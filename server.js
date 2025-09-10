@@ -422,10 +422,10 @@ app.get("/statistics", (req, res) => {
 // ➤ API-Route: Bons mit Artikeln laden
 app.get("/bons", (req, res) => {
     const query = `
-        SELECT b.id, b.total, b.created_at,
+        SELECT b.id, b.total AS totalAmount, b.created_at, b.category,
                bi.name, bi.quantity, bi.total
         FROM kasse_bon b
-        JOIN kasse_bon_items bi ON b.id = bi.bon_id
+                 JOIN kasse_bon_items bi ON b.id = bi.bon_id
         ORDER BY b.created_at DESC
     `;
 
@@ -443,12 +443,13 @@ app.get("/bons", (req, res) => {
                     id: row.id,
                     created_at: row.created_at,
                     totalAmount: row.totalAmount,
+                    category: row.category, // Neu!
                     items: []
                 };
             }
             bons[row.id].items.push({
                 name: row.name,
-                price: row.price,
+                // price: row.price, // Entfernen!
                 quantity: row.quantity,
                 total: row.total
             });
@@ -466,19 +467,23 @@ app.get('/recent-bons', (req, res) => {
     let where = '';
     const params = [];
     if (gui) {
-        where = 'WHERE b.category = ?';
+        where = 'WHERE category = ?';
         params.push(gui);
     }
 
     const sql = `
-    SELECT b.id, b.total AS totalAmount, b.category, b.created_at,
-           bi.name, bi.quantity, bi.total AS item_total
-    FROM kasse_bon b
-    LEFT JOIN kasse_bon_items bi ON b.id = bi.bon_id
-    ${where}
-    ORDER BY b.created_at DESC
-    LIMIT 50
-  `;
+        SELECT b.id, b.total AS totalAmount, b.category, b.created_at,
+               bi.name, bi.quantity, bi.total AS item_total
+        FROM (
+                 SELECT id FROM kasse_bon
+                                    ${where}
+                 ORDER BY created_at DESC
+                     LIMIT 10
+             ) AS latest_bons
+                 JOIN kasse_bon b ON b.id = latest_bons.id
+                 LEFT JOIN kasse_bon_items bi ON b.id = bi.bon_id
+        ORDER BY b.created_at DESC, bi.name
+    `;
 
     db.query(sql, params, (err, rows) => {
         if (err) {
@@ -502,7 +507,7 @@ app.get('/recent-bons', (req, res) => {
             });
         });
 
-        res.json(Object.values(bons).slice(0, 10)); // nur 10
+        res.json(Object.values(bons)); // Kein slice
     });
 });
 

@@ -2,58 +2,80 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Bon-Übersicht</title>
+    <title>Bons Übersicht</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            padding: 20px;
-            background: #f4f4f4;
+            margin: 2rem;
+            background: #f8f8f8;
         }
         h1 {
-            margin-bottom: 10px;
+            color: #333;
+            margin-bottom: 1rem;
         }
-        .controls {
-            margin-bottom: 20px;
+        #search-section {
+            margin-bottom: 1.5rem;
         }
-        .controls input {
-            padding: 6px;
-            font-size: 14px;
-            width: 150px;
+        #searchBon {
+            padding: 0.5rem;
+            width: 220px;
+            font-size: 1rem;
         }
-        .controls button {
-            padding: 6px 12px;
-            font-size: 14px;
-            margin-left: 10px;
+        button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            margin-left: 0.5rem;
             cursor: pointer;
         }
+        #bons-container {
+            margin-top: 2rem;
+        }
         .bon {
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            padding: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: #fff;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            margin-bottom: 1.5rem;
+            padding: 1rem 1.5rem;
         }
         .bon-header {
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        .bon-items {
-            margin-top: 10px;
+        .bon-category {
+            font-size: 1rem;
+            color: #888;
+            margin-left: 1rem;
         }
         .bon-items table {
             width: 100%;
             border-collapse: collapse;
         }
         .bon-items th, .bon-items td {
-            border-bottom: 1px solid #ddd;
-            padding: 6px;
+            padding: 0.4rem 0.8rem;
+            border-bottom: 1px solid #eee;
             text-align: left;
         }
+        .bon-items th {
+            background: #f0f0f0;
+        }
         .total {
+            margin-top: 1rem;
+            font-size: 1.2rem;
             font-weight: bold;
-            margin-top: 10px;
             text-align: right;
+        }
+        @media (max-width:600px) {
+            .bon-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .bon-category {
+                margin-left: 0;
+                margin-top: 0.3rem;
+            }
         }
     </style>
 </head>
@@ -63,10 +85,12 @@
 <div class="controls">
     <input type="number" id="searchBon" placeholder="Bon-Nummer suchen">
     <button onclick="searchBon()">Suchen</button>
+    <button onclick="resetSearch()">Alle anzeigen</button>
     <button onclick="window.location.href='dashboard.html'">Zurück zum Dashboard</button>
 </div>
-
-<div id="bons-container"></div>
+<div id="bons-container">
+    <!-- Bons werden hier gerendert -->
+</div>
 
 <script>
     let allBons = [];
@@ -74,7 +98,6 @@
     async function loadBons() {
         const res = await fetch("http://192.168.0.187:3000/bons");
         allBons = await res.json();
-
         renderBons(allBons);
     }
 
@@ -82,8 +105,13 @@
         const container = document.getElementById("bons-container");
         container.innerHTML = "";
 
-        // sicherstellen, dass neueste oben angezeigt werden
+        // Sicherstellen, dass neueste oben angezeigt werden
         const sorted = [...bons].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        if(sorted.length === 0) {
+            container.innerHTML = "<p>Kein Bon gefunden.</p>";
+            return;
+        }
 
         sorted.forEach(bon => {
             const div = document.createElement("div");
@@ -91,19 +119,31 @@
 
             div.innerHTML = `
                     <div class="bon-header">
-                        Bon Nr. ${bon.id} – ${new Date(bon.created_at).toLocaleString()}
+                        <span>Bon Nr. ${bon.id} – ${new Date(bon.created_at).toLocaleString()}</span>
+                        <span class="bon-category">Kasse: ${bon.category || '-'}</span>
                     </div>
                     <div class="bon-items">
                         <table>
                             <thead>
-                                <tr><th>Artikel</th><th>Menge</th><th>Preis</th><th>Summe</th></tr>
+                                <tr>
+                                    <th>Artikel</th>
+                                    <th>Menge</th>
+                                    <th>Preis</th>
+                                    <th>Summe</th>
+                                </tr>
                             </thead>
                             <tbody>
                                 ${bon.items.map(item => `
                                     <tr>
                                         <td>${item.name}</td>
                                         <td>${item.quantity}</td>
-                                        <td>€${parseFloat(item.price).toFixed(2)}</td>
+                                        <td>
+                                            ${
+                item.quantity > 0
+                    ? `€${(parseFloat(item.total) / parseFloat(item.quantity)).toFixed(2)}`
+                    : ""
+            }
+                                        </td>
                                         <td>€${parseFloat(item.total).toFixed(2)}</td>
                                     </tr>
                                 `).join("")}
@@ -118,17 +158,28 @@
     }
 
     function searchBon() {
-        const searchValue = document.getElementById("searchBon").value.trim();
+        const searchValue = document.getElementById("searchBon").value.trim().toLowerCase();
         if (!searchValue) {
             renderBons(allBons); // keine Suche → alle anzeigen
             return;
         }
 
-        const filtered = allBons.filter(b => b.id == searchValue);
+        // Suche nach Bonnummer, Kategorie/Kasse oder Artikelnamen
+        const filtered = allBons.filter(bon =>
+            bon.id.toString() === searchValue ||
+            (bon.category && bon.category.toLowerCase().includes(searchValue)) ||
+            bon.items.some(item => item.name && item.name.toLowerCase().includes(searchValue))
+        );
+
         renderBons(filtered);
     }
 
-    loadBons();
+    function resetSearch() {
+        document.getElementById("searchBon").value = "";
+        renderBons(allBons);
+    }
+
+    window.addEventListener("DOMContentLoaded", loadBons);
 </script>
 </body>
 </html>

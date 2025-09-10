@@ -520,10 +520,12 @@ async function loadRecentBons() {
             return;
         }
 
-        // Sortieren nach ID absteigend und nur die 10 neuesten
-        const latestBons = bons.sort((a, b) => b.id - a.id).slice(0, 10);
+        // Sortiere absteigend nach ID und hole die 10 höchsten IDs (= neuesten Bons)
+        const sortedBons = bons.sort((a, b) => b.id - a.id);
+        const latestBons = sortedBons.slice(0, 10);
 
-        latestBons.forEach(bon => renderBon(bon, true));
+        // Render von neu (höchste ID) nach alt (niedrigste ID)
+        latestBons.forEach(bon => renderBon(bon, false)); // prepend = false!
     } catch (err) {
         console.error("Fehler beim Laden der letzten Bons:", err);
     }
