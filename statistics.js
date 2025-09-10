@@ -1,27 +1,28 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // Setze das Datum auf heute beim Laden der Seite
+    // Setze das Datum auf heute beim Laden der Seite (ISO Format für Input-Feld)
     const today = new Date();
-    const formattedDate = formatDate(today);
+    const formattedDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
     document.getElementById("date").value = formattedDate;
 
     // Daten beim Laden der Seite abrufen
     fetchStatistics();
 
     // Event-Listener für den Filter-Button
-    document.querySelector("button").addEventListener("click", filterStatistics);
+    // Nimm explizit den richtigen Button (nicht Back-Button!)
+    document.querySelector(".filter-container button").addEventListener("click", filterStatistics);
 });
 
 function formatDate(date) {
+    // Erwartet ein Date-Objekt!
     const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0'); // Monate sind 0-basiert
+    const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${day}.${month}.${year}`;
 }
 
 function formatDateForMySQL(date) {
-    if (!date) return "";
-    const [day, month, year] = date.split('.');
-    return `${year}-${month}-${day}`;
+    // Das Feld liefert nun immer YYYY-MM-DD
+    return date;
 }
 
 function fetchStatistics(date = "", startTime = "", endTime = "") {
@@ -43,9 +44,18 @@ function fetchStatistics(date = "", startTime = "", endTime = "") {
     fetch(url)
         .then(response => response.json())
         .then(data => {
+            console.log("Response data:", data); // Debug!
+            if (data.error) {
+                console.error("API-Fehler:", data.error);
+                return;
+            }
+            if (!data.bonStats || !Array.isArray(data.bonStats)) {
+                console.error("Keine gültigen bonStats erhalten:", data);
+                return;
+            }
             updateBonStatsTable(data.bonStats);
-            updateProductStatsTable(data.productStats);
-            updateIntervalStatsTable(data.intervalStats);
+            updateProductStatsTable(data.productStats || []);
+            updateIntervalStatsTable(data.intervalStats || []);
             renderChart(data.bonStats);
         })
         .catch(error => console.error("Fehler beim Abrufen der Statistik:", error));
@@ -60,8 +70,8 @@ function updateBonStatsTable(bonStats) {
     bonStatsTable.innerHTML = ""; // Tabelle leeren
 
     bonStats.forEach(stat => {
-        const totalRevenue = parseFloat(stat.total_revenue) || 0; // Falls total_revenue null oder undefined ist, setze es auf 0
-        const avgBonValue = parseFloat(stat.avg_bon_value) || 0; // Falls avg_bon_value null oder undefined ist, setze es auf 0
+        const totalRevenue = parseFloat(stat.total_revenue) || 0;
+        const avgBonValue = parseFloat(stat.avg_bon_value) || 0;
 
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -83,7 +93,7 @@ function updateProductStatsTable(productStats) {
     productStatsTable.innerHTML = ""; // Tabelle leeren
 
     productStats.forEach(stat => {
-        const totalRevenue = parseFloat(stat.total_revenue) || 0; // Falls total_revenue null oder undefined ist, setze es auf 0
+        const totalRevenue = parseFloat(stat.total_revenue) || 0;
 
         const row = document.createElement("tr");
         row.innerHTML = `

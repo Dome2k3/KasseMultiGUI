@@ -362,8 +362,8 @@ app.get("/statistics", (req, res) => {
         SELECT
             DATE(b.created_at) AS date,
             COUNT(b.id) AS total_bons,
-            SUM(b.totalAmount) AS total_revenue,
-            (SUM(b.totalAmount) / COUNT(b.id)) AS avg_bon_value
+            SUM(b.total) AS total_revenue,
+            (SUM(b.total) / COUNT(b.id)) AS avg_bon_value
         FROM kasse_bon b
             ${whereClause}
         GROUP BY DATE(b.created_at)
@@ -382,7 +382,7 @@ app.get("/statistics", (req, res) => {
                 SUM(bi.quantity) AS total_sold,
                 SUM(bi.total) AS total_revenue
             FROM kasse_bon_items bi
-                     JOIN bon b ON bi.bon_id = b.id
+                     JOIN kasse_bon b ON bi.bon_id = b.id
                 ${whereClause}
             GROUP BY bi.name
             ORDER BY total_sold DESC
@@ -401,7 +401,7 @@ app.get("/statistics", (req, res) => {
                     bi.name AS product_name,
                     SUM(bi.quantity) AS total_sold
                 FROM kasse_bon b
-                         JOIN bon_items bi ON b.id = bi.bon_id
+                         JOIN kasse_bon_items bi ON b.id = bi.bon_id
                     ${whereClause}
                 GROUP BY \`interval\`, bi.name
                 ORDER BY \`interval\`, bi.name;
