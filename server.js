@@ -342,7 +342,7 @@ app.post('/print', (req, res) => {
 
 // 🔹 Route zur Abrufung von Verkaufsstatistiken mit optionalem Zeitfilter
 app.get("/statistics", (req, res) => {
-    const { date, startTime, endTime } = req.query;
+    const { date, startTime, endTime, category } = req.query;
 
     let whereClause = "";
     let params = [];
@@ -351,72 +351,93 @@ app.get("/statistics", (req, res) => {
         whereClause += "WHERE DATE(b.created_at) = ?";
         params.push(date);
     }
-
     if (startTime && endTime) {
         whereClause += whereClause ? " AND " : "WHERE ";
         whereClause += "TIME(b.created_at) BETWEEN ? AND ?";
         params.push(startTime, endTime);
     }
+    if (category) {
+        whereClause += whereClause ? " AND " : "WHERE ";
+        whereClause += "b.category = ?";
+        params.push(category);
+    }
 
-    const statsQuery = `
+    const bonStatsQuery = `
         SELECT
             DATE(b.created_at) AS date,
             COUNT(b.id) AS total_bons,
             SUM(b.total) AS total_revenue,
-            (SUM(b.total) / COUNT(b.id)) AS avg_bon_value
+            AVG(b.total) AS avg_bon_value
         FROM kasse_bon b
             ${whereClause}
         GROUP BY DATE(b.created_at)
         ORDER BY DATE(b.created_at) DESC;
     `;
 
-    db.query(statsQuery, params, (err, bonStats) => {
-        if (err) {
-            console.error("Fehler beim Abrufen der Statistik:", err);
-            return res.status(500).json({ error: "Fehler beim Abrufen der Statistik" });
-        }
+    const productStatsQuery = `
+        SELECT
+            bi.name AS product_name,
+            SUM(bi.quantity) AS total_sold,
+            SUM(bi.total) AS total_revenue
+        FROM kasse_bon_items bi
+             JOIN kasse_bon b ON bi.bon_id = b.id
+            ${whereClause}
+        GROUP BY bi.name
+        ORDER BY total_sold DESC
+        LIMIT 20;
+    `;
 
-        const productStatsQuery = `
-            SELECT
-                bi.name AS product_name,
-                SUM(bi.quantity) AS total_sold,
-                SUM(bi.total) AS total_revenue
-            FROM kasse_bon_items bi
-                     JOIN kasse_bon b ON bi.bon_id = b.id
-                ${whereClause}
-            GROUP BY bi.name
-            ORDER BY total_sold DESC
-                LIMIT 20;
-        `;
+    const intervalStatsQuery = `
+        SELECT
+            CONCAT(HOUR(b.created_at), ':', LPAD(FLOOR(MINUTE(b.created_at) / 15) * 15, 2, '0')) AS \`interval\`,
+            bi.name AS product_name,
+            SUM(bi.quantity) AS total_sold
+        FROM kasse_bon b
+             JOIN kasse_bon_items bi ON b.id = bi.bon_id
+            ${whereClause}
+        GROUP BY \`interval\`, bi.name
+        ORDER BY \`interval\`, bi.name;
+    `;
 
-        db.query(productStatsQuery, params, (err, productStats) => {
-            if (err) {
-                console.error("Fehler beim Abrufen der Produktstatistik:", err);
-                return res.status(500).json({ error: "Fehler beim Abrufen der Produktstatistik" });
-            }
+    const categoryStatsQuery = `
+        SELECT
+            b.category,
+            COUNT(b.id) AS total_bons,
+            SUM(b.total) AS total_revenue,
+            AVG(b.total) AS avg_bon_value
+        FROM kasse_bon b
+            ${whereClause}
+        GROUP BY b.category
+        ORDER BY total_revenue DESC
+        LIMIT 20;
+    `;
 
-            const intervalStatsQuery = `
-                SELECT
-                    CONCAT(HOUR(b.created_at), ':', LPAD(FLOOR(MINUTE(b.created_at) / 15) * 15, 2, '0')) AS \`interval\`,
-                    bi.name AS product_name,
-                    SUM(bi.quantity) AS total_sold
-                FROM kasse_bon b
-                         JOIN kasse_bon_items bi ON b.id = bi.bon_id
-                    ${whereClause}
-                GROUP BY \`interval\`, bi.name
-                ORDER BY \`interval\`, bi.name;
-            `;
-
-            db.query(intervalStatsQuery, params, (err, intervalStats) => {
+    // Helper für parallele Queries
+    function runQuery(query, params) {
+        return new Promise((resolve, reject) => {
+            db.query(query, params, (err, results) => {
                 if (err) {
-                    console.error("Fehler beim Abrufen der Intervallstatistik:", err);
-                    return res.status(500).json({ error: "Fehler beim Abrufen der Intervallstatistik" });
+                    reject(err);
+                } else {
+                    resolve(results);
                 }
-
-                res.json({ bonStats, productStats, intervalStats });
             });
         });
-    });
+    }
+
+    Promise.all([
+        runQuery(bonStatsQuery, params),
+        runQuery(productStatsQuery, params),
+        runQuery(intervalStatsQuery, params),
+        runQuery(categoryStatsQuery, params),
+    ])
+        .then(([bonStats, productStats, intervalStats, categoryStats]) => {
+            res.json({ bonStats, productStats, intervalStats, categoryStats });
+        })
+        .catch(error => {
+            console.error("Fehler bei Statistik-API:", error);
+            res.status(500).json({ error: "Fehler beim Abrufen der Statistikdaten" });
+        });
 });
 
 // ➤ API-Route: Bons mit Artikeln laden

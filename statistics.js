@@ -1,3 +1,4 @@
+
 document.addEventListener("DOMContentLoaded", () => {
     // Setze das Datum auf heute beim Laden der Seite (ISO Format für Input-Feld)
     const today = new Date();
@@ -56,9 +57,33 @@ function fetchStatistics(date = "", startTime = "", endTime = "") {
             updateBonStatsTable(data.bonStats);
             updateProductStatsTable(data.productStats || []);
             updateIntervalStatsTable(data.intervalStats || []);
+            updateCategoryStatsTable(data.categoryStats || []);
             renderChart(data.bonStats);
         })
         .catch(error => console.error("Fehler beim Abrufen der Statistik:", error));
+}
+
+function updateCategoryStatsTable(categoryStats) {
+    const categoryStatsTable = document.getElementById("categoryStatsTable");
+    if (!categoryStatsTable) {
+        console.error("Element with id 'categoryStatsTable' not found");
+        return;
+    }
+    categoryStatsTable.innerHTML = ""; // Tabelle leeren
+
+    categoryStats.forEach(stat => {
+        const totalRevenue = parseFloat(stat.total_revenue) || 0;
+        const avgBonValue = parseFloat(stat.avg_bon_value) || 0;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${stat.category}</td>
+            <td>${stat.total_bons}</td>
+            <td>${totalRevenue.toFixed(2)}</td>
+            <td>${avgBonValue.toFixed(2)}</td>
+        `;
+        categoryStatsTable.appendChild(row);
+    });
 }
 
 function updateBonStatsTable(bonStats) {
@@ -132,13 +157,20 @@ function filterStatistics() {
     fetchStatistics(date, startTime, endTime);
 }
 
+let salesChartInstance = null; // Globale Variable für Chart-Instanz
+
 function renderChart(bonStats) {
     const ctx = document.getElementById('salesChart').getContext('2d');
+
+    // Vorherigen Chart zerstören, falls vorhanden
+    if (salesChartInstance) {
+        salesChartInstance.destroy();
+    }
 
     const labels = bonStats.map(stat => formatDate(new Date(stat.date)));
     const data = bonStats.map(stat => parseFloat(stat.total_revenue) || 0);
 
-    new Chart(ctx, {
+    salesChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,

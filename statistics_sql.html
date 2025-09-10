@@ -24,6 +24,14 @@
     <input type="time" id="startTime">
     <label for="endTime">Bis:</label>
     <input type="time" id="endTime">
+    <label for="category">Kategorie:</label>
+    <select id="category">
+        <option value="">Alle</option>
+        <option value="essen">Essen</option>
+        <option value="bierzelt">Bierzelt</option>
+        <option value="pfand">Pfand</option>
+        <option value="fruehstueck">Frühstück</option>
+    </select>
     <button onclick="filterStatistics()">Filtern</button>
 </div>
 
@@ -39,6 +47,20 @@
     </tr>
     </thead>
     <tbody id="bonStatsTable"></tbody>
+</table>
+
+<h2>Kategorie-Statistik</h2>
+
+<table>
+    <thead>
+    <tr>
+        <th>Kategorie</th>
+        <th>Anzahl Bons</th>
+        <th>Gesamtumsatz (€)</th>
+        <th>⌀ Bon (€)</th>
+    </tr>
+    </thead>
+    <tbody id="categoryStatsTable"></tbody>
 </table>
 
 <!-- Verkaufsstatistik für 14 Artikel -->
