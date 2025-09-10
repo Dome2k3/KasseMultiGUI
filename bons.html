@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Bon-Übersicht</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f4f4f4;
+        }
+        h1 {
+            margin-bottom: 10px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .controls input {
+            padding: 6px;
+            font-size: 14px;
+            width: 150px;
+        }
+        .controls button {
+            padding: 6px 12px;
+            font-size: 14px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .bon {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .bon-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .bon-items {
+            margin-top: 10px;
+        }
+        .bon-items table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .bon-items th, .bon-items td {
+            border-bottom: 1px solid #ddd;
+            padding: 6px;
+            text-align: left;
+        }
+        .total {
+            font-weight: bold;
+            margin-top: 10px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+<h1>Bon-Übersicht</h1>
+
+<div class="controls">
+    <input type="number" id="searchBon" placeholder="Bon-Nummer suchen">
+    <button onclick="searchBon()">Suchen</button>
+    <button onclick="window.location.href='dashboard.html'">Zurück zum Dashboard</button>
+</div>
+
+<div id="bons-container"></div>
+
+<script>
+    let allBons = [];
+
+    async function loadBons() {
+        const res = await fetch("http://192.168.0.187:3000/bons");
+        allBons = await res.json();
+
+        renderBons(allBons);
+    }
+
+    function renderBons(bons) {
+        const container = document.getElementById("bons-container");
+        container.innerHTML = "";
+
+        // sicherstellen, dass neueste oben angezeigt werden
+        const sorted = [...bons].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        sorted.forEach(bon => {
+            const div = document.createElement("div");
+            div.className = "bon";
+
+            div.innerHTML = `
+                    <div class="bon-header">
+                        Bon Nr. ${bon.id} – ${new Date(bon.created_at).toLocaleString()}
+                    </div>
+                    <div class="bon-items">
+                        <table>
+                            <thead>
+                                <tr><th>Artikel</th><th>Menge</th><th>Preis</th><th>Summe</th></tr>
+                            </thead>
+                            <tbody>
+                                ${bon.items.map(item => `
+                                    <tr>
+                                        <td>${item.name}</td>
+                                        <td>${item.quantity}</td>
+                                        <td>€${parseFloat(item.price).toFixed(2)}</td>
+                                        <td>€${parseFloat(item.total).toFixed(2)}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="total">Gesamt: €${parseFloat(bon.totalAmount).toFixed(2)}</div>
+                `;
+
+            container.appendChild(div);
+        });
+    }
+
+    function searchBon() {
+        const searchValue = document.getElementById("searchBon").value.trim();
+        if (!searchValue) {
+            renderBons(allBons); // keine Suche → alle anzeigen
+            return;
+        }
+
+        const filtered = allBons.filter(b => b.id == searchValue);
+        renderBons(filtered);
+    }
+
+    loadBons();
+</script>
+</body>
+</html>

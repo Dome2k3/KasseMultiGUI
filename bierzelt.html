@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bierzelt Kasse</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="js/jspdf.umd.min.js"></script>
+</head>
+<body>
+<h1>Bierzelt Kasse</h1>
+<button onclick="window.location.href='dashboard.html'">Zurück zum Dashboard</button>
+
+<div id="container">
+    <div id="button-panel">
+        <label for="generate-pdf">Bon als PDF/Bon erstellen:</label>
+        <input type="checkbox" id="generate-pdf" checked>
+        <div id="artikel-buttons"></div>
+    </div>
+
+    <div id="bon-panel">
+        <div id="receipt-section">
+            <div class="action-buttons">
+                <button onclick="finalizeBon()">Bon abschließen</button>
+                <button onclick="removePfandItems()" class="remove-pfand">Pfand entfernen</button>
+                <button onclick="resetReceipt()" class="reset">Bon zurücksetzen</button>
+            </div>
+            <h3>Aktueller Bon</h3>
+            <ul id="receipt-list"></ul>
+            <div id="total">Summe: 0.00 €</div>
+        </div>
+
+        <div id="history-section">
+            <h3>Historie</h3>
+            <div id="history-list"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+     currentGUI = 'bierzelt';
+</script>
+<script src="script.js"></script>
+</body>
+</html>

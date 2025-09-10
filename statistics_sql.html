@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verkaufsstatistiken</title>
+    <link rel="stylesheet" href="style_statistics.css"> <!-- Einbinden der CSS-Datei -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Einbinden der Chart.js Bibliothek -->
+    <script defer src="statistics.js"></script>
+</head>
+<body>
+<h1>Verkaufsstatistiken</h1>
+
+<!-- Button zum Zurückkehren -->
+<div class="action-buttons">
+    <button class="back-button" onclick="window.location.href='index.html'">Kasse</button>
+</div>
+
+<!-- Filter für Datum & Zeitbereich -->
+<div class="filter-container">
+    <label for="date">Datum:</label>
+    <input type="date" id="date">
+    <label for="startTime">Von:</label>
+    <input type="time" id="startTime">
+    <label for="endTime">Bis:</label>
+    <input type="time" id="endTime">
+    <button onclick="filterStatistics()">Filtern</button>
+</div>
+
+<!-- Gesamtverkaufsstatistiken -->
+<h2>Gesamtstatistik</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Datum</th>
+        <th>Anzahl Bons</th>
+        <th>Gesamtumsatz (€)</th>
+        <th>Ø Bon-Wert (€)</th>
+    </tr>
+    </thead>
+    <tbody id="bonStatsTable"></tbody>
+</table>
+
+<!-- Verkaufsstatistik für 14 Artikel -->
+<h2>Verkaufsstatistik nach Artikel</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Artikel</th>
+        <th>Verkaufte Menge</th>
+        <th>Gesamtumsatz (€)</th>
+    </tr>
+    </thead>
+    <tbody id="productStatsTable"></tbody>
+</table>
+
+<!-- Verkaufsstatistik in 15-Minuten-Intervallen -->
+<h2>Verkäufe in 15-Minuten-Intervallen</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Intervall</th>
+        <th>Artikel</th>
+        <th>Verkaufte Menge</th>
+    </tr>
+    </thead>
+    <tbody id="intervalStatsTable"></tbody>
+</table>
+
+<!-- Diagramm -->
+<h2>Diagramm der Verkaufsstatistiken</h2>
+<canvas id="salesChart" width="400" height="200"></canvas>
+</body>
+</html>

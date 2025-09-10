@@ -1,0 +1,222 @@
+/* ==========================
+   Grundlayout
+   ========================== */
+* {
+    box-sizing: border-box; /* wichtig für Padding + Border */
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+h1 {
+    text-align: center;
+    margin: 10px 0;
+}
+
+#container {
+    flex: 1;
+    display: flex;
+    height: calc(100vh - 80px); /* Platz unter H1 und Zurück-Button */
+    overflow: hidden;
+}
+
+/* ==========================
+   Linke Seite: Button-Panel (2/3)
+   ========================== */
+#button-panel {
+    flex: 2;
+    background: #fff;
+    padding: 15px;
+    border-right: 2px solid #ddd;
+    display: flex;
+    flex-wrap: wrap;         /* Warengruppen nebeneinander */
+    gap: 20px;
+    justify-content: flex-start;
+    overflow-y: auto;
+}
+
+/* ==========================
+   Warengruppen
+   ========================== */
+.warengruppe {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 280px;           /* feste Breite pro Warengruppe */
+    flex: 0 0 280px;        /* verhindert Shrink/Grow */
+}
+
+/* Überschrift */
+.warengruppe h3 {
+    margin: 0 0 12px 0;
+    font-size: 1.2rem;
+    color: #333;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+    width: 100%;
+}
+
+/* Grid der Buttons in der Gruppe */
+.warengruppe .button-grid {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    justify-content: center; /* Buttons zentrieren */
+}
+
+/* Buttons */
+.warengruppe .button-grid button {
+    width: 130px;
+    height: 80px;
+    font-size: 1rem;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background 0.2s ease;
+}
+
+.warengruppe .button-grid button:hover {
+    background-color: #0056b3;
+}
+
+/* Dynamische Spalten je nach Anzahl der Produkte */
+.warengruppe:nth-child(1) .button-grid,
+.warengruppe:nth-child(2) .button-grid,
+.warengruppe:nth-child(3) .button-grid,
+.warengruppe:nth-child(4) .button-grid,
+.warengruppe:nth-child(6) .button-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 Produkte pro Reihe */
+}
+
+.warengruppe:nth-child(5) .button-grid {
+    grid-template-columns: 1fr; /* 1 Produkt */
+}
+
+.warengruppe:nth-child(7) .button-grid {
+    grid-template-columns: repeat(4, 1fr); /* 4 Produkte */
+}
+
+/* ==========================
+   Rechte Seite: Bons (1/3)
+   ========================== */
+#bon-panel {
+    flex: 1;
+    background: #fafafa;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.action-buttons button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: #28a745;
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.action-buttons button.reset {
+    background-color: #dc3545;
+}
+.action-buttons button.remove-pfand {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.action-buttons button:hover {
+    opacity: 0.9;
+}
+
+/* Bon & Historie */
+#receipt-section {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 20px;
+}
+
+#receipt-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#receipt-list li {
+    padding: 8px;
+    margin-bottom: 5px;
+    background: #fff;
+    border-radius: 6px;
+}
+
+#total {
+    font-weight: bold;
+    margin-top: 10px;
+    font-size: 1.2rem;
+}
+
+#history-section {
+    flex: 1;
+    overflow-y: auto;
+}
+
+#history-list .history-item {
+    padding: 8px;
+    margin-bottom: 8px;
+    background: #fff;
+    border-radius: 6px;
+}
+
+/* ==========================
+   Responsiv
+   ========================== */
+@media (max-width: 1024px) {
+    #container {
+        flex-direction: column;
+        height: auto;
+    }
+
+    #button-panel, #bon-panel {
+        flex: none;
+        width: 100%;
+        gap: 15px;
+        justify-content: center;
+    }
+
+    .warengruppe {
+        width: 90%; /* fast volle Breite auf Tablet */
+        flex: 0 0 auto;
+    }
+
+    .warengruppe .button-grid button {
+        width: 120px;
+        height: 70px;
+        font-size: 0.9rem;
+    }
+}

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kassen Dashboard</title>
+    <style>
+        /* Grundlayout */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        h1 {
+            margin-top: 30px;
+            font-size: 2.2rem;
+            color: #2c3e50;
+        }
+
+        p {
+            margin: 10px 0 20px 0;
+            font-size: 1.1rem;
+        }
+
+        /* Buttons Container */
+        .gui-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            width: 90%;
+            max-width: 900px;
+            margin-bottom: 40px;
+        }
+
+        /* Buttons Styling */
+        .gui-buttons button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 20px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .gui-buttons button:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        .gui-buttons button:active {
+            transform: translateY(1px);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .gui-buttons {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            }
+        }
+
+        @media (max-width: 480px) {
+            .gui-buttons {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 10px;
+            }
+            .gui-buttons button {
+                padding: 15px;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<h1>Kassen Dashboard</h1>
+<p>Wähle die gewünschte Kasse:</p>
+<div class="gui-buttons">
+    <button onclick="openGUI('essen')">Essen</button>
+    <button onclick="openGUI('bierzelt')">Bierzelt</button>
+    <button onclick="openGUI('pfand')">Pfandrückgabe</button>
+    <button onclick="openGUI('fruehstueck')">Frühstück</button>
+    <button onclick="openGUI('bons')">Bons</button>
+</div>
+
+<script>
+    function openGUI(gui) {
+        window.location.href = gui + '.html';
+    }
+</script>
+</body>
+</html>
