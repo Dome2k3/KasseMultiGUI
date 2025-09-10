@@ -3,23 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bierzelt Kasse</title>
+    <title>Bierzelt</title>
     <link rel="stylesheet" href="style.css">
     <script src="js/jspdf.umd.min.js"></script>
 </head>
 <body>
-<h1>Bierzelt Kasse</h1>
-<button onclick="window.location.href='dashboard.html'">Zurück zum Dashboard</button>
+<h1>Bierzelt</h1>
+
+<!-- Top-Bar mit Button und Checkbox nebeneinander -->
+<div id="top-bar" style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
+    <button onclick="window.location.href='dashboard.html'">Zurück zum Dashboard</button>
+
+    <label for="generate-pdf" style="margin: 0; display: flex; align-items: center; gap: 5px;">
+        <input type="checkbox" id="generate-pdf" checked>
+        Bon als PDF/Bon erstellen
+    </label>
+</div>
 
 <div id="container">
-    <div id="button-panel">
-        <label for="generate-pdf">Bon als PDF/Bon erstellen:</label>
-        <input type="checkbox" id="generate-pdf" checked>
-        <div id="artikel-buttons"></div>
-    </div>
-
-    <div id="bon-panel">
-        <div id="receipt-section">
+    <!-- Linke Seite: Bestellung und Historie -->
+    <div class="left-panel">
+        <div class="card" id="receipt-section">
             <div class="action-buttons">
                 <button onclick="finalizeBon()">Bon abschließen</button>
                 <button onclick="removePfandItems()" class="remove-pfand">Pfand entfernen</button>
@@ -29,10 +33,15 @@
             <ul id="receipt-list"></ul>
             <div id="total">Summe: 0.00 €</div>
         </div>
-
-        <div id="history-section">
+        <div class="card" id="history-section">
             <h3>Historie</h3>
             <div id="history-list"></div>
+        </div>
+    </div>
+    <!-- Rechte Seite: Buttons zum Auswählen -->
+    <div class="right-panel">
+        <div id="button-panel">
+            <div class="button-grid" id="artikel-buttons"></div>
         </div>
     </div>
 </div>

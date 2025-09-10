@@ -20,14 +20,10 @@
     </label>
 </div>
 
-
 <div id="container">
-    <div id="button-panel">
-        <div id="artikel-buttons"></div>
-    </div>
-
-    <div id="bon-panel">
-        <div id="receipt-section">
+    <!-- Linke Seite: Bestellung und Historie -->
+    <div class="left-panel">
+        <div class="card" id="receipt-section">
             <div class="action-buttons">
                 <button onclick="finalizeBon()">Bon abschließen</button>
                 <button onclick="removePfandItems()" class="remove-pfand">Pfand entfernen</button>
@@ -37,10 +33,15 @@
             <ul id="receipt-list"></ul>
             <div id="total">Summe: 0.00 €</div>
         </div>
-
-        <div id="history-section">
+        <div class="card" id="history-section">
             <h3>Historie</h3>
             <div id="history-list"></div>
+        </div>
+    </div>
+    <!-- Rechte Seite: Buttons zum Auswählen -->
+    <div class="right-panel">
+        <div id="button-panel">
+            <div class="button-grid" id="artikel-buttons"></div>
         </div>
     </div>
 </div>

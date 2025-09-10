@@ -1,148 +1,87 @@
-/* ==========================
-   Grundlayout
-   ========================== */
-* {
-    box-sizing: border-box; /* wichtig für Padding + Border */
+:root {
+    --main-bg: #f7f9fc;
+    --card-bg: #fff;
+    --accent: #007bff;
+    --accent-hover: #0056b3;
+    --border: #e0e5ec;
+    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+    --radius: 16px;
 }
 
 body {
     margin: 0;
     padding: 0;
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: var(--main-bg);
+    min-height: 100vh;
 }
 
 h1 {
     text-align: center;
-    margin: 10px 0;
+    margin: 24px 0 16px 0;
+    font-size: 2.1rem;
+    color: var(--accent);
+    letter-spacing: 1px;
 }
 
 #container {
-    flex: 1;
     display: flex;
-    height: calc(100vh - 80px); /* Platz unter H1 und Zurück-Button */
-    overflow: hidden;
+    gap: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: 80vh;
+    padding-bottom: 32px;
 }
 
-/* ==========================
-   Linke Seite: Button-Panel (2/3)
-   ========================== */
-#button-panel {
+.left-panel, .right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.left-panel {
+    flex: 1;
+    min-width: 280px;
+    max-width: 370px;
+}
+
+.right-panel {
     flex: 2;
-    background: #fff;
-    padding: 15px;
-    border-right: 2px solid #ddd;
-    display: flex;
-    flex-wrap: wrap;         /* Warengruppen nebeneinander */
-    gap: 20px;
-    justify-content: flex-start;
-    overflow-y: auto;
+    min-width: 0;
+    /* overflow optional for smaller screens */
 }
 
-/* ==========================
-   Warengruppen
-   ========================== */
-.warengruppe {
-    background: #f9f9f9;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    padding: 12px;
+/* Card-Style */
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    width: 280px;           /* feste Breite pro Warengruppe */
-    flex: 0 0 280px;        /* verhindert Shrink/Grow */
-}
-
-/* Überschrift */
-.warengruppe h3 {
-    margin: 0 0 12px 0;
-    font-size: 1.2rem;
-    color: #333;
-    text-align: center;
-    border-bottom: 1px solid #ddd;
-    padding-bottom: 5px;
-    width: 100%;
-}
-
-/* Grid der Buttons in der Gruppe */
-.warengruppe .button-grid {
-    display: grid;
     gap: 12px;
-    width: 100%;
-    justify-content: center; /* Buttons zentrieren */
-}
-
-/* Buttons */
-.warengruppe .button-grid button {
-    width: 130px;
-    height: 80px;
-    font-size: 1rem;
-    background-color: #007bff;
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: background 0.2s ease;
-}
-
-.warengruppe .button-grid button:hover {
-    background-color: #0056b3;
-}
-
-/* Dynamische Spalten je nach Anzahl der Produkte */
-.warengruppe:nth-child(1) .button-grid,
-.warengruppe:nth-child(2) .button-grid,
-.warengruppe:nth-child(3) .button-grid,
-.warengruppe:nth-child(4) .button-grid,
-.warengruppe:nth-child(6) .button-grid {
-    grid-template-columns: repeat(2, 1fr); /* 2 Produkte pro Reihe */
-}
-
-.warengruppe:nth-child(5) .button-grid {
-    grid-template-columns: 1fr; /* 1 Produkt */
-}
-
-.warengruppe:nth-child(7) .button-grid {
-    grid-template-columns: repeat(4, 1fr); /* 4 Produkte */
-}
-
-/* ==========================
-   Rechte Seite: Bons (1/3)
-   ========================== */
-#bon-panel {
-    flex: 1;
-    background: #fafafa;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
 }
 
 /* Action Buttons */
 .action-buttons {
     display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
+    gap: 8px;
+    margin-bottom: 10px;
 }
-
 .action-buttons button {
     flex: 1;
-    padding: 12px;
+    padding: 11px;
     border: none;
-    border-radius: 8px;
-    background-color: #28a745;
+    border-radius: 9px;
+    background-color: var(--accent);
     color: #fff;
     font-size: 1rem;
+    font-weight: 500;
     cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
-
 .action-buttons button.reset {
     background-color: #dc3545;
 }
@@ -150,73 +89,169 @@ h1 {
     background-color: #ffc107;
     color: #000;
 }
-
 .action-buttons button:hover {
-    opacity: 0.9;
+    background-color: var(--accent-hover);
+    opacity: 0.94;
 }
 
-/* Bon & Historie */
-#receipt-section {
-    flex: 1;
-    overflow-y: auto;
-    margin-bottom: 20px;
+/* Aktuelle Bestellung */
+#receipt-section h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.14rem;
+    color: #333;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
 }
-
 #receipt-list {
     list-style: none;
     padding: 0;
     margin: 0;
 }
-
 #receipt-list li {
-    padding: 8px;
+    background: #f6f8fa;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
     margin-bottom: 5px;
-    background: #fff;
-    border-radius: 6px;
+    font-size: 0.97rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
-
 #total {
     font-weight: bold;
-    margin-top: 10px;
-    font-size: 1.2rem;
+    font-size: 1.09rem;
+    color: var(--accent);
+    margin-top: 6px;
+    padding: 8px 0 0 0;
+    border-top: 1px solid var(--border);
 }
 
-#history-section {
-    flex: 1;
+/* Historie */
+#history-section h3 {
+    margin-bottom: 5px;
+    font-size: 1.09rem;
+    color: #555;
+    letter-spacing: 0.5px;
+}
+#history-list {
+    max-height: 160px;
     overflow-y: auto;
+    padding-right: 6px;
 }
-
 #history-list .history-item {
-    padding: 8px;
-    margin-bottom: 8px;
-    background: #fff;
-    border-radius: 6px;
+    background: #f6f8fa;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    margin-bottom: 5px;
+    font-size: 0.94rem;
 }
 
-/* ==========================
-   Responsiv
-   ========================== */
+/* Button Panel (Bestellbuttons) -- jetzt wirklich rechts! */
+#button-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 12px;
+    min-height: 400px;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+}
+
+/* Grid für Buttons (18 Produkte, z.B. 3 Spalten, 6 Reihen) */
+.button-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+.button-grid button {
+    width: 100%;
+    min-width: 100px;   /* vorher 80px, jetzt minimal breiter */
+    max-width: 190px;   /* optional, wenn du sehr breite Buttons willst */
+    height: 46px;
+    font-size: 0.93rem; /* vorher 0.98rem, jetzt etwas kleiner */
+    background-color: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transition: background 0.2s, box-shadow 0.2s;
+    font-weight: 500;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    padding: 0 4px;  /* etwas weniger Rand für mehr Platz im Button */
+    line-height: 1.1;
+    word-break: break-word; /* trennt lange Wörter */
+}
+
+
+.button-grid button:hover {
+    background-color: var(--accent-hover);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.13);
+}
+.button-grid button:active {
+    background-color: #003366;
+}
+
+/* Responsiv für iPad & Co */
 @media (max-width: 1024px) {
     #container {
         flex-direction: column;
-        height: auto;
+        gap: 20px;
+        max-width: 98vw;
+        padding-bottom: 8px;
     }
-
-    #button-panel, #bon-panel {
-        flex: none;
-        width: 100%;
-        gap: 15px;
-        justify-content: center;
+    .left-panel, .right-panel {
+        max-width: 100%;
+        gap: 12px;
     }
-
-    .warengruppe {
-        width: 90%; /* fast volle Breite auf Tablet */
-        flex: 0 0 auto;
+    #button-panel {
+        padding: 12px 6px;
     }
+    .button-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
 
-    .warengruppe .button-grid button {
-        width: 120px;
-        height: 70px;
-        font-size: 0.9rem;
+@media (max-width: 700px) {
+    #container {
+        flex-direction: column;
+        gap: 12px;
+        padding-bottom: 6px;
+    }
+    .left-panel, .right-panel {
+        max-width: 100%;
+        gap: 8px;
+    }
+    #button-panel {
+        padding: 8px 2px;
+    }
+    .card {
+        padding: 7px 2px;
+        gap: 8px;
+    }
+    .button-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 7px;
+    }
+    .button-grid button {
+        min-width: 70px;
+        height: 40px;
+        font-size: 0.92rem;
     }
 }
