@@ -117,17 +117,24 @@ function updateProductStatsTable(productStats) {
     }
     productStatsTable.innerHTML = ""; // Tabelle leeren
 
-    productStats.forEach(stat => {
-        const totalRevenue = parseFloat(stat.total_revenue) || 0;
+    for (let i = 0; i < productStats.length; i += 2) {
+        const stat1 = productStats[i];
+        const stat2 = productStats[i + 1];
+
+        const totalRevenue1 = parseFloat(stat1?.total_revenue) || 0;
+        const totalRevenue2 = parseFloat(stat2?.total_revenue) || 0;
 
         const row = document.createElement("tr");
         row.innerHTML = `
-            <td>${stat.product_name}</td>
-            <td>${stat.total_sold}</td>
-            <td>${totalRevenue.toFixed(2)}</td>
+            <td>${stat1?.product_name || ""}</td>
+            <td>${stat1?.total_sold || ""}</td>
+            <td>${stat1 ? totalRevenue1.toFixed(2) : ""}</td>
+            <td>${stat2?.product_name || ""}</td>
+            <td>${stat2?.total_sold || ""}</td>
+            <td>${stat2 ? totalRevenue2.toFixed(2) : ""}</td>
         `;
         productStatsTable.appendChild(row);
-    });
+    }
 }
 
 function updateIntervalStatsTable(intervalStats) {

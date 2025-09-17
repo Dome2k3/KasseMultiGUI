@@ -71,23 +71,49 @@
         <th>Artikel</th>
         <th>Verkaufte Menge</th>
         <th>Gesamtumsatz (€)</th>
+        <th>Artikel</th>
+        <th>Verkaufte Menge</th>
+        <th>Gesamtumsatz (€)</th>
     </tr>
     </thead>
     <tbody id="productStatsTable"></tbody>
 </table>
 
 <!-- Verkaufsstatistik in 15-Minuten-Intervallen -->
-<h2>Verkäufe in 15-Minuten-Intervallen</h2>
-<table>
-    <thead>
-    <tr>
-        <th>Intervall</th>
-        <th>Artikel</th>
-        <th>Verkaufte Menge</th>
-    </tr>
-    </thead>
-    <tbody id="intervalStatsTable"></tbody>
-</table>
+<h2 style="margin-bottom: 0;">Verkäufe in 15-Minuten-Intervallen</h2>
+
+<button onclick="toggleTable()" style="margin-bottom: 10px;">Tabelle anzeigen</button>
+
+<div id="tableContainer" style="display: none;">
+    <table>
+        <thead>
+        <tr>
+            <th>Intervall</th>
+            <th>Artikel</th>
+            <th>Verkaufte Menge</th>
+        </tr>
+        </thead>
+        <tbody id="intervalStatsTable">
+        <!-- Dynamische Daten -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+    function toggleTable() {
+        const container = document.getElementById("tableContainer");
+        const button = event.target;
+
+        if (container.style.display === "none") {
+            container.style.display = "block";
+            button.textContent = "Tabelle ausblenden";
+        } else {
+            container.style.display = "none";
+            button.textContent = "Tabelle anzeigen";
+        }
+    }
+</script>
+
 
 <!-- Diagramm -->
 <h2>Diagramm der Verkaufsstatistiken</h2>
