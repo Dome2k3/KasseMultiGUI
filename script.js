@@ -42,7 +42,7 @@ function displayItems() {
             (it.kategorie && it.kategorie.toLowerCase().includes('pfand')) ||
             (it.name && it.name.toLowerCase().includes('pfand'))
         );
-        const pfandPrice = pfandProduct ? parseFloat(pfandProduct.preis) : 0.25;
+        const pfandPrice = pfandProduct ? parseFloat(pfandProduct.preis) : 1;
 
         const quantities = [1, 2, 5];
         const gruppeDiv = document.createElement("div");
@@ -58,7 +58,7 @@ function displayItems() {
         quantities.forEach(q => {
             const btn = document.createElement('button');
             btn.textContent = `${q}x Pfand - €${(pfandPrice * q).toFixed(2)}`;
-            btn.onclick = () => addMultipleItems('Pfand', pfandPrice, q);
+            btn.onclick = () => addMultipleItems('Pfandrück', pfandPrice, q);
             grid.appendChild(btn);
         });
 
