@@ -58,7 +58,7 @@ function displayItems() {
         quantities.forEach(q => {
             const btn = document.createElement('button');
             btn.textContent = `${q}x Pfand - €${(pfandPrice * q).toFixed(2)}`;
-            btn.onclick = () => addMultipleItems('Pfandrück', pfandPrice, q);
+            btn.onclick = () => addMultipleItems('Pfandrück', pfandPrice * -1, q);
             grid.appendChild(btn);
         });
 
