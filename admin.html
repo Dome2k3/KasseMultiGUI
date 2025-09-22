@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        :root {
+            --main-bg: #f4f6fa;
+            --panel-bg: #fff;
+            --primary: #34495e;
+            --primary-dark: #2c3e50;
+            --accent: #3867d6;
+            --border: #e2e6ea;
+            --radius: 14px;
+            --shadow: 0 4px 20px #0001;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background: var(--main-bg);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 430px;
+            margin: 40px auto 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        h1 {
+            margin: 0 0 32px 0;
+            color: var(--primary-dark);
+            font-size: 2.1rem;
+            text-align: center;
+            letter-spacing: 0.03em;
+            font-weight: 800;
+        }
+        .admin-buttons {
+            background: var(--panel-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px 24px 18px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            justify-content: center;
+            margin-bottom: 34px;
+            border: 1.5px solid var(--border);
+        }
+        .admin-buttons button, .admin-buttons a {
+            flex: 1 1 auto;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            padding: 14px 0;
+            font-size: 1.07rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 2px 8px #0001;
+            text-align: center;
+            text-decoration: none;
+            display: block;
+        }
+        .admin-buttons button:hover,
+        .admin-buttons a:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px) scale(1.03);
+            box-shadow: 0 4px 20px #0002;
+        }
+        .statistik-panel {
+            background: var(--panel-bg);
+            border-radius: var(--radius);
+            border: 1.5px solid var(--border);
+            box-shadow: var(--shadow);
+            padding: 32px 22px 24px 22px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .section-heading {
+            font-size: 1.18rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin: 0 0 15px 0;
+            text-align: left;
+            letter-spacing: .01em;
+        }
+        label {
+            display: block;
+            margin: 12px 0 5px 2px;
+            color: var(--primary-dark);
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        input[type="date"], input[type="email"] {
+            width: 100%;
+            padding: 11px;
+            border: 1.2px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 1.02rem;
+            background: #f7f9fb;
+            margin-bottom: 2px;
+            box-sizing: border-box;
+        }
+        input[type="date"]:focus, input[type="email"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: #fff;
+        }
+        #sendStatsMailBtn {
+            width: 100%;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            padding: 13px 0;
+            font-size: 1.04rem;
+            font-weight: bold;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.15s;
+            box-shadow: 0 1.5px 8px #3867d622;
+        }
+        #sendStatsMailBtn:hover {
+            background: #2451a6;
+        }
+        .msg {
+            margin-top: 14px;
+            font-size: 1.02rem;
+            font-weight: 500;
+            min-height: 1.2em;
+        }
+        @media (max-width: 520px) {
+            .container {
+                max-width: 98vw;
+                padding: 0 2vw 0 2vw;
+            }
+            .admin-buttons, .statistik-panel {
+                padding-left: 7vw;
+                padding-right: 7vw;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Admin Dashboard</h1>
+    <div class="admin-buttons">
+        <button onclick="window.location.href='index.html'">Zum Kassen-Dashboard</button>
+        <button onclick="window.location.href='/teams/teams.html'">Zur Teamübersicht</button>
+        <a href="http://192.168.0.187/kasse/statistics_sql.html" target="_blank">Statistik-Übersicht</a>
+    </div>
+    <div class="statistik-panel">
+        <div class="section-heading">Statistik per Mail versenden</div>
+        <form class="admin-form" id="statsMailForm" autocomplete="off" style="background:none; border:none; padding:0; margin:0;">
+            <label for="dateInput">Datum wählen:</label>
+            <input type="date" id="dateInput" name="date" required>
+
+            <label for="emailInput">Empfänger E-Mail:</label>
+            <input type="email" id="emailInput" name="email" required placeholder="admin@email.de">
+
+            <button type="submit" id="sendStatsMailBtn">Tagesstatistik senden</button>
+            <div class="msg" id="mailStatusMsg"></div>
+        </form>
+    </div>
+</div>
+<script src="admin.js"></script>
+</body>
+</html>

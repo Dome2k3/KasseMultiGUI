@@ -18,18 +18,15 @@
             min-height: 100vh;
             color: #333;
         }
-
         h1 {
             margin-top: 30px;
             font-size: 2.2rem;
             color: #2c3e50;
         }
-
         p {
             margin: 10px 0 20px 0;
             font-size: 1.1rem;
         }
-
         /* Buttons Container */
         .gui-buttons {
             display: grid;
@@ -39,9 +36,8 @@
             max-width: 900px;
             margin-bottom: 40px;
         }
-
         /* Buttons Styling */
-        .gui-buttons button {
+        .gui-buttons button, .admin-btn {
             background-color: #3498db;
             color: white;
             border: none;
@@ -52,23 +48,103 @@
             transition: background-color 0.2s, transform 0.1s;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-
-        .gui-buttons button:hover {
+        .gui-buttons button:hover, .admin-btn:hover {
             background-color: #2980b9;
             transform: translateY(-2px);
         }
-
-        .gui-buttons button:active {
+        .gui-buttons button:active, .admin-btn:active {
             transform: translateY(1px);
         }
-
-        /* Responsive */
+        /* Admin Button extra Abstand */
+        .admin-btn-container {
+            width: 90%;
+            max-width: 900px;
+            margin-bottom: 40px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .admin-btn {
+            padding: 12px 32px;
+            font-size: 1.07rem;
+            border-radius: 10px;
+            background-color: #34495e;
+            margin-left: auto;
+        }
+        .admin-btn:hover {
+            background-color: #2c3e50;
+        }
+        /* Modal Styles */
+        .modal-bg {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.2);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal {
+            background: #fff;
+            padding: 30px 26px 24px 26px;
+            border-radius: 13px;
+            box-shadow: 0 4px 30px #0003;
+            min-width: 260px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .modal label {
+            font-weight: 500;
+            margin-bottom: 7px;
+        }
+        .modal input[type="password"] {
+            padding: 9px;
+            margin-bottom: 18px;
+            border-radius: 7px;
+            border: 1.2px solid #ccc;
+            font-size: 1.1rem;
+        }
+        .modal input[type="password"]:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        .modal .modal-btn-row {
+            display: flex;
+            gap: 12px;
+        }
+        .modal button {
+            padding: 9px 22px;
+            border: none;
+            border-radius: 7px;
+            font-size: 1.01rem;
+            cursor: pointer;
+            background: #3498db;
+            color: #fff;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .modal button:hover {
+            background: #2980b9;
+        }
+        .modal .cancel-btn {
+            background: #bbb;
+            color: #222;
+        }
+        .modal .cancel-btn:hover {
+            background: #848484;
+        }
+        .modal .error {
+            color: #c0392b;
+            font-size: 1rem;
+            margin-bottom: 10px;
+            min-height: 1.2em;
+        }
         @media (max-width: 768px) {
-            .gui-buttons {
+            .gui-buttons, .admin-btn-container {
                 grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             }
         }
-
         @media (max-width: 480px) {
             .gui-buttons {
                 grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -77,6 +153,9 @@
             .gui-buttons button {
                 padding: 15px;
                 font-size: 1rem;
+            }
+            .admin-btn-container {
+                margin-bottom: 20px;
             }
         }
     </style>
@@ -90,13 +169,56 @@
     <button onclick="openGUI('pfand')">Pfandrückgabe</button>
     <button onclick="openGUI('fruehstueck')">Frühstück</button>
     <button onclick="openGUI('bons')">Bons</button>
-    <button onclick="openGUI('statistics_sql')">Statistik</button>
+</div>
+<div class="admin-btn-container">
+    <button class="admin-btn" onclick="showAdminModal()">Adminbereich</button>
+</div>
+
+<!-- Modal für Passwortabfrage -->
+<div class="modal-bg" id="adminModalBg">
+    <div class="modal">
+        <div class="error" id="adminModalError"></div>
+        <label for="adminPass">Admin-Passwort:</label>
+        <input type="password" id="adminPass" autocomplete="off">
+        <div class="modal-btn-row">
+            <button onclick="checkAdminPassword()">OK</button>
+            <button class="cancel-btn" onclick="closeAdminModal()">Abbrechen</button>
+        </div>
+    </div>
 </div>
 
 <script>
     function openGUI(gui) {
         window.location.href = gui + '.html';
     }
+
+    // Admin Modal Logik
+    function showAdminModal() {
+        document.getElementById('adminModalBg').style.display = 'flex';
+        document.getElementById('adminPass').value = '';
+        document.getElementById('adminModalError').textContent = '';
+        setTimeout(() => {
+            document.getElementById('adminPass').focus();
+        }, 50);
+    }
+    function closeAdminModal() {
+        document.getElementById('adminModalBg').style.display = 'none';
+    }
+    function checkAdminPassword() {
+        const pass = document.getElementById('adminPass').value;
+        if(pass === '1881') {
+            window.location.href = 'admin.html';
+        } else {
+            document.getElementById('adminModalError').textContent = 'Falsches Passwort!';
+        }
+    }
+    // Schließen via ESC oder Klick außerhalb
+    document.addEventListener('keydown', function(evt) {
+        if(evt.key === "Escape") closeAdminModal();
+    });
+    document.getElementById('adminModalBg').addEventListener('click', function(evt){
+        if(evt.target === this) closeAdminModal();
+    });
 </script>
 </body>
 </html>
