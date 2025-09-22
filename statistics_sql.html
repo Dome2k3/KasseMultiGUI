@@ -49,7 +49,13 @@
     <tbody id="bonStatsTable"></tbody>
 </table>
 
+<!-- Kategorie-Statistik UND E-Mail-Button -->
 <h2>Kategorie-Statistik</h2>
+
+<!-- Neuer Button für E-Mail-Versand -->
+<div style="margin-bottom: 1em;">
+    <button id="sendStatsMailBtn">Tagesstatistik per E-Mail senden</button>
+</div>
 
 <table>
     <thead>
@@ -120,3 +126,17 @@
 <canvas id="salesChart" width="400" height="200"></canvas>
 </body>
 </html>
+
+<!-- Modal für E-Mail-Eingabe -->
+<div id="mailModal" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:1.5em; border-radius:10px; max-width:95vw; min-width:300px;">
+        <span id="closeMailModal" style="float:right; cursor:pointer;">&#10005;</span>
+        <h3>Statistik per E-Mail versenden</h3>
+        <form id="mailForm" autocomplete="off">
+            <label for="emailInput">Empfänger E-Mail:</label>
+            <input type="email" id="emailInput" name="email" required style="width:100%; margin-bottom:1em;" />
+            <button type="submit">Senden</button>
+        </form>
+        <div id="mailStatusMsg" style="margin-top:0.5em; color:#333;"></div>
+    </div>
+</div>

@@ -1,5 +1,7 @@
 require('dotenv').config({ path: '/var/www/html/kasse/Umgebung.env' });
 
+const nodemailer = require("nodemailer");
+
 // MYSQL
 const express = require("express");
 const mysql = require("mysql2");
@@ -530,6 +532,207 @@ app.get('/recent-bons', (req, res) => {
 
         res.json(Object.values(bons)); // Kein slice
     });
+});
+
+// ➤ API-Route: Statistik per Mail versenden (mit Einzelposten/Produkte)
+app.post("/send-statistics-email", async (req, res) => {
+    const { email, date, startTime, endTime, category } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: "E-Mail fehlt" });
+
+    // Filter bauen
+    let whereClause = "";
+    let params = [];
+
+    if (date) {
+        whereClause += "WHERE DATE(b.created_at) = ?";
+        params.push(date);
+    }
+    if (startTime && endTime) {
+        whereClause += whereClause ? " AND " : "WHERE ";
+        whereClause += "TIME(b.created_at) BETWEEN ? AND ?";
+        params.push(startTime, endTime);
+    }
+    if (category) {
+        whereClause += whereClause ? " AND " : "WHERE ";
+        whereClause += "b.category = ?";
+        params.push(category);
+    }
+
+    // 1. Kategorie-Statistik
+    const categoryStatsQuery = `
+        SELECT
+            b.category,
+            COUNT(b.id) AS total_bons,
+            SUM(b.total) AS total_revenue,
+            AVG(b.total) AS avg_bon_value
+        FROM kasse_bon b
+            ${whereClause}
+        GROUP BY b.category
+        ORDER BY total_revenue DESC
+            LIMIT 20;
+    `;
+
+    // 2. Einzelposten nach Kategorie
+    const itemStatsQuery = `
+        SELECT
+            b.category,
+            bi.name AS product_name,
+            SUM(bi.quantity) AS total_sold,
+            SUM(bi.total) AS total_revenue
+        FROM kasse_bon_items bi
+                 JOIN kasse_bon b ON bi.bon_id = b.id
+            ${whereClause}
+        GROUP BY b.category, bi.name
+        ORDER BY b.category, total_sold DESC
+            LIMIT 200;
+    `;
+
+    function runQuery(query, params) {
+        return new Promise((resolve, reject) => {
+            db.query(query, params, (err, results) => {
+                if (err) reject(err);
+                else resolve(results);
+            });
+        });
+    }
+
+    let categoryStats, itemStats;
+    try {
+        [categoryStats, itemStats] = await Promise.all([
+            runQuery(categoryStatsQuery, params),
+            runQuery(itemStatsQuery, params)
+        ]);
+    } catch (err) {
+        console.error("Fehler beim Lesen Statistikdaten:", err);
+        return res.status(500).json({ success: false, message: "Fehler beim Abrufen der Statistik" });
+    }
+
+    if (!categoryStats || categoryStats.length === 0) {
+        return res.json({ success: false, message: "Keine Daten für diesen Zeitraum." });
+    }
+
+    // -- MAILTEXT AUFBAUEN (Klartext für Fallback) --
+    let mailText = `Tagesstatistik nach Kategorie\n\n`;
+    mailText += `Datum: ${date || "Alle"}\n`;
+    if (startTime && endTime) mailText += `Zeitraum: ${startTime} - ${endTime}\n`;
+    if (category) mailText += `Kategorie: ${category}\n`;
+    mailText += "\n";
+    mailText += `Kategorie                | Bons | Umsatz (€) | ⌀ Bon (€)\n`;
+    mailText += `-------------------------|------|------------|----------\n`;
+    categoryStats.forEach(row => {
+        mailText +=
+            (row.category || "").padEnd(25, " ") + " | " +
+            String(row.total_bons).padStart(4, " ") + " | " +
+            (parseFloat(row.total_revenue).toFixed(2).toString()).padStart(10, " ") + " | " +
+            (parseFloat(row.avg_bon_value).toFixed(2).toString()).padStart(8, " ") + "\n";
+    });
+
+    // Einzelposten gruppieren
+    const itemsByCat = {};
+    itemStats.forEach(row => {
+        if (!itemsByCat[row.category]) itemsByCat[row.category] = [];
+        itemsByCat[row.category].push(row);
+    });
+
+    mailText += "\n\n-----------------------------\n";
+    mailText += "Einzelposten nach Kategorie:\n";
+    mailText += "-----------------------------\n\n";
+    categoryStats.forEach(catRow => {
+        const cat = catRow.category;
+        mailText += `Kategorie: ${cat}\n`;
+        if (!itemsByCat[cat] || itemsByCat[cat].length === 0) {
+            mailText += "  (keine Produkte)\n";
+            return;
+        }
+        mailText += "  Einzelposten                 | Anzahl | Umsatz (€)\n";
+        mailText += "  -----------------------------|--------|-----------\n";
+        itemsByCat[cat].forEach((item) => {
+            mailText += "  " +
+                (item.product_name || "").padEnd(28, " ") + "| " +
+                String(item.total_sold).padStart(6, " ") + " | " +
+                (parseFloat(item.total_revenue).toFixed(2).toString()).padStart(9, " ") + "\n";
+        });
+        mailText += "\n";
+    });
+
+    // -- MAILHTML AUFBAUEN (Schön für moderne Clients) --
+    let mailHtml = `
+    <h2 style="margin-bottom:4px;">Tagesstatistik nach Kategorie</h2>
+    <div>
+        <b>Datum:</b> ${date || "Alle"}<br>
+        ${startTime && endTime ? `<b>Zeitraum:</b> ${startTime} - ${endTime}<br>` : ""}
+        ${category ? `<b>Kategorie:</b> ${category}<br>` : ""}
+    </div>
+    <table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse; margin-top:8px; margin-bottom:18px;">
+      <tr style="background:#eee;">
+        <th>Kategorie</th>
+        <th>Bons</th>
+        <th>Umsatz&nbsp;(&euro;)</th>
+        <th>&Oslash;&nbsp;Bon&nbsp;(&euro;)</th>
+      </tr>
+      ${categoryStats.map(row => `
+        <tr>
+          <td>${row.category}</td>
+          <td align="right">${row.total_bons}</td>
+          <td align="right">${parseFloat(row.total_revenue).toFixed(2)}</td>
+          <td align="right">${parseFloat(row.avg_bon_value).toFixed(2)}</td>
+        </tr>
+      `).join("")}
+    </table>
+    <hr>
+    <h2 style="margin-bottom:4px;">Einzelposten nach Kategorie</h2>
+    `;
+
+    categoryStats.forEach(catRow => {
+        const cat = catRow.category;
+        mailHtml += `<h3 style="margin-bottom:2px;">${cat}</h3>`;
+        if (!itemsByCat[cat] || itemsByCat[cat].length === 0) {
+            mailHtml += `<i>(keine Produkte)</i>`;
+            return;
+        }
+        mailHtml += `
+        <table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse; margin-bottom:18px;">
+          <tr style="background:#eee;">
+            <th>Einzelposten</th>
+            <th>Anzahl</th>
+            <th>Umsatz&nbsp;(&euro;)</th>
+          </tr>
+          ${itemsByCat[cat].map(item => `
+            <tr>
+              <td>${item.product_name}</td>
+              <td align="right">${item.total_sold}</td>
+              <td align="right">${parseFloat(item.total_revenue).toFixed(2)}</td>
+            </tr>
+          `).join("")}
+        </table>
+        `;
+    });
+
+    // -- MAIL SENDEN --
+    try {
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || "587"),
+            secure: false,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS
+            }
+        });
+
+        await transporter.sendMail({
+            from: process.env.SMTP_SENDER || process.env.SMTP_USER,
+            to: email,
+            subject: "Tagesstatistik nach Kategorie und Einzelposten",
+            text: mailText, // Fallback (Plaintext)
+            html: mailHtml  // Schöne HTML-Mail!
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("E-Mail-Versand fehlgeschlagen:", err);
+        res.json({ success: false, message: "Fehler beim E-Mail-Versand (" + err.message + ")" });
+    }
 });
 
 

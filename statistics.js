@@ -209,3 +209,78 @@ function renderChart(bonStats) {
         }
     });
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    // ... (dein bisheriger Code)
+
+    // E-Mail Button initialisieren
+    const sendStatsMailBtn = document.getElementById("sendStatsMailBtn");
+    if (sendStatsMailBtn) {
+        sendStatsMailBtn.addEventListener("click", openMailModal);
+    }
+    setupMailModal();
+});
+
+// --- E-Mail-Dialog, Speicherung, Versand ---
+function openMailModal() {
+    const modal = document.getElementById("mailModal");
+    const emailInput = document.getElementById("emailInput");
+    const mailStatusMsg = document.getElementById("mailStatusMsg");
+    mailStatusMsg.textContent = "";
+    // Lade Standard-Mailadresse
+    emailInput.value = localStorage.getItem("statsEmail") || "";
+    modal.style.display = "flex";
+    emailInput.focus();
+}
+
+function setupMailModal() {
+    // Schließen mit X oder außen klicken
+    document.getElementById("closeMailModal").onclick = () => {
+        document.getElementById("mailModal").style.display = "none";
+    };
+    // ESC schließt auch
+    document.addEventListener("keydown", function(evt) {
+        if (evt.key === "Escape") document.getElementById("mailModal").style.display = "none";
+    });
+    // Modal-Formular-Submit
+    document.getElementById("mailForm").onsubmit = async function(evt) {
+        evt.preventDefault();
+        const email = document.getElementById("emailInput").value.trim();
+        if (!email) return;
+        localStorage.setItem("statsEmail", email); // als Standard speichern
+
+        // Hole aktuelle Filter
+        const date = document.getElementById("date").value;
+        const startTime = document.getElementById("startTime").value;
+        const endTime = document.getElementById("endTime").value;
+        const category = document.getElementById("category")?.value || "";
+
+        // UI Feedback
+        const msgDiv = document.getElementById("mailStatusMsg");
+        msgDiv.style.color = "#007b00";
+        msgDiv.textContent = "Versand läuft ...";
+
+        try {
+            const res = await fetch("http://192.168.0.187:3000/send-statistics-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, date, startTime, endTime, category })
+            });
+            const data = await res.json();
+            if (data.success) {
+                msgDiv.textContent = "E-Mail erfolgreich versendet!";
+                msgDiv.style.color = "#007b00";
+            } else {
+                msgDiv.textContent = "Fehler beim Versand: " + (data.message || "Unbekannter Fehler");
+                msgDiv.style.color = "#c00";
+            }
+        } catch (err) {
+            msgDiv.textContent = "Fehler beim Versand: " + err.message;
+            msgDiv.style.color = "#c00";
+        }
+    };
+    // Modal bei Klick außerhalb schließen
+    document.getElementById("mailModal").onclick = function(e) {
+        if (e.target === this) this.style.display = "none";
+    };
+}
