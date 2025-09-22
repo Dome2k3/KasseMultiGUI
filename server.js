@@ -723,7 +723,7 @@ app.post("/send-statistics-email", async (req, res) => {
         await transporter.sendMail({
             from: process.env.SMTP_SENDER || process.env.SMTP_USER,
             to: email,
-            subject: "Tagesstatistik nach Kategorie und Einzelposten",
+            subject:  `Tagesstatistik für ${date || "Alle Tage"} nach Kategorie und Einzelposten`,
             text: mailText, // Fallback (Plaintext)
             html: mailHtml  // Schöne HTML-Mail!
         });
