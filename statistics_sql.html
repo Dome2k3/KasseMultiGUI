@@ -7,6 +7,28 @@
     <link rel="stylesheet" href="style_statistics.css"> <!-- Einbinden der CSS-Datei -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Einbinden der Chart.js Bibliothek -->
     <script defer src="statistics.js"></script>
+    <style>
+        /* Hübscher Button im Stil der anderen (optional, wenn nicht schon in style_statistics.css) */
+        .pretty-btn {
+            padding: 6px 18px;
+            font-size: 15px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(90deg, #f5c542 0%, #facd60 100%);
+            color: #444;
+            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            cursor: pointer;
+            font-weight: 500;
+            opacity: 0.95;
+        }
+        .pretty-btn:hover, .pretty-btn:focus {
+            background: linear-gradient(90deg, #ffe082 0%, #f5c542 100%);
+            color: #222;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.11);
+            opacity: 1;
+        }
+    </style>
 </head>
 <body>
 <h1>Verkaufsstatistiken</h1>
@@ -53,9 +75,9 @@
 <!-- Kategorie-Statistik UND E-Mail-Button -->
 <h2>Kategorie-Statistik</h2>
 
-<!-- Neuer Button für E-Mail-Versand -->
+<!-- Hübscher Button für E-Mail-Versand -->
 <div style="margin-bottom: 1em;">
-    <button id="sendStatsMailBtn">Tagesstatistik per E-Mail senden</button>
+    <button id="sendStatsMailBtn" class="pretty-btn">Tagesstatistik per E-Mail senden</button>
 </div>
 
 <table>
