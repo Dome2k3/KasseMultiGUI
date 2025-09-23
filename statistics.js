@@ -27,7 +27,7 @@ function formatDateForMySQL(date) {
 }
 
 function fetchStatistics(date = "", startTime = "", endTime = "") {
-    let url = "http://192.168.0.187:3000/statistics";
+    let url = `${window.API_URL}/statistics`;
 
     if (date) {
         const mysqlDate = formatDateForMySQL(date);
@@ -261,7 +261,7 @@ function setupMailModal() {
         msgDiv.textContent = "Versand läuft ...";
 
         try {
-            const res = await fetch("http://192.168.0.187:3000/send-statistics-email", {
+            const res = await fetch(`${window.API_URL}/send-statistics-email`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, date, startTime, endTime, category })
