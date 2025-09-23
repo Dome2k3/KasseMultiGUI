@@ -6,7 +6,7 @@ let receipts = {}; // Startet leer, wird mit jedem Artikel befüllt
 let bonDetails = { items: [] }; // Standardwert als leeres Array
 
 // Artikel laden und Preis loggen
-fetch('http://192.168.0.187:3000/items')
+fetch(`${window.API_URL}/items`)
     .then(response => response.json())
     .then(data => {
         items = data;
@@ -364,7 +364,7 @@ function sendPrintRequest(bonDetails) {
         return;  // Stoppt die Funktion, wenn die Checkbox nicht aktiviert ist
     }
     console.log("Bon Details zum Drucken:", bonDetails);  // Logge die Bon-Daten zur Überprüfung
-    fetch('http://192.168.0.187:3000/print', {
+    fetch(`${window.API_URL}/print`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -434,7 +434,7 @@ function sendReceiptsToServer(bonDetails) {
     bonDetails.gui = window.currentGUI || bonDetails.gui || 'essen';
 
     if (bonDetails && Array.isArray(bonDetails.items) && bonDetails.items.length > 0) {
-        fetch('http://192.168.0.187:3000/finalize-bon', {
+        fetch(`${window.API_URL}/finalize-bon`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bonDetails }),

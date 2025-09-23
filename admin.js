@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
         msgDiv.style.color = "#007b00";
 
         try {
-            const res = await fetch("http://192.168.0.187:3000/send-statistics-email", {
+            const res = await fetch(`${window.API_URL}/send-statistics-email`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, date })
