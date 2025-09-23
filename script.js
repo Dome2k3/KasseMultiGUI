@@ -508,7 +508,7 @@ function renderBon(bon, prepend = false) {
 async function loadRecentBons() {
     try {
         const guiParam = encodeURIComponent(window.currentGUI || '');
-        const url = guiParam ? `http://192.168.0.187:3000/recent-bons?gui=${guiParam}` : `http://192.168.0.187:3000/recent-bons`;
+        const url = guiParam ? `${window.API_URL}/recent-bons?gui=${guiParam}` : `${window.API_URL}/recent-bons`;
         const response = await fetch(url);
         const bons = await response.json();
 
