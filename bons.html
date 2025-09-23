@@ -97,7 +97,7 @@
     let allBons = [];
 
     async function loadBons() {
-        const res = await fetch("http://192.168.0.187:3000/bons");
+        const res = await fetch(`${window.API_URL}/bons`);
         allBons = await res.json();
         renderBons(allBons);
     }
