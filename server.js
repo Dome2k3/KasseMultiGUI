@@ -534,7 +534,7 @@ app.get('/recent-bons', (req, res) => {
     });
 });
 
-// ➤ API-Route: Statistik per Mail versenden (mit Einzelposten/Produkte)
+// ➤ API-Route: Statistik per Mail versenden (mit Einzelposten/Produkte UND Gesamtstatistik)
 app.post("/send-statistics-email", async (req, res) => {
     const { email, date, startTime, endTime, category } = req.body;
     if (!email) return res.status(400).json({ success: false, message: "E-Mail fehlt" });
@@ -558,7 +558,20 @@ app.post("/send-statistics-email", async (req, res) => {
         params.push(category);
     }
 
-    // 1. Kategorie-Statistik
+    // 1. Gesamtstatistik (bonStats)
+    const bonStatsQuery = `
+        SELECT
+            DATE(b.created_at) AS date,
+            COUNT(b.id) AS total_bons,
+            SUM(b.total) AS total_revenue,
+            AVG(b.total) AS avg_bon_value
+        FROM kasse_bon b
+            ${whereClause}
+        GROUP BY DATE(b.created_at)
+        ORDER BY DATE(b.created_at) DESC;
+    `;
+
+    // 2. Kategorie-Statistik
     const categoryStatsQuery = `
         SELECT
             b.category,
@@ -572,7 +585,7 @@ app.post("/send-statistics-email", async (req, res) => {
             LIMIT 20;
     `;
 
-    // 2. Einzelposten nach Kategorie
+    // 3. Einzelposten nach Kategorie
     const itemStatsQuery = `
         SELECT
             b.category,
@@ -596,9 +609,10 @@ app.post("/send-statistics-email", async (req, res) => {
         });
     }
 
-    let categoryStats, itemStats;
+    let bonStats, categoryStats, itemStats;
     try {
-        [categoryStats, itemStats] = await Promise.all([
+        [bonStats, categoryStats, itemStats] = await Promise.all([
+            runQuery(bonStatsQuery, params),
             runQuery(categoryStatsQuery, params),
             runQuery(itemStatsQuery, params)
         ]);
@@ -607,16 +621,28 @@ app.post("/send-statistics-email", async (req, res) => {
         return res.status(500).json({ success: false, message: "Fehler beim Abrufen der Statistik" });
     }
 
-    if (!categoryStats || categoryStats.length === 0) {
+    if ((!categoryStats || categoryStats.length === 0) && (!bonStats || bonStats.length === 0)) {
         return res.json({ success: false, message: "Keine Daten für diesen Zeitraum." });
     }
 
     // -- MAILTEXT AUFBAUEN (Klartext für Fallback) --
-    let mailText = `Tagesstatistik nach Kategorie\n\n`;
-    mailText += `Datum: ${date || "Alle"}\n`;
-    if (startTime && endTime) mailText += `Zeitraum: ${startTime} - ${endTime}\n`;
-    if (category) mailText += `Kategorie: ${category}\n`;
-    mailText += "\n";
+    let mailText = ``;
+
+    // Gesamtstatistik als Text
+    mailText += `Gesamtstatistik\n\n`;
+    mailText += `Datum                | Bons | Umsatz (€) | ⌀ Bon (€)\n`;
+    mailText += `---------------------|------|------------|----------\n`;
+    bonStats.forEach(row => {
+        // Datum als String formatieren!
+        let dateStr = row.date ? (typeof row.date === "string" ? row.date : row.date.toISOString().slice(0,10)) : "";
+        mailText +=
+            dateStr.padEnd(20, " ") + " | " +
+            String(row.total_bons).padStart(4, " ") + " | " +
+            (parseFloat(row.total_revenue).toFixed(2).toString()).padStart(10, " ") + " | " +
+            (parseFloat(row.avg_bon_value).toFixed(2).toString()).padStart(8, " ") + "\n";
+    });
+
+    mailText += `\n\nTagesstatistik nach Kategorie\n\n`;
     mailText += `Kategorie                | Bons | Umsatz (€) | ⌀ Bon (€)\n`;
     mailText += `-------------------------|------|------------|----------\n`;
     categoryStats.forEach(row => {
@@ -657,6 +683,27 @@ app.post("/send-statistics-email", async (req, res) => {
 
     // -- MAILHTML AUFBAUEN (Schön für moderne Clients) --
     let mailHtml = `
+    <h2 style="margin-bottom:4px;">Gesamtstatistik</h2>
+    <table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse; margin-top:8px; margin-bottom:18px;">
+      <tr style="background:#eee;">
+        <th>Datum</th>
+        <th>Bons</th>
+        <th>Umsatz&nbsp;(&euro;)</th>
+        <th>&Oslash;&nbsp;Bon&nbsp;(&euro;)</th>
+      </tr>
+      ${bonStats.map(row => {
+        let dateStr = row.date ? (typeof row.date === "string" ? row.date : row.date.toISOString().slice(0,10)) : "";
+        return `
+        <tr>
+          <td>${dateStr}</td>
+          <td align="right">${row.total_bons}</td>
+          <td align="right">${parseFloat(row.total_revenue).toFixed(2)}</td>
+          <td align="right">${parseFloat(row.avg_bon_value).toFixed(2)}</td>
+        </tr>
+      `;
+    }).join("")}
+    </table>
+    <hr>
     <h2 style="margin-bottom:4px;">Tagesstatistik nach Kategorie</h2>
     <div>
         <b>Datum:</b> ${date || "Alle"}<br>
@@ -723,7 +770,7 @@ app.post("/send-statistics-email", async (req, res) => {
         await transporter.sendMail({
             from: process.env.SMTP_SENDER || process.env.SMTP_USER,
             to: email,
-            subject:  `Tagesstatistik für ${date || "Alle Tage"} nach Kategorie und Einzelposten`,
+            subject:  `Statistik für ${date || "Alle Tage"}: Gesamt, Kategorie und Einzelposten`,
             text: mailText, // Fallback (Plaintext)
             html: mailHtml  // Schöne HTML-Mail!
         });
