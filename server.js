@@ -382,11 +382,11 @@ app.get("/statistics", (req, res) => {
             SUM(bi.quantity) AS total_sold,
             SUM(bi.total) AS total_revenue
         FROM kasse_bon_items bi
-             JOIN kasse_bon b ON bi.bon_id = b.id
+                 JOIN kasse_bon b ON bi.bon_id = b.id
             ${whereClause}
         GROUP BY bi.name
         ORDER BY total_sold DESC
-        LIMIT 20;
+            LIMIT 20;
     `;
 
     const intervalStatsQuery = `
@@ -395,7 +395,7 @@ app.get("/statistics", (req, res) => {
             bi.name AS product_name,
             SUM(bi.quantity) AS total_sold
         FROM kasse_bon b
-             JOIN kasse_bon_items bi ON b.id = bi.bon_id
+                 JOIN kasse_bon_items bi ON b.id = bi.bon_id
             ${whereClause}
         GROUP BY \`interval\`, bi.name
         ORDER BY \`interval\`, bi.name;
@@ -411,7 +411,7 @@ app.get("/statistics", (req, res) => {
             ${whereClause}
         GROUP BY b.category
         ORDER BY total_revenue DESC
-        LIMIT 20;
+            LIMIT 20;
     `;
 
     // Helper für parallele Queries
@@ -733,6 +733,94 @@ app.post("/send-statistics-email", async (req, res) => {
         console.error("E-Mail-Versand fehlgeschlagen:", err);
         res.json({ success: false, message: "Fehler beim E-Mail-Versand (" + err.message + ")" });
     }
+});
+
+
+// Alle Lager-Einträge anzeigen
+app.get('/lager', (req, res) => {
+    db.query('SELECT * FROM lager_bestand ORDER BY produkt_name', (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Einzelnen Lager-Eintrag holen
+app.get('/lager/:id', (req, res) => {
+    db.query('SELECT * FROM lager_bestand WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+        res.json(rows[0]);
+    });
+});
+
+// Neuen Lager-Eintrag anlegen
+app.post('/lager', (req, res) => {
+    const { produkt_name, menge, einheit } = req.body;
+    if (!produkt_name || !menge || !einheit) return res.status(400).json({ error: 'Fehlende Felder' });
+    db.query('INSERT INTO lager_bestand (produkt_name, menge, einheit) VALUES (?, ?, ?)', [produkt_name, menge, einheit], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Lager-Eintrag bearbeiten
+app.put('/lager/:id', (req, res) => {
+    const { produkt_name, menge, einheit } = req.body;
+    db.query('UPDATE lager_bestand SET produkt_name = ?, menge = ?, einheit = ? WHERE id = ?', [produkt_name, menge, einheit, req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Lager-Eintrag löschen
+app.delete('/lager/:id', (req, res) => {
+    db.query('DELETE FROM lager_bestand WHERE id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+
+// Alle Gebinde anzeigen
+app.get('/config-gebinde', (req, res) => {
+    db.query('SELECT * FROM config_gebinde ORDER BY produkt_name', (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Einzelnes Gebinde holen
+app.get('/config-gebinde/:id', (req, res) => {
+    db.query('SELECT * FROM config_gebinde WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err || !rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+        res.json(rows[0]);
+    });
+});
+
+// Neues Gebinde eintragen
+app.post('/config-gebinde', (req, res) => {
+    const { produkt_name, gebinde_groesse } = req.body;
+    if (!produkt_name || !gebinde_groesse) return res.status(400).json({ error: 'Fehlende Felder' });
+    db.query('INSERT INTO config_gebinde (produkt_name, gebinde_groesse) VALUES (?, ?)', [produkt_name, gebinde_groesse], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Gebinde bearbeiten
+app.put('/config-gebinde/:id', (req, res) => {
+    const { produkt_name, gebinde_groesse } = req.body;
+    db.query('UPDATE config_gebinde SET produkt_name = ?, gebinde_groesse = ? WHERE id = ?', [produkt_name, gebinde_groesse, req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+// Gebinde löschen
+app.delete('/config-gebinde/:id', (req, res) => {
+    db.query('DELETE FROM config_gebinde WHERE id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
 });
 
 
