@@ -32,13 +32,15 @@
     </style>
 </head>
 <body>
-<h1>Verkaufsstatistiken</h1>
+<!-- Navigation oben -->
+<nav style="margin-bottom: 20px;">
+    <button onclick="window.location.href='admin.html'" class="pretty-btn">Zur Admin-Seite</button>
+    <button onclick="window.location.href='lager.html'" class="pretty-btn">Zur Lagerverwaltung</button>
+    <button onclick="window.location.href='config_gebinde.html'" class="pretty-btn">Gebinde-Konfiguration</button>
+    <button onclick="window.location.href='index.html'" class="pretty-btn">Kassen</button>
+</nav>
 
-<!-- Button zum Zurückkehren -->
-<div class="action-buttons">
-    <button class="back-button" onclick="window.location.href='admin.html'">Admin</button>
-    <button class="back-button" onclick="window.location.href='index.html'">Kassen</button>
-</div>
+<h1>Verkaufsstatistiken</h1>
 
 <!-- Filter für Datum & Zeitbereich -->
 <div class="filter-container">
