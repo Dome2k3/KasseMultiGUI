@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Team Anmeldung</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    tr.neutral { background-color: #f9f9f9; }
+    tr.angemeldet { background-color: #c8f7c5; }
+    tr.abgemeldet { background-color: #f7c5c5; }
+    input[type="number"] { width: 80px; padding: 4px; }
+    button { padding: 6px 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 2px; }
+    button.angemeldet { background-color: #4CAF50; color: white; }
+    button.abgemeldet { background-color: #f44336; color: white; }
+    button.extra { background-color: #2196F3; color: white; }
+    button.alpha { background-color: #eee; color: #333; }
+    #stats { margin-bottom: 12px; font-size: 16px; }
+    #search { padding: 6px; width: 220px; margin-bottom: 10px; }
+    #importBtn { background-color: #ff9800; color: white; font-weight: bold; padding: 8px 14px; border-radius: 6px; }
+    #importBtn[disabled] { opacity: 0.6; cursor: not-allowed; }
+    #importMessage { margin-left: 10px; font-style: italic; }
+    #alphaFilter { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<h1>Navigation</h1>
+<div class="action-buttons">
+  <button class="back-button" onclick="window.location.href='/kasse/admin.html'">Admin</button>
+  <button class="back-button" onclick="window.location.href='/kasse/index.html'">Kassen</button>
+</div>
+
+<h1>Team Anmeldung</h1>
+
+<div id="controls">
+  <button id="importBtn">Google Sheet Import starten</button>
+  <span id="importMessage"></span>
+</div>
+
+<!-- Statistik -->
+<div id="stats">
+  Gesamt: <span id="teamCount">0</span> |
+  Angemeldet: <span id="angemeldetCount">0</span> |
+  Abgemeldet: <span id="abgemeldetCount">0</span> |
+  Teilnehmer: <span id="teilnehmerCount">0</span>
+</div>
+
+<!-- Buchstaben Filter -->
+<div id="alphaFilter"></div>
+
+<input type="text" id="search" placeholder="Team suchen..." oninput="filterTeams()" />
+
+<table id="teamTable">
+  <thead>
+  <tr>
+    <th>ID</th>
+    <th>Team</th>
+    <th>Anmelder</th>
+    <th>E-Mail</th>
+    <th>Status</th>
+    <th>Teilnehmer</th>
+    <th>Extra</th>
+  </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+  const API_BASE = 'http://192.168.0.187:3002'; // <-- ggf. anpassen
+  let teams = [];
+  let currentAlphaFilter = '';
+
+  document.getElementById('importBtn').addEventListener('click', async () => {
+    const ok = confirm('⚠️ Achtung! Der Import überschreibt ALLE bestehenden Team-Daten. Fortfahren?');
+    if (!ok) return;
+
+    const btn = document.getElementById('importBtn');
+    const msg = document.getElementById('importMessage');
+    btn.disabled = true;
+    msg.textContent = 'Import läuft... bitte warten ⏳';
+
+    try {
+      const res = await fetch(`${API_BASE}/import-teams`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        msg.textContent = '✅ Import erfolgreich. Daten werden neu geladen...';
+        await loadTeams(); // neue Daten laden
+      } else {
+        msg.textContent = '❌ Import fehlgeschlagen: ' + (data.message || res.statusText);
+      }
+    } catch (err) {
+      console.error(err);
+      msg.textContent = '⚠️ Import fehlgeschlagen (Netzwerk/Server)';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { document.getElementById('importMessage').textContent = ''; }, 5000);
+    }
+  });
+
+  // Alphabet-Buttons
+  function renderAlphaButtons() {
+    const container = document.getElementById('alphaFilter');
+    container.innerHTML = '';
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(letter => {
+      const b = document.createElement('button');
+      b.className = 'alpha';
+      b.textContent = letter;
+      b.onclick = () => { currentAlphaFilter = letter; renderTeams(); updateStats(); };
+      container.appendChild(b);
+    });
+    const all = document.createElement('button');
+    all.className = 'alpha';
+    all.textContent = 'Alle';
+    all.onclick = () => { currentAlphaFilter = ''; renderTeams(); updateStats(); };
+    container.appendChild(all);
+  }
+
+  async function loadTeams() {
+    try {
+      const res = await fetch(`${API_BASE}/teams`);
+      teams = await res.json();
+      renderAlphaButtons();
+      renderTeams();
+      updateStats();
+    } catch (err) {
+      console.error('Fehler beim Laden der Teams', err);
+      alert('Fehler beim Laden der Teams (siehe Konsole).');
+    }
+  }
+
+  function renderTeams() {
+    const tbody = document.querySelector('#teamTable tbody');
+    tbody.innerHTML = '';
+    const searchFilter = document.getElementById('search').value.trim().toLowerCase();
+
+    teams.forEach(team => {
+      if (currentAlphaFilter && !team.name.toUpperCase().startsWith(currentAlphaFilter)) return;
+      if (searchFilter && !team.name.toLowerCase().includes(searchFilter) && !(team.anmelder||'').toLowerCase().includes(searchFilter) && !(team.email||'').toLowerCase().includes(searchFilter)) return;
+
+      const tr = document.createElement('tr');
+      tr.className = team.status || 'neutral';
+      const statusButtonClass = team.status === 'angemeldet' ? 'angemeldet' : (team.status === 'abgemeldet' ? 'abgemeldet' : '');
+
+      tr.innerHTML = `
+        <td>${team.id ?? ''}</td>
+        <td>${team.name ?? ''}</td>
+        <td>${team.anmelder ?? ''}</td>
+        <td>${team.email ?? ''}</td>
+        <td><button class="${statusButtonClass}" onclick="toggleStatus(${team.id})">${team.status === 'angemeldet' ? 'Abmelden' : 'Anmelden'}</button></td>
+        <td><input type="number" value="${team.teilnehmerzahl ?? 0}" onchange="updateTeilnehmer(${team.id}, this.value)"></td>
+        <td><button class="extra" onclick="extraAction(${team.id})">Extra</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function updateStats() {
+    // Statistik nur für aktuell sichtbare / gefilterte Teams
+    const searchFilter = document.getElementById('search').value.trim().toLowerCase();
+    const filtered = teams.filter(team => {
+      if (currentAlphaFilter && !team.name.toUpperCase().startsWith(currentAlphaFilter)) return false;
+      if (searchFilter && !team.name.toLowerCase().includes(searchFilter) && !(team.anmelder||'').toLowerCase().includes(searchFilter) && !(team.email||'').toLowerCase().includes(searchFilter)) return false;
+      return true;
+    });
+
+    const teamCount = filtered.length;
+    const angemeldetCount = filtered.filter(t => t.status === 'angemeldet').length;
+    const abgemeldetCount = filtered.filter(t => t.status === 'abgemeldet').length;
+    const teilnehmerCount = filtered.reduce((s,t)=> s + (t.teilnehmerzahl ? Number(t.teilnehmerzahl) : 0), 0);
+
+    document.getElementById('teamCount').textContent = teamCount;
+    document.getElementById('angemeldetCount').textContent = angemeldetCount;
+    document.getElementById('abgemeldetCount').textContent = abgemeldetCount;
+    document.getElementById('teilnehmerCount').textContent = teilnehmerCount;
+  }
+
+  async function toggleStatus(id) {
+    const t = teams.find(x => x.id === id);
+    if (!t) return;
+    const newStatus = t.status === 'angemeldet' ? 'abgemeldet' : 'angemeldet';
+    try {
+      await fetch(`${API_BASE}/teams/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      t.status = newStatus;
+      renderTeams();
+      updateStats();
+    } catch (err) {
+      console.error(err);
+      alert('Fehler beim Ändern des Status');
+    }
+  }
+
+  async function updateTeilnehmer(id, value) {
+    const t = teams.find(x => x.id === id);
+    if (!t) return;
+    const newVal = parseInt(value || 0, 10);
+    try {
+      await fetch(`${API_BASE}/teams/${id}/teilnehmer`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teilnehmerzahl: newVal })
+      });
+      t.teilnehmerzahl = newVal;
+      updateStats();
+    } catch (err) {
+      console.error(err);
+      alert('Fehler beim Aktualisieren der Teilnehmerzahl');
+    }
+  }
+
+  function extraAction(id) {
+    alert('Extra-Button für Team ID ' + id);
+  }
+
+  function filterTeams() {
+    renderTeams();
+    updateStats();
+  }
+
+  // initial
+  loadTeams();
+</script>
+</body>
+</html>
