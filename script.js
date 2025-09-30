@@ -130,7 +130,7 @@ function addItem(itemName, itemPrice) {
     // Anzeige des hinzugefügten Artikels und des Gesamtbetrags aktualisieren
     const receiptList = document.getElementById('receipt-list');
     const newItem = document.createElement('li');
-    newItem.textContent = `${itemCount}. ${itemName} - €${itemPrice.toFixed(2)}`;
+    newItem.textContent = `${itemName} - €${itemPrice.toFixed(2)}`;
     receiptList.appendChild(newItem);
 
     total += itemPrice;
