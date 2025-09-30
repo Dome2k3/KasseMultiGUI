@@ -7,31 +7,41 @@
     <script src="config.js"></script>
     <script defer src="lager.js"></script>
     <style>
-    .pretty-btn {
-        padding: 6px 18px;
-        font-size: 15px;
-        border-radius: 8px;
-        border: none;
-        background: linear-gradient(90deg, #f5c542 0%, #facd60 100%);
-        color: #444;
-        transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-        margin: 2px 4px;
-        cursor: pointer;
-    }
-    .pretty-btn:active {
-        background: linear-gradient(90deg, #facd60 0%, #f5c542 100%);
-    }
-    .sortable-header {
-        cursor: pointer;
-        text-decoration: underline;
-    }
-    #message {
-        color: green;
-        font-weight: bold;
-        margin-top: 8px;
-        margin-bottom: 8px;
-    }
-</style>
+        .pretty-btn {
+            padding: 6px 18px;
+            font-size: 15px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(90deg, #f5c542 0%, #facd60 100%);
+            color: #444;
+            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+            margin: 2px 4px;
+            cursor: pointer;
+        }
+        .pretty-btn:active {
+            background: linear-gradient(90deg, #facd60 0%, #f5c542 100%);
+        }
+        .sortable-header {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        #message {
+            color: green;
+            font-weight: bold;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        .filter-row {
+            margin: 0.5em 0 1em 0;
+            padding: 0.5em 0.5em;
+            background: #ffe082;
+            border-radius: 8px;
+            display: flex;
+            gap: 1em;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+    </style>
 </head>
 <body>
 <!-- Navigation oben -->
@@ -59,6 +69,14 @@
     <p id="message"></p>
 </div>
 
+<!-- Filter für Verkaufsstatistik -->
+<div class="filter-row">
+    <label for="salesDate">Verkäufe für Datum:</label>
+    <input type="date" id="salesDate">
+    <button type="button" id="filterSalesBtn" class="pretty-btn">Aktualisieren</button>
+    <span id="salesDateInfo" style="color:#444; font-size:0.95em;"></span>
+</div>
+
 <h3>Bestände</h3>
 <table border="1" id="lagerTable">
     <thead>
@@ -67,6 +85,8 @@
         <th class="sortable-header" data-sort="menge">Menge</th>
         <th class="sortable-header" data-sort="einheit">Einheit</th>
         <th class="sortable-header" data-sort="last_update">Last Update</th>
+        <th class="sortable-header" data-sort="verkauft">Verkauft</th>
+        <th class="sortable-header" data-sort="differenz">Differenz</th>
         <th>Bearbeiten</th>
         <th>Löschen</th>
     </tr>

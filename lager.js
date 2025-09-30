@@ -3,20 +3,48 @@ document.addEventListener("DOMContentLoaded", function () {
     const form = document.getElementById("editForm");
     const resetBtn = document.getElementById("resetBtn");
     const message = document.getElementById("message");
+    const salesDateInput = document.getElementById("salesDate");
+    const filterSalesBtn = document.getElementById("filterSalesBtn");
+    const salesDateInfo = document.getElementById("salesDateInfo");
 
     let lagerData = [];
+    let productSales = {}; // produkt_name -> verkauft
     let currentSort = { key: "produkt_name", asc: true };
+    let salesDate = ""; // Datum für Verkaufsstatistik
 
-    // Laden & Rendern
-    function loadLager() {
-        fetch(window.API_URL + '/lager')
-            .then(res => res.json())
-            .then(data => {
-                lagerData = data;
-                renderTable();
-            });
+    // Setze Standarddatum auf heute
+    function getTodayYYYYMMDD() {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    }
+    salesDateInput.value = getTodayYYYYMMDD();
+    salesDate = salesDateInput.value;
+
+    // Daten laden: Lager & Verkaufsstatistik
+    function loadAllData() {
+        Promise.all([loadLager(), loadProductSales()]).then(renderTable);
     }
 
+    function loadLager() {
+        return fetch(window.API_URL + '/lager')
+            .then(res => res.json())
+            .then(data => { lagerData = data; });
+    }
+
+    function loadProductSales() {
+        let url = window.API_URL + '/statistics';
+        if (salesDate) url += '?date=' + encodeURIComponent(salesDate);
+        return fetch(url)
+            .then(res => res.json())
+            .then(stats => {
+                productSales = {};
+                if (stats.productStats && Array.isArray(stats.productStats)) {
+                    stats.productStats.forEach(stat => {
+                        productSales[stat.product_name] = stat.total_sold;
+                    });
+                }
+            }).catch(() => { productSales = {}; });
+    }
 
     // Schönes Datumsformat
     function formatDateTime(ts) {
@@ -32,10 +60,25 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function renderTable() {
+        // Info über das Filterdatum anzeigen
+        salesDateInfo.textContent = salesDate
+            ? `Verkaufte Mengen für ${salesDate.split('-').reverse().join('.')}` : "";
+
         // Sortieren
         const key = currentSort.key;
         const asc = currentSort.asc;
+        // Für die Spalte "verkauft" und "differenz" eigene Sortierung
         const sorted = [...lagerData].sort((a, b) => {
+            if (key === "verkauft") {
+                const sa = productSales[a.produkt_name] || 0;
+                const sb = productSales[b.produkt_name] || 0;
+                return asc ? sa - sb : sb - sa;
+            }
+            if (key === "differenz") {
+                const da = (a.menge || 0) - (productSales[a.produkt_name] || 0);
+                const db = (b.menge || 0) - (productSales[b.produkt_name] || 0);
+                return asc ? da - db : db - da;
+            }
             if (a[key] === undefined || b[key] === undefined) return 0;
             if (typeof a[key] === "number") return asc ? a[key] - b[key] : b[key] - a[key];
             return asc ? String(a[key]).localeCompare(String(b[key])) : String(b[key]).localeCompare(String(a[key]));
@@ -43,12 +86,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
         tableBody.innerHTML = "";
         sorted.forEach(item => {
+            const verkauft = productSales[item.produkt_name] || 0;
+            const differenz = (item.menge || 0) - verkauft;
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td>${item.produkt_name}</td>
                 <td>${item.menge}</td>
                 <td>${item.einheit}</td>
                 <td>${formatDateTime(item.last_update)}</td>
+                <td>${verkauft}</td>
+                <td style="font-weight:bold; color:${differenz < 0 ? '#c00' : '#444'}">${differenz}</td>
                 <td><button data-id="${item.id}" class="pretty-btn editBtn">Bearbeiten</button></td>
                 <td><button data-id="${item.id}" class="pretty-btn delBtn">Löschen</button></td>
             `;
@@ -57,7 +104,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Initial laden
-    loadLager();
+    loadAllData();
 
     // Neu/Editieren
     form.onsubmit = function (e) {
@@ -83,7 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(res => {
                 message.textContent = res.success ? "Gespeichert!" : res.error;
                 form.reset();
-                loadLager();
+                loadAllData();
                 setTimeout(() => { message.textContent = ""; }, 2500);
             });
     };
@@ -116,7 +163,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     .then(res => res.json())
                     .then(res => {
                         message.textContent = res.success ? "Gelöscht!" : res.error;
-                        loadLager();
+                        loadAllData();
                         setTimeout(() => { message.textContent = ""; }, 2500);
                     });
             }
@@ -136,4 +183,14 @@ document.addEventListener("DOMContentLoaded", function () {
             renderTable();
         });
     });
+
+    // Verkaufsdatum-Filter
+    filterSalesBtn.onclick = function() {
+        salesDate = salesDateInput.value;
+        loadAllData();
+    };
+    salesDateInput.onchange = function() {
+        salesDate = salesDateInput.value;
+        loadAllData();
+    };
 });
