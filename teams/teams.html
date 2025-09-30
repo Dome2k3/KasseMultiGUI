@@ -27,8 +27,8 @@
 <body>
 <h1>Navigation</h1>
 <div class="action-buttons">
-  <button class="back-button" onclick="window.location.href='/kasse/admin.html'">Admin</button>
-  <button class="back-button" onclick="window.location.href='/kasse/index.html'">Kassen</button>
+  <button class="back-button" onclick="window.location.href='/admin.html'">Admin</button>
+  <button class="back-button" onclick="window.location.href='/index.html'">Kassen</button>
 </div>
 
 <h1>Team Anmeldung</h1>
@@ -67,7 +67,7 @@
 </table>
 
 <script>
-  const API_BASE = 'http://192.168.0.187:3002'; // <-- ggf. anpassen
+  const API_BASE = window.API_URL // <-- ggf. anpassen
   let teams = [];
   let currentAlphaFilter = '';
 
