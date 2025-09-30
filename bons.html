@@ -4,29 +4,31 @@
     <meta charset="UTF-8">
     <script src="config.js"></script>
     <title>Bons Übersicht</title>
+    <link rel="stylesheet" href="style_statistics.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 2rem;
-            background: #f8f8f8;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 1rem;
-        }
-        #search-section {
-            margin-bottom: 1.5rem;
-        }
-        #searchBon {
-            padding: 0.5rem;
-            width: 220px;
-            font-size: 1rem;
-        }
-        button {
-            padding: 0.5rem 1rem;
-            font-size: 1rem;
-            margin-left: 0.5rem;
+        .pretty-btn {
+            padding: 6px 18px;
+            font-size: 15px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(90deg, #f5c542 0%, #facd60 100%);
+            color: #444;
+            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+            margin: 2px 4px;
             cursor: pointer;
+        }
+        .pretty-btn:active {
+            background: linear-gradient(90deg, #facd60 0%, #f5c542 100%);
+        }
+        .sortable-header {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        #message {
+            color: green;
+            font-weight: bold;
+            margin-top: 8px;
+            margin-bottom: 8px;
         }
         #bons-container {
             margin-top: 2rem;
@@ -78,16 +80,25 @@
                 margin-top: 0.3rem;
             }
         }
+
     </style>
 </head>
 <body>
+<!-- Navigation oben -->
+<nav style="margin-bottom: 20px;">
+    <button onclick="window.location.href='admin.html'" class="pretty-btn">Zur Admin-Seite</button>
+    <button onclick="window.location.href='statistics_sql.html'" class="pretty-btn">Zur Statistik</button>
+    <button onclick="window.location.href='config_gebinde.html'" class="pretty-btn">Gebinde-Konfiguration</button>
+    <button onclick="window.location.href='index.html'" class="pretty-btn">Zurück zur Kassenübersicht</button>
+</nav>
+
 <h1>Bon-Übersicht</h1>
 
 <div class="controls">
     <input type="number" id="searchBon" placeholder="Bon-Nummer suchen">
-    <button onclick="searchBon()">Suchen</button>
-    <button onclick="resetSearch()">Alle anzeigen</button>
-    <button onclick="window.location.href='index.html'">Zurück zum Dashboard</button>
+    <button onclick="searchBon()" class="pretty-btn">Suchen</button>
+    <button onclick="resetSearch()" class="pretty-btn">Alle anzeigen</button>
+
 </div>
 <div id="bons-container">
     <!-- Bons werden hier gerendert -->
