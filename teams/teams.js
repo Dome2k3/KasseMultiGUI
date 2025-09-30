@@ -1,5 +1,7 @@
 // teams.js
-require('dotenv').config({ path: '/var/www/html/teams/Umgebung.env' });
+require('dotenv').config({path: '/var/www/html/kasse/Umgebung.env'});
+
+<script src="../config.js"></script>
 
 const express = require('express');
 const mysql = require('mysql2/promise');
@@ -31,33 +33,33 @@ app.get('/teams', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error('GET /teams Fehler:', err);
-        res.status(500).json({ error: 'Datenbankfehler' });
+        res.status(500).json({error: 'Datenbankfehler'});
     }
 });
 
 // Status ändern
 app.put('/teams/:id/status', async (req, res) => {
     try {
-        const { id } = req.params;
-        const { status } = req.body;
+        const {id} = req.params;
+        const {status} = req.body;
         await db.query('UPDATE teams SET status=? WHERE id=?', [status, id]);
-        res.json({ success: true });
+        res.json({success: true});
     } catch (err) {
         console.error('PUT /teams/:id/status Fehler:', err);
-        res.status(500).json({ error: 'Datenbankfehler' });
+        res.status(500).json({error: 'Datenbankfehler'});
     }
 });
 
 // Teilnehmerzahl ändern
 app.put('/teams/:id/teilnehmer', async (req, res) => {
     try {
-        const { id } = req.params;
-        const { teilnehmerzahl } = req.body;
+        const {id} = req.params;
+        const {teilnehmerzahl} = req.body;
         await db.query('UPDATE teams SET teilnehmerzahl=? WHERE id=?', [teilnehmerzahl, id]);
-        res.json({ success: true });
+        res.json({success: true});
     } catch (err) {
         console.error('PUT /teams/:id/teilnehmer Fehler:', err);
-        res.status(500).json({ error: 'Datenbankfehler' });
+        res.status(500).json({error: 'Datenbankfehler'});
     }
 });
 
@@ -66,10 +68,10 @@ app.post('/import-teams', async (req, res) => {
     try {
         // optional: hier kann man noch auth/secret prüfen (nicht eingebaut)
         await importTeams(db);
-        res.json({ success: true, message: 'Import erfolgreich abgeschlossen' });
+        res.json({success: true, message: 'Import erfolgreich abgeschlossen'});
     } catch (err) {
         console.error('POST /import-teams Fehler:', err);
-        res.status(500).json({ success: false, message: err.message || 'Import fehlgeschlagen' });
+        res.status(500).json({success: false, message: err.message || 'Import fehlgeschlagen'});
     }
 });
 

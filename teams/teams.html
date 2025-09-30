@@ -23,13 +23,16 @@
     #importMessage { margin-left: 10px; font-style: italic; }
     #alphaFilter { margin-bottom: 8px; }
   </style>
+  <script src="../config.js"></script>
+  <script src="teams.js"></script>
 </head>
 <body>
 <h1>Navigation</h1>
 <div class="action-buttons">
-  <button class="back-button" onclick="window.location.href='/admin.html'">Admin-Dashboard</button>
-  <button class="back-button" onclick="window.location.href='/index.html'">Kassen</button>
+  <button class="back-button" onclick="window.location.href='../admin.html'">Admin-Dashboard</button>
+  <button class="back-button" onclick="window.location.href='../index.html'">Kassen</button>
 </div>
+
 
 <h1>Team Anmeldung</h1>
 
@@ -67,7 +70,7 @@
 </table>
 
 <script>
-  const API_BASE = window.API_URL // <-- ggf. anpassen
+  const API_BASE = window.API_URL_TEAMS // <-- ggf. anpassen
   let teams = [];
   let currentAlphaFilter = '';
 
