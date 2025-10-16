@@ -11,8 +11,8 @@
         const DEFAULT_DATA = [
             { id: genId(), name: 'Bier', price: 3.50, editing: false },
             { id: genId(), name: 'Radler', price: 3.80, editing: false },
-            { id: genId(), name: 'Cola', price: 2.50, editing: false }
-            { id: genId(), name: 'Wasser', price: 2.50, editing: false }
+            { id: genId(), name: 'Cola', price: 2.50, editing: false },
+            { id: genId(), name: 'Wasser', price: 2.50, editing: false },
             { id: genId(), name: 'Pfand', price: 2.50, editing: false }
         ];
 
