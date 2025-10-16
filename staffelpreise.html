@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Staffelpreise — Übersicht</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Übernommen aus lager.html (pretty buttons + weitere kleine Klassen) */
+    .pretty-btn {
+      padding: 6px 18px;
+      font-size: 15px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(90deg, #f5c542 0%, #facd60 100%);
+      color: #444;
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+      margin: 2px 4px;
+      cursor: pointer;
+    }
+    .pretty-btn:active {
+      background: linear-gradient(90deg, #facd60 0%, #f5c542 100%);
+    }
+    .sortable-header {
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    #message {
+      color: green;
+      font-weight: bold;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+    .filter-row {
+      margin: 0.5em 0 1em 0;
+      padding: 0.5em 0.5em;
+      background: #ffe082;
+      border-radius: 8px;
+      display: flex;
+      gap: 1em;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    /* Ergänzende Styles für Tabelle */
+    .container { max-width: 1100px; margin: 20px auto; padding: 10px; }
+    table.staffel { width: 100%; border-collapse: collapse; }
+    table.staffel th, table.staffel td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    table.staffel th { background: #f3f3f3; }
+    .left-col { width: 160px; text-align: left; }
+    .name-col { text-align: left; }
+    .btn { padding: 6px 10px; cursor: pointer; }
+    .btn-edit { background: #007bff; color: white; border: none; border-radius: 4px; }
+    .btn-delete { background: #dc3545; color: white; border: none; border-radius: 4px; }
+    .controls { margin-bottom: 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input.price-input { width: 90px; text-align: right; }
+    input.name-input { width: 200px; }
+    .small-muted { color: #666; font-size: 0.9em; margin-left: 8px; }
+    @media (max-width: 780px) {
+      table.staffel th:nth-child(n+4), table.staffel td:nth-child(n+4) { display: none; }
+      .small-muted { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Staffelpreise — Übersicht</h1>
+
+  <div class="filter-row">
+    <button id="addItemBtn" class="pretty-btn">Artikel hinzufügen</button>
+    <button id="resetBtn" class="pretty-btn">Auf Standard zurücksetzen</button>
+    <div id="message" aria-live="polite"></div>
+    <div style="margin-left:auto;">
+      <button class="pretty-btn" onclick="window.location.href='index.html'">Zum Kassen-Dashboard</button>
+    </div>
+  </div>
+
+  <table id="staffelTable" class="staffel" aria-describedby="staffelInfo">
+    <!-- Kopf und Body werden per JS erzeugt -->
+  </table>
+
+  <p id="staffelInfo" class="small-muted">Klicke "Editieren", um Name und Preis der Zeile zu bearbeiten. Spalten 1–6 zeigen automatisch den Preis für 1..6 Stück.</p>
+</div>
+
+<script src="staffelpreise.js"></script>
+</body>
+</html>
