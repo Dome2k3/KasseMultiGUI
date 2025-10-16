@@ -1,16 +1,37 @@
-
 document.addEventListener("DOMContentLoaded", () => {
     // Setze das Datum auf heute beim Laden der Seite (ISO Format für Input-Feld)
     const today = new Date();
     const formattedDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
-    document.getElementById("date").value = formattedDate;
+    const dateInput = document.getElementById("date");
+    if (dateInput) dateInput.value = formattedDate;
 
-    // Daten beim Laden der Seite abrufen
-    fetchStatistics();
+    // Daten beim Laden der Seite abrufen (inkl. evtl. gewählter Kategorie)
+    const initialCategory = document.getElementById("category")?.value || "";
+    fetchStatistics("", "", "", initialCategory);
 
-    // Event-Listener für den Filter-Button
-    // Nimm explizit den richtigen Button (nicht Back-Button!)
-    document.querySelector(".filter-container button").addEventListener("click", filterStatistics);
+    // Event-Listener für den Filter-Button: Event-Delegation am Container (robuster)
+    const filterContainer = document.querySelector(".filter-container");
+    if (filterContainer) {
+        filterContainer.addEventListener("click", (e) => {
+            const target = e.target;
+            if (target && target.tagName === "BUTTON") {
+                // explizit den richtigen Button erwischen: falls weitere Buttons im Container sind, man kann hier ggf. eine ID oder class prüfen
+                // z.B. if (target.id === 'applyFilterBtn') ...
+                filterStatistics();
+            }
+        });
+    } else {
+        // Fallback: Versuch, direkt den Button zu binden
+        const btn = document.querySelector(".filter-container button");
+        if (btn) btn.addEventListener("click", filterStatistics);
+    }
+
+    // E-Mail Button initialisieren
+    const sendStatsMailBtn = document.getElementById("sendStatsMailBtn");
+    if (sendStatsMailBtn) {
+        sendStatsMailBtn.addEventListener("click", openMailModal);
+    }
+    setupMailModal();
 });
 
 function formatDate(date) {
@@ -26,23 +47,20 @@ function formatDateForMySQL(date) {
     return date;
 }
 
-function fetchStatistics(date = "", startTime = "", endTime = "") {
-    let url = `${window.API_URL}/statistics`;
+function fetchStatistics(date = "", startTime = "", endTime = "", category = "") {
+    // Verwende URL & URLSearchParams für korrekten Query-Build
+    const base = `${window.API_URL}/statistics`;
+    const url = new URL(base, window.location.origin);
 
     if (date) {
         const mysqlDate = formatDateForMySQL(date);
-        url += `?date=${encodeURIComponent(mysqlDate)}`;
+        url.searchParams.set("date", mysqlDate);
     }
-    if (startTime && endTime) {
-        if (!url.includes('?')) {
-            url += '?';
-        } else {
-            url += '&';
-        }
-        url += `startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`;
-    }
+    if (startTime) url.searchParams.set("startTime", startTime);
+    if (endTime) url.searchParams.set("endTime", endTime);
+    if (category) url.searchParams.set("category", category);
 
-    fetch(url)
+    fetch(url.toString())
         .then(response => response.json())
         .then(data => {
             console.log("Response data:", data); // Debug!
@@ -157,17 +175,20 @@ function updateIntervalStatsTable(intervalStats) {
 }
 
 function filterStatistics() {
-    const date = document.getElementById("date").value;
-    const startTime = document.getElementById("startTime").value;
-    const endTime = document.getElementById("endTime").value;
+    const date = document.getElementById("date")?.value || "";
+    const startTime = document.getElementById("startTime")?.value || "";
+    const endTime = document.getElementById("endTime")?.value || "";
+    const category = document.getElementById("category")?.value || "";
 
-    fetchStatistics(date, startTime, endTime);
+    fetchStatistics(date, startTime, endTime, category);
 }
 
 let salesChartInstance = null; // Globale Variable für Chart-Instanz
 
 function renderChart(bonStats) {
-    const ctx = document.getElementById('salesChart').getContext('2d');
+    const canvas = document.getElementById('salesChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
     // Vorherigen Chart zerstören, falls vorhanden
     if (salesChartInstance) {
@@ -210,77 +231,85 @@ function renderChart(bonStats) {
     });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    // ... (dein bisheriger Code)
-
-    // E-Mail Button initialisieren
-    const sendStatsMailBtn = document.getElementById("sendStatsMailBtn");
-    if (sendStatsMailBtn) {
-        sendStatsMailBtn.addEventListener("click", openMailModal);
-    }
-    setupMailModal();
-});
-
 // --- E-Mail-Dialog, Speicherung, Versand ---
 function openMailModal() {
     const modal = document.getElementById("mailModal");
     const emailInput = document.getElementById("emailInput");
     const mailStatusMsg = document.getElementById("mailStatusMsg");
-    mailStatusMsg.textContent = "";
+    if (mailStatusMsg) mailStatusMsg.textContent = "";
     // Lade Standard-Mailadresse
-    emailInput.value = localStorage.getItem("statsEmail") || "";
-    modal.style.display = "flex";
-    emailInput.focus();
+    if (emailInput) emailInput.value = localStorage.getItem("statsEmail") || "";
+    if (modal) {
+        modal.style.display = "flex";
+        emailInput?.focus();
+    }
 }
 
 function setupMailModal() {
     // Schließen mit X oder außen klicken
-    document.getElementById("closeMailModal").onclick = () => {
-        document.getElementById("mailModal").style.display = "none";
+    const closeBtn = document.getElementById("closeMailModal");
+    if (closeBtn) closeBtn.onclick = () => {
+        const modal = document.getElementById("mailModal");
+        if (modal) modal.style.display = "none";
     };
     // ESC schließt auch
     document.addEventListener("keydown", function(evt) {
-        if (evt.key === "Escape") document.getElementById("mailModal").style.display = "none";
+        if (evt.key === "Escape") {
+            const modal = document.getElementById("mailModal");
+            if (modal) modal.style.display = "none";
+        }
     });
     // Modal-Formular-Submit
-    document.getElementById("mailForm").onsubmit = async function(evt) {
-        evt.preventDefault();
-        const email = document.getElementById("emailInput").value.trim();
-        if (!email) return;
-        localStorage.setItem("statsEmail", email); // als Standard speichern
+    const mailForm = document.getElementById("mailForm");
+    if (mailForm) {
+        mailForm.onsubmit = async function(evt) {
+            evt.preventDefault();
+            const email = document.getElementById("emailInput")?.value.trim();
+            if (!email) return;
+            localStorage.setItem("statsEmail", email); // als Standard speichern
 
-        // Hole aktuelle Filter
-        const date = document.getElementById("date").value;
-        const startTime = document.getElementById("startTime").value;
-        const endTime = document.getElementById("endTime").value;
-        const category = document.getElementById("category")?.value || "";
+            // Hole aktuelle Filter
+            const date = document.getElementById("date")?.value;
+            const startTime = document.getElementById("startTime")?.value;
+            const endTime = document.getElementById("endTime")?.value;
+            const category = document.getElementById("category")?.value || "";
 
-        // UI Feedback
-        const msgDiv = document.getElementById("mailStatusMsg");
-        msgDiv.style.color = "#007b00";
-        msgDiv.textContent = "Versand läuft ...";
-
-        try {
-            const res = await fetch(`${window.API_URL}/send-statistics-email`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, date, startTime, endTime, category })
-            });
-            const data = await res.json();
-            if (data.success) {
-                msgDiv.textContent = "E-Mail erfolgreich versendet!";
+            // UI Feedback
+            const msgDiv = document.getElementById("mailStatusMsg");
+            if (msgDiv) {
                 msgDiv.style.color = "#007b00";
-            } else {
-                msgDiv.textContent = "Fehler beim Versand: " + (data.message || "Unbekannter Fehler");
-                msgDiv.style.color = "#c00";
+                msgDiv.textContent = "Versand läuft ...";
             }
-        } catch (err) {
-            msgDiv.textContent = "Fehler beim Versand: " + err.message;
-            msgDiv.style.color = "#c00";
-        }
-    };
+
+            try {
+                const res = await fetch(`${window.API_URL}/send-statistics-email`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, date, startTime, endTime, category })
+                });
+                const data = await res.json();
+                if (msgDiv) {
+                    if (data.success) {
+                        msgDiv.textContent = "E-Mail erfolgreich versendet!";
+                        msgDiv.style.color = "#007b00";
+                    } else {
+                        msgDiv.textContent = "Fehler beim Versand: " + (data.message || "Unbekannter Fehler");
+                        msgDiv.style.color = "#c00";
+                    }
+                }
+            } catch (err) {
+                if (msgDiv) {
+                    msgDiv.textContent = "Fehler beim Versand: " + err.message;
+                    msgDiv.style.color = "#c00";
+                }
+            }
+        };
+    }
     // Modal bei Klick außerhalb schließen
-    document.getElementById("mailModal").onclick = function(e) {
-        if (e.target === this) this.style.display = "none";
-    };
+    const mailModal = document.getElementById("mailModal");
+    if (mailModal) {
+        mailModal.onclick = function(e) {
+            if (e.target === this) this.style.display = "none";
+        };
+    }
 }
