@@ -15,9 +15,18 @@
     function addResponsiveStyles() {
         if (document.getElementById('staffel-responsive-styles')) return;
         const css = `
+/* Wrapper für horizontales Scrollen */
+#staffel-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  position: relative;
+}
+
 /* Basis-Layout für die Tabelle - normale Tabellenanzeige */
 #staffelTable {
-  width: 100%;
+  width: max-content; /* erlaubt horizontales Scrollen bei vielen Spalten */
   border-collapse: collapse;
   table-layout: auto;
   box-sizing: border-box;
@@ -97,12 +106,41 @@
   height: 28px;
 }
 
+/* Horizontal scroll slider (visible when table overflows) */
+#staffel-scroll-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+#staffel-scroll-container input[type="range"] {
+  width: 100%;
+  max-width: 600px;
+  -webkit-appearance: none;
+  height: 6px;
+  background: #e6e6e6;
+  border-radius: 6px;
+  outline: none;
+}
+#staffel-scroll-container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #333;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+  cursor: pointer;
+}
+
 /* Kleinere Displays: kleinere Padding/Svg-Größen */
 @media (max-width: 420px) {
   #staffelTable, #staffelTable th, #staffelTable td { font-size: 11px; padding: 4px 6px; }
   #staffelTable .icon-btn { width: 24px; height: 24px; }
   #staffelTable .icon-btn svg { width: 16px; height: 16px; }
   #staffel-multiplier-control input[type="range"] { width: 120px; }
+  #staffel-scroll-container input[type="range"] { max-width: 380px; }
 }
 `;
         const st = document.createElement('style');
@@ -192,7 +230,6 @@
 
     // slider control helper: create UI and attach event
     function ensureMultiplierControl() {
-        // if already present, update value and return
         let control = document.getElementById('staffel-multiplier-control');
         if (control) return control;
 
@@ -218,19 +255,18 @@
         range.addEventListener('input', (e) => {
             const v = Number(e.target.value);
             state.maxMultiplierVisible = v;
-            // persist choice
             localStorage.setItem(STORAGE_MAX_MULT, String(v));
             const vs = document.getElementById('staffel-multiplier-value');
             if (vs) vs.textContent = v;
             renderTable();
+            // update scroll slider after re-render
+            setTimeout(updateHorizontalScrollSlider, 40);
         });
 
-        // assemble: label + value + range (value between label and range for clarity)
         control.appendChild(label);
         control.appendChild(valueSpan);
         control.appendChild(range);
 
-        // place control: before the table if possible, otherwise above body
         if (table && table.parentNode) {
             table.parentNode.insertBefore(control, table);
         } else {
@@ -250,15 +286,121 @@
     // Determine effective max multiplier to render, enforcing landscape minimum
     function getEffectiveMaxMultiplier() {
         const saved = state.maxMultiplierVisible || getSavedMaxMultiplier() || DEFAULT_MAX_MULTIPLIER;
-        // if device in landscape and small width, ensure at least 3 multipliers (→ total columns: Buttons, Name, Preis, 2,3 = 5)
         if (window.matchMedia && window.matchMedia('(orientation: landscape) and (max-width: 812px)').matches) {
-            return Math.max(saved, 3);
+            return Math.max(saved, 3); // at least multipliers 2 and 3 visible
         }
         return saved;
     }
 
+    // ----- Horizontal scroll wrapper + slider -----
+    function ensureTableWrapperAndSlider() {
+        if (!table) return;
+        // wrap table with a wrapper if not already wrapped
+        let wrapper = document.getElementById('staffel-table-wrapper');
+        if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.id = 'staffel-table-wrapper';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        }
+
+        // create scroll slider container if not exists
+        let sc = document.getElementById('staffel-scroll-container');
+        if (!sc) {
+            sc = document.createElement('div');
+            sc.id = 'staffel-scroll-container';
+
+            const leftLabel = document.createElement('span');
+            leftLabel.textContent = '◀';
+            leftLabel.setAttribute('aria-hidden', 'true');
+            leftLabel.style.opacity = '0.6';
+            leftLabel.style.fontSize = '12px';
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.id = 'staffel-scroll-slider';
+            slider.min = '0';
+            slider.max = '0';
+            slider.step = '1';
+            slider.value = '0';
+            slider.setAttribute('aria-label', 'Tabelle horizontal scrollen');
+
+            const rightLabel = document.createElement('span');
+            rightLabel.textContent = '▶';
+            rightLabel.setAttribute('aria-hidden', 'true');
+            rightLabel.style.opacity = '0.6';
+            rightLabel.style.fontSize = '12px';
+
+            sc.appendChild(leftLabel);
+            sc.appendChild(slider);
+            sc.appendChild(rightLabel);
+
+            // insert after wrapper
+            wrapper.parentNode.insertBefore(sc, wrapper.nextSibling);
+
+            // slider <-> wrapper synchronization
+            slider.addEventListener('input', (e) => {
+                const s = document.getElementById('staffel-table-wrapper');
+                if (!s) return;
+                s.scrollLeft = Number(e.target.value);
+            });
+
+            // update slider while scrolling
+            wrapper.addEventListener('scroll', () => {
+                syncSliderWithScroll();
+            });
+
+            // also update on pointer/touch drag
+            slider.addEventListener('pointerdown', () => {
+                // nothing special now
+            });
+
+            // detect manual wheel / touch end to resync
+            wrapper.addEventListener('touchend', () => setTimeout(syncSliderWithScroll, 10));
+            wrapper.addEventListener('mouseup', () => setTimeout(syncSliderWithScroll, 10));
+            window.addEventListener('resize', () => {
+                // update slider max on resize
+                setTimeout(updateHorizontalScrollSlider, 80);
+            });
+
+            // initial update
+            setTimeout(updateHorizontalScrollSlider, 40);
+        }
+    }
+
+    function updateHorizontalScrollSlider() {
+        const wrapper = document.getElementById('staffel-table-wrapper');
+        const slider = document.getElementById('staffel-scroll-slider');
+        if (!wrapper || !slider) return;
+        const max = Math.max(0, wrapper.scrollWidth - wrapper.clientWidth);
+        slider.max = String(Math.round(max));
+        // if current slider value exceeds new max, clamp and scroll
+        if (Number(slider.value) > max) {
+            slider.value = String(Math.round(max));
+            wrapper.scrollLeft = max;
+        } else {
+            // sync scroll to slider value (in case)
+            wrapper.scrollLeft = Number(slider.value);
+        }
+        // hide slider if no overflow
+        const scContainer = document.getElementById('staffel-scroll-container');
+        if (scContainer) {
+            scContainer.style.display = (max > 0 ? 'flex' : 'none');
+        }
+    }
+
+    function syncSliderWithScroll() {
+        const wrapper = document.getElementById('staffel-table-wrapper');
+        const slider = document.getElementById('staffel-scroll-slider');
+        if (!wrapper || !slider) return;
+        slider.value = String(Math.round(wrapper.scrollLeft));
+    }
+    // ----- end scroll wrapper + slider -----
+
     function renderTable() {
         ensureMultiplierControl();
+        ensureTableWrapperAndSlider();
+
         const items = state.items;
         const maxMult = getEffectiveMaxMultiplier();
 
@@ -360,9 +502,13 @@
             body.appendChild(tr);
         });
 
+        // write to table
         table.innerHTML = '';
         table.appendChild(head);
         table.appendChild(body);
+
+        // after render update scroll slider
+        setTimeout(updateHorizontalScrollSlider, 40);
     }
 
     function toggleEdit(id) {
@@ -414,15 +560,26 @@
 
     // create control and attach listeners
     ensureMultiplierControl();
+    ensureTableWrapperAndSlider();
 
     if (addItemBtn) addItemBtn.addEventListener('click', addItem);
     if (resetBtn) resetBtn.addEventListener('click', resetToDefault);
 
     // re-render on orientation/resize, to enforce landscape minimum
     window.addEventListener('resize', () => {
-        // minor debounce-ish: small timeout so multiple resizes don't thrash
         clearTimeout(window.__staffel_resize_timeout);
-        window.__staffel_resize_timeout = setTimeout(() => renderTable(), 120);
+        window.__staffel_resize_timeout = setTimeout(() => {
+            renderTable();
+            updateHorizontalScrollSlider();
+        }, 120);
+    });
+
+    // also re-sync on orientation change
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+            renderTable();
+            updateHorizontalScrollSlider();
+        }, 160);
     });
 
     renderTable();

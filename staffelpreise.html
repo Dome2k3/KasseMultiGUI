@@ -44,7 +44,7 @@
 
     /* Ergänzende Styles für Tabelle */
     .container { max-width: 1100px; margin: 20px auto; padding: 10px; }
-    table.staffel { width: 100%; border-collapse: collapse; }
+    table.staffel { /* keep class but actual width will be handled by injected CSS */ border-collapse: collapse; }
     table.staffel th, table.staffel td { border: 1px solid #ddd; padding: 8px; text-align: center; }
     table.staffel th { background: #f3f3f3; }
     .left-col { width: 60px; text-align: left; }
@@ -54,12 +54,12 @@
     .btn-delete { background: #dc3545; color: white; border: none; border-radius: 4px; }
     .controls { margin-bottom: 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     input.price-input { width: 90px; text-align: right; }
-    input.name-input { width: 100px; }
+    input.name-input { width: auto; max-width: 9ch; } /* display shorter names by default */
     .small-muted { color: #666; font-size: 0.9em; margin-left: 8px; }
-    @media (max-width: 780px) {
-      table.staffel th:nth-child(n+4), table.staffel td:nth-child(n+4) { display: none; }
-      .small-muted { display: none; }
-    }
+
+    /* NOTE: removed old rule that hid columns on small screens.
+       That rule conflicted with the JS slider/wrapper and caused only 3 columns to remain visible.
+       The responsive hiding/slider is now handled by staffelpreise.js. */
   </style>
 </head>
 <body>
