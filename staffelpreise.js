@@ -11,26 +11,27 @@
     function addResponsiveStyles() {
         if (document.getElementById('staffel-responsive-styles')) return;
         const css = `
-/* Responsive tweaks für die Staffeltabelle */
+/* Basis-Layout für die Tabelle - normale Tabellenanzeige */
 #staffelTable {
-  display: block;
   width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  white-space: nowrap;
+  border-collapse: collapse;
+  table-layout: auto;
   box-sizing: border-box;
 }
+
 /* Schriftgröße skaliert, damit auf kleinen Bildschirmen mehr Spalten sichtbar sind */
 #staffelTable, #staffelTable th, #staffelTable td {
   font-size: clamp(11px, 2.6vw, 14px);
   padding: 6px 8px;
   vertical-align: middle;
 }
+
 /* Eingaben und Buttons anpassen */
-#staffelTable .name-input, 
+#staffelTable .name-input,
 #staffelTable .price-input {
   font-size: inherit;
   box-sizing: border-box;
+  width: 100%;
 }
 
 /* Icon-Buttons links: kompakt, ohne Text */
@@ -64,19 +65,65 @@
   margin-left: 6px;
 }
 
-/* Noch kompakter auf sehr kleinen Bildschirmen */
+/* --- Progressive column hiding ---
+   Kolonnenaufbau:
+   1: Buttons (Edit/Delete)
+   2: Name
+   3: Preis
+   4: 2
+   5: 3
+   6: 4
+   7: 5
+   8: 6
+
+   Mit Media-Queries blendet die Tabelle bei immer schmaleren Viewports
+   nacheinander die rechten Staffelspalten aus (8 -> 7 -> 6 -> ... -> 4),
+   Preis (Spalte 3) bleibt immer sichtbar.
+*/
+
+/* Bis 720px: letzte Spalte (Multiplikator 6) verbergen */
+@media (max-width: 720px) {
+  #staffelTable th:nth-child(8),
+  #staffelTable td:nth-child(8) { display: none; }
+}
+
+/* Bis 640px: Multiplikator 5 verbergen (die vorherige bleibt auch verborgen) */
+@media (max-width: 640px) {
+  #staffelTable th:nth-child(7),
+  #staffelTable td:nth-child(7) { display: none; }
+}
+
+/* Bis 560px: Multiplikator 4 verbergen */
+@media (max-width: 560px) {
+  #staffelTable th:nth-child(6),
+  #staffelTable td:nth-child(6) { display: none; }
+}
+
+/* Bis 480px: Multiplikator 3 verbergen */
+@media (max-width: 480px) {
+  #staffelTable th:nth-child(5),
+  #staffelTable td:nth-child(5) { display: none; }
+}
+
+/* Bis 420px: Multiplikator 2 verbergen (es bleiben Buttons, Name, Preis) */
 @media (max-width: 420px) {
+  #staffelTable th:nth-child(4),
+  #staffelTable td:nth-child(4) { display: none; }
+}
+
+/* Sehr kleine Displays: kleinere Padding/Svg-Größen */
+@media (max-width: 360px) {
   #staffelTable, #staffelTable th, #staffelTable td {
     font-size: 11px;
-    padding: 4px 6px;
+    padding: 3px 5px;
   }
   #staffelTable .icon-btn {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
   }
   #staffelTable .icon-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
 }
 `;
@@ -86,15 +133,39 @@
         document.head.appendChild(st);
     }
 
-    // inline SVG Icons (kleine, skalierbare Icons)
-    const ICONS = {
-        pencil: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>`,
-        check: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M9 16.2l-3.5-3.5L4 14.2 9 19.25 20 8.25 17.5 5.75z"/></svg>`,
-        x: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M18.3 5.71L12 12.01 5.71 5.71 4.29 7.12 10.59 13.41 4.29 19.71 5.71 21.12 12 14.83 18.29 21.12 19.71 19.71 13.41 13.41 19.71 7.12z"/></svg>`
-    };
+    // helper: create an SVG element for the requested icon (no innerHTML, no eval)
+    function createSvgIcon(name) {
+        const svgns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        svg.style.width = '18px';
+        svg.style.height = '18px';
+        svg.style.display = 'block';
+        svg.style.fill = 'currentColor';
 
-    // Beispielstandards (kann angepasst werden)
-    // Um Namenskonflikte zu vermeiden, verwende einen eindeutigen Namen statt DEFAULT_DATA
+        const path = document.createElementNS(svgns, 'path');
+
+        switch (name) {
+            case 'pencil':
+                path.setAttribute('d', 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z');
+                break;
+            case 'check':
+                path.setAttribute('d', 'M9 16.2l-3.5-3.5L4 14.2 9 19.25 20 8.25 17.5 5.75z');
+                break;
+            case 'x':
+                path.setAttribute('d', 'M18.3 5.71L12 12.01 5.71 5.71 4.29 7.12 10.59 13.41 4.29 19.71 5.71 21.12 12 14.83 18.29 21.12 19.71 19.71 13.41 13.41 19.71 7.12z');
+                break;
+            default:
+                path.setAttribute('d', '');
+        }
+
+        svg.appendChild(path);
+        return svg;
+    }
+
+    // Beispielstandards (eindeutiger Name, um Konflikte zu vermeiden)
     const STAFFEL_DEFAULT_DATA = [
         { id: genId(), name: 'Bier', price: 3.50, editing: false },
         { id: genId(), name: 'Radler', price: 3.80, editing: false },
@@ -150,7 +221,7 @@
         head.appendChild(headRow);
 
         const body = document.createElement('tbody');
-        items.forEach((item, rowIndex) => {
+        items.forEach((item) => {
             const tr = document.createElement('tr');
 
             // Links: ein Icon-Button (Stift / Häkchen) und ein Icon-Button (X) dicht nebeneinander
@@ -159,19 +230,19 @@
 
             const btn = document.createElement('button');
             btn.className = 'icon-btn btn-edit';
-            // Icon wechselt: Stift wenn nicht-editierend, Häkchen beim Speichern
-            btn.innerHTML = item.editing ? ICONS.check : ICONS.pencil;
             btn.title = item.editing ? 'Speichern' : 'Editieren';
             btn.setAttribute('aria-label', item.editing ? 'Speichern' : 'Editieren');
             btn.addEventListener('click', () => toggleEdit(item.id));
+            // append the correct SVG node (no innerHTML)
+            btn.appendChild(createSvgIcon(item.editing ? 'check' : 'pencil'));
             tdBtn.appendChild(btn);
 
             const del = document.createElement('button');
             del.className = 'icon-btn btn-delete';
-            del.innerHTML = ICONS.x;
             del.title = 'Löschen';
             del.setAttribute('aria-label', 'Löschen');
             del.addEventListener('click', (e) => { e.stopPropagation(); if (confirm('Artikel wirklich löschen?')) { deleteItem(item.id); }});
+            del.appendChild(createSvgIcon('x'));
             tdBtn.appendChild(del);
 
             tr.appendChild(tdBtn);
@@ -195,7 +266,7 @@
             }
             tr.appendChild(tdName);
 
-            // Preis (Einzelpreis - Spalte 1, die bereits sichtbar ist)
+            // Preis (Einzelpreis - Spalte 3)
             const tdPrice = document.createElement('td');
             if (item.editing) {
                 const inp = document.createElement('input');
@@ -278,8 +349,8 @@
     // responsive Styles hinzufügen, bevor die Tabelle gerendert wird
     addResponsiveStyles();
 
-    addItemBtn.addEventListener('click', addItem);
-    resetBtn.addEventListener('click', resetToDefault);
+    if (addItemBtn) addItemBtn.addEventListener('click', addItem);
+    if (resetBtn) resetBtn.addEventListener('click', resetToDefault);
 
     renderTable();
 
