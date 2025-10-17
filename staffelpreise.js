@@ -11,7 +11,7 @@
     const messageDiv = document.getElementById('message');
 
     // Default
-    const DEFAULT_MAX_MULTIPLIER = 6;
+    const DEFAULT_MAX_MULTIPLIER = 7;
 
     // ----------------- Helpers -----------------
     // Debounce helper
@@ -251,7 +251,7 @@
     function getSavedMaxMultiplier() {
         const raw = localStorage.getItem(STORAGE_MAX_MULT);
         const n = raw ? Number(raw) : DEFAULT_MAX_MULTIPLIER;
-        if (!isFinite(n) || n < 2 || n > 6) return DEFAULT_MAX_MULTIPLIER;
+        if (!isFinite(n) || n < 2 || n > 7) return DEFAULT_MAX_MULTIPLIER;
         return n;
     }
 
@@ -274,7 +274,7 @@
         range.type = 'range';
         range.id = 'staffel-multiplier-range';
         range.min = '2';
-        range.max = '6';
+        range.max = '7';
         range.step = '1';
         range.value = getSavedMaxMultiplier();
 
@@ -558,20 +558,6 @@
 
         // after render update scroll slider
         setTimeout(updateHorizontalScrollSlider, 40);
-    }
-
-    // ----------------- Core actions -----------------
-    function toggleEdit(id) {
-        const item = state.items.find(i => i.id === id);
-        if (!item) return;
-        if (item.editing) {
-            item.editing = false;
-            saveData(state.items);
-        } else {
-            state.items.forEach(i => i.editing = false);
-            item.editing = true;
-        }
-        renderTable();
     }
 
     function addItem() {
