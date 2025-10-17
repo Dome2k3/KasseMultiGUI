@@ -1,5 +1,7 @@
 // staffelpreise.js
 // Verwaltet die Staffeltabelle lokal (localStorage) ohne DB-Anbindung
+// Enthält Debounce für Eingaben, horizontales Scroll-Wrapper + Slider,
+// Icon-Buttons per createElementNS (CSP-freundlich) und einen Multiplier-Slider.
 (function () {
     const STORAGE_KEY = 'kasse_staffelpreise_v1';
     const STORAGE_MAX_MULT = 'kasse_staffel_max_multiplier_v1';
@@ -11,7 +13,103 @@
     // Default
     const DEFAULT_MAX_MULTIPLIER = 6;
 
-    // responsive styles (wird per JS injiziert, damit Datei standalone bleibt)
+    // ----------------- Helpers -----------------
+    // Debounce helper
+    function debounce(fn, wait) {
+        let t;
+        return function (...args) {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), wait);
+        };
+    }
+
+    // CSP-safe SVG creator (no innerHTML)
+    function createSvgIcon(name) {
+        const svgns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        svg.style.width = '18px';
+        svg.style.height = '18px';
+        svg.style.display = 'block';
+        svg.style.fill = 'currentColor';
+
+        const path = document.createElementNS(svgns, 'path');
+
+        switch (name) {
+            case 'pencil':
+                path.setAttribute('d', 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z');
+                break;
+            case 'check':
+                path.setAttribute('d', 'M9 16.2l-3.5-3.5L4 14.2 9 19.25 20 8.25 17.5 5.75z');
+                break;
+            case 'x':
+                path.setAttribute('d', 'M18.3 5.71L12 12.01 5.71 5.71 4.29 7.12 10.59 13.41 4.29 19.71 5.71 21.12 12 14.83 18.29 21.12 19.71 19.71 13.41 13.41 19.71 7.12z');
+                break;
+            default:
+                path.setAttribute('d', '');
+        }
+
+        svg.appendChild(path);
+        return svg;
+    }
+
+    // format Euro
+    function formatEuro(n) {
+        return n.toFixed(2).replace('.', ',') + ' €';
+    }
+
+    function showMessage(text) {
+        if (!messageDiv) return;
+        messageDiv.textContent = text || '';
+    }
+
+    // Truncate name for display (max 9 characters)
+    function truncateName(name) {
+        if (!name) return '';
+        return name.length > 9 ? name.slice(0, 9) + '…' : name;
+    }
+
+    function genId() {
+        return 'id_' + Math.random().toString(36).slice(2, 10);
+    }
+
+    // ----------------- Data load/save -----------------
+    function loadData() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return STAFFEL_DEFAULT_DATA.slice();
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return STAFFEL_DEFAULT_DATA.slice();
+            return parsed.map(item => ({ id: item.id || genId(), name: item.name || '', price: Number(item.price) || 0, editing: false }));
+        } catch (e) {
+            console.error('Fehler beim Laden der Staffelpreise:', e);
+            return STAFFEL_DEFAULT_DATA.slice();
+        }
+    }
+
+    function saveData(items) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items.map(i => ({ id: i.id, name: i.name, price: i.price }))));
+        showMessage('Gespeichert');
+        setTimeout(() => showMessage(''), 1200);
+    }
+
+    // Debounced save to avoid frequent localStorage writes while typing
+    const debouncedSave = debounce(() => {
+        saveData(state.items);
+    }, 500);
+
+    // ----------------- Defaults -----------------
+    const STAFFEL_DEFAULT_DATA = [
+        { id: genId(), name: 'Bier', price: 3.50, editing: false },
+        { id: genId(), name: 'Radler', price: 3.80, editing: false },
+        { id: genId(), name: 'Cola', price: 2.50, editing: false },
+        { id: genId(), name: 'Wasser', price: 2.50, editing: false },
+        { id: genId(), name: 'Pfand', price: 2.50, editing: false }
+    ];
+
+    // ----------------- Responsive + Controls (injected CSS) -----------------
     function addResponsiveStyles() {
         if (document.getElementById('staffel-responsive-styles')) return;
         const css = `
@@ -24,9 +122,9 @@
   position: relative;
 }
 
-/* Basis-Layout für die Tabelle - normale Tabellenanzeige */
+/* Tabelle als inline-width (natürliche Breite) */
 #staffelTable {
-  width: max-content; /* erlaubt horizontales Scrollen bei vielen Spalten */
+  width: max-content;
   border-collapse: collapse;
   table-layout: auto;
   box-sizing: border-box;
@@ -87,7 +185,7 @@
   margin-left: 6px;
 }
 
-/* Container für den Slider (rechts oberhalb der Tabelle) */
+/* Multiplier control */
 #staffel-multiplier-control {
   display: flex;
   justify-content: flex-end;
@@ -106,7 +204,7 @@
   height: 28px;
 }
 
-/* Horizontal scroll slider (visible when table overflows) */
+/* Scroll slider */
 #staffel-scroll-container {
   display: flex;
   justify-content: center;
@@ -134,7 +232,7 @@
   cursor: pointer;
 }
 
-/* Kleinere Displays: kleinere Padding/Svg-Größen */
+/* Kleine Displays */
 @media (max-width: 420px) {
   #staffelTable, #staffelTable th, #staffelTable td { font-size: 11px; padding: 4px 6px; }
   #staffelTable .icon-btn { width: 24px; height: 24px; }
@@ -149,86 +247,14 @@
         document.head.appendChild(st);
     }
 
-    // helper: create an SVG element for the requested icon (no innerHTML, no eval)
-    function createSvgIcon(name) {
-        const svgns = 'http://www.w3.org/2000/svg';
-        const svg = document.createElementNS(svgns, 'svg');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('aria-hidden', 'true');
-        svg.setAttribute('focusable', 'false');
-        svg.style.width = '18px';
-        svg.style.height = '18px';
-        svg.style.display = 'block';
-        svg.style.fill = 'currentColor';
-
-        const path = document.createElementNS(svgns, 'path');
-
-        switch (name) {
-            case 'pencil':
-                path.setAttribute('d', 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z');
-                break;
-            case 'check':
-                path.setAttribute('d', 'M9 16.2l-3.5-3.5L4 14.2 9 19.25 20 8.25 17.5 5.75z');
-                break;
-            case 'x':
-                path.setAttribute('d', 'M18.3 5.71L12 12.01 5.71 5.71 4.29 7.12 10.59 13.41 4.29 19.71 5.71 21.12 12 14.83 18.29 21.12 19.71 19.71 13.41 13.41 19.71 7.12z');
-                break;
-            default:
-                path.setAttribute('d', '');
-        }
-
-        svg.appendChild(path);
-        return svg;
+    // ----------------- Multiplier control (slider) -----------------
+    function getSavedMaxMultiplier() {
+        const raw = localStorage.getItem(STORAGE_MAX_MULT);
+        const n = raw ? Number(raw) : DEFAULT_MAX_MULTIPLIER;
+        if (!isFinite(n) || n < 2 || n > 6) return DEFAULT_MAX_MULTIPLIER;
+        return n;
     }
 
-    // Beispielstandards (eindeutiger Name, um Konflikte zu vermeiden)
-    const STAFFEL_DEFAULT_DATA = [
-        { id: genId(), name: 'Bier', price: 3.50, editing: false },
-        { id: genId(), name: 'Radler', price: 3.80, editing: false },
-        { id: genId(), name: 'Cola', price: 2.50, editing: false },
-        { id: genId(), name: 'Wasser', price: 2.50, editing: false },
-        { id: genId(), name: 'Pfand', price: 2.50, editing: false }
-    ];
-
-    function genId() {
-        return 'id_' + Math.random().toString(36).slice(2, 10);
-    }
-
-    function loadData() {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return STAFFEL_DEFAULT_DATA.slice();
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) return STAFFEL_DEFAULT_DATA.slice();
-            return parsed.map(item => ({ id: item.id || genId(), name: item.name || '', price: Number(item.price) || 0, editing: false }));
-        } catch (e) {
-            console.error('Fehler beim Laden der Staffelpreise:', e);
-            return STAFFEL_DEFAULT_DATA.slice();
-        }
-    }
-
-    function saveData(items) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(items.map(i => ({ id: i.id, name: i.name, price: i.price }))));
-        showMessage('Gespeichert');
-        setTimeout(() => showMessage(''), 1200);
-    }
-
-    function formatEuro(n) {
-        return n.toFixed(2).replace('.', ',') + ' €';
-    }
-
-    function showMessage(text) {
-        if (!messageDiv) return;
-        messageDiv.textContent = text || '';
-    }
-
-    // Truncate name for display (max 9 characters)
-    function truncateName(name) {
-        if (!name) return '';
-        return name.length > 9 ? name.slice(0, 9) + '…' : name;
-    }
-
-    // slider control helper: create UI and attach event
     function ensureMultiplierControl() {
         let control = document.getElementById('staffel-multiplier-control');
         if (control) return control;
@@ -258,7 +284,7 @@
             localStorage.setItem(STORAGE_MAX_MULT, String(v));
             const vs = document.getElementById('staffel-multiplier-value');
             if (vs) vs.textContent = v;
-            renderTable();
+            renderTable(); // render when user explicitly changes multiplier count
             // update scroll slider after re-render
             setTimeout(updateHorizontalScrollSlider, 40);
         });
@@ -276,26 +302,18 @@
         return control;
     }
 
-    function getSavedMaxMultiplier() {
-        const raw = localStorage.getItem(STORAGE_MAX_MULT);
-        const n = raw ? Number(raw) : DEFAULT_MAX_MULTIPLIER;
-        if (!isFinite(n) || n < 2 || n > 6) return DEFAULT_MAX_MULTIPLIER;
-        return n;
-    }
-
-    // Determine effective max multiplier to render, enforcing landscape minimum
+    // Enforce at least 3 multipliers in landscape on small devices (so total visible columns >=5)
     function getEffectiveMaxMultiplier() {
         const saved = state.maxMultiplierVisible || getSavedMaxMultiplier() || DEFAULT_MAX_MULTIPLIER;
         if (window.matchMedia && window.matchMedia('(orientation: landscape) and (max-width: 812px)').matches) {
-            return Math.max(saved, 3); // at least multipliers 2 and 3 visible
+            return Math.max(saved, 3);
         }
         return saved;
     }
 
-    // ----- Horizontal scroll wrapper + slider -----
+    // ----------------- Horizontal scroll wrapper + slider -----------------
     function ensureTableWrapperAndSlider() {
         if (!table) return;
-        // wrap table with a wrapper if not already wrapped
         let wrapper = document.getElementById('staffel-table-wrapper');
         if (!wrapper) {
             wrapper = document.createElement('div');
@@ -304,7 +322,6 @@
             wrapper.appendChild(table);
         }
 
-        // create scroll slider container if not exists
         let sc = document.getElementById('staffel-scroll-container');
         if (!sc) {
             sc = document.createElement('div');
@@ -335,35 +352,24 @@
             sc.appendChild(slider);
             sc.appendChild(rightLabel);
 
-            // insert after wrapper
             wrapper.parentNode.insertBefore(sc, wrapper.nextSibling);
 
-            // slider <-> wrapper synchronization
             slider.addEventListener('input', (e) => {
                 const s = document.getElementById('staffel-table-wrapper');
                 if (!s) return;
                 s.scrollLeft = Number(e.target.value);
             });
 
-            // update slider while scrolling
             wrapper.addEventListener('scroll', () => {
                 syncSliderWithScroll();
             });
 
-            // also update on pointer/touch drag
-            slider.addEventListener('pointerdown', () => {
-                // nothing special now
-            });
-
-            // detect manual wheel / touch end to resync
             wrapper.addEventListener('touchend', () => setTimeout(syncSliderWithScroll, 10));
             wrapper.addEventListener('mouseup', () => setTimeout(syncSliderWithScroll, 10));
             window.addEventListener('resize', () => {
-                // update slider max on resize
                 setTimeout(updateHorizontalScrollSlider, 80);
             });
 
-            // initial update
             setTimeout(updateHorizontalScrollSlider, 40);
         }
     }
@@ -374,15 +380,12 @@
         if (!wrapper || !slider) return;
         const max = Math.max(0, wrapper.scrollWidth - wrapper.clientWidth);
         slider.max = String(Math.round(max));
-        // if current slider value exceeds new max, clamp and scroll
         if (Number(slider.value) > max) {
             slider.value = String(Math.round(max));
             wrapper.scrollLeft = max;
         } else {
-            // sync scroll to slider value (in case)
             wrapper.scrollLeft = Number(slider.value);
         }
-        // hide slider if no overflow
         const scContainer = document.getElementById('staffel-scroll-container');
         if (scContainer) {
             scContainer.style.display = (max > 0 ? 'flex' : 'none');
@@ -395,8 +398,23 @@
         if (!wrapper || !slider) return;
         slider.value = String(Math.round(wrapper.scrollLeft));
     }
-    // ----- end scroll wrapper + slider -----
 
+    // ----------------- Partial DOM updates to avoid focus loss -----------------
+    // Update total cells for a given rendered row element (tr)
+    function updateTotalsForRow(tr, price, maxMult) {
+        // td indices: 0=buttons,1=name,2=price, 3.. => multipliers 2..
+        const tds = tr.querySelectorAll('td');
+        for (let i = 2; i < tds.length; i++) {
+            const multIndex = i - 1; // when i=3 -> mult 2
+            const mult = multIndex;
+            if (mult >= 2 && mult <= maxMult) {
+                const total = Number(price) * mult;
+                tds[i].textContent = formatEuro(total);
+            }
+        }
+    }
+
+    // ----------------- Rendering -----------------
     function renderTable() {
         ensureMultiplierControl();
         ensureTableWrapperAndSlider();
@@ -434,7 +452,19 @@
             btn.className = 'icon-btn btn-edit';
             btn.title = item.editing ? 'Speichern' : 'Editieren';
             btn.setAttribute('aria-label', item.editing ? 'Speichern' : 'Editieren');
-            btn.addEventListener('click', () => toggleEdit(item.id));
+            btn.addEventListener('click', () => {
+                // Toggle: if saving, flip editing->false and re-render to show view mode
+                if (item.editing) {
+                    item.editing = false;
+                    saveData(state.items);
+                    renderTable();
+                } else {
+                    state.items.forEach(i => i.editing = false);
+                    item.editing = true;
+                    renderTable();
+                    // focus on newly created input (handled after render)
+                }
+            });
             btn.appendChild(createSvgIcon(item.editing ? 'check' : 'pencil'));
             tdBtn.appendChild(btn);
 
@@ -442,7 +472,12 @@
             del.className = 'icon-btn btn-delete';
             del.title = 'Löschen';
             del.setAttribute('aria-label', 'Löschen');
-            del.addEventListener('click', (e) => { e.stopPropagation(); if (confirm('Artikel wirklich löschen?')) { deleteItem(item.id); }});
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm('Artikel wirklich löschen?')) {
+                    deleteItem(item.id);
+                }
+            });
             del.appendChild(createSvgIcon('x'));
             tdBtn.appendChild(del);
 
@@ -456,21 +491,23 @@
                 inp.type = 'text';
                 inp.value = item.name;
                 inp.className = 'name-input';
-                inp.maxLength = 64; // editing can still be longer; display truncated later
+                inp.maxLength = 64; // allow editing longer name if desired
+                // IMPORTANT: do NOT re-render while typing; update model and debounced-save
                 inp.addEventListener('input', (e) => {
                     item.name = e.target.value;
-                    saveData(state.items);
-                    renderTable();
+                    debouncedSave();
+                    // update title for ease (not re-render)
+                    tdName.title = item.name || '';
                 });
                 tdName.appendChild(inp);
             } else {
                 tdName.textContent = truncateName(item.name);
                 tdName.style.textAlign = 'left';
-                tdName.title = item.name || ''; // full name on hover
+                tdName.title = item.name || '';
             }
             tr.appendChild(tdName);
 
-            // Preis (Einzelpreis)
+            // Price cell
             const tdPrice = document.createElement('td');
             if (item.editing) {
                 const inp = document.createElement('input');
@@ -479,11 +516,15 @@
                 inp.min = '0';
                 inp.value = Number(item.price).toFixed(2);
                 inp.className = 'price-input';
+                // Update model and totals on input, but do NOT re-render => avoids focus loss
                 inp.addEventListener('input', (e) => {
-                    const val = parseFloat(e.target.value.replace(',', '.'));
+                    // allow comma as decimal separator
+                    const raw = e.target.value;
+                    const val = parseFloat(String(raw).replace(',', '.'));
                     item.price = isFinite(val) ? val : 0;
-                    saveData(state.items);
-                    renderTable();
+                    debouncedSave(); // save after typing stops
+                    // update totals in this row directly
+                    updateTotalsForRow(tr, item.price, maxMult);
                 });
                 tdPrice.appendChild(inp);
             } else {
@@ -491,7 +532,7 @@
             }
             tr.appendChild(tdPrice);
 
-            // Staffelspalten 2..maxMult
+            // Multiplier columns (render based on active maxMult)
             for (let i = 2; i <= maxMult; i++) {
                 const td = document.createElement('td');
                 const total = Number(item.price) * i;
@@ -502,15 +543,24 @@
             body.appendChild(tr);
         });
 
-        // write to table
         table.innerHTML = '';
         table.appendChild(head);
         table.appendChild(body);
+
+        // After render, focus newly created input if any
+        const lastEditingInput = table.querySelector('input.name-input, input.price-input');
+        if (lastEditingInput) {
+            lastEditingInput.focus();
+            // move cursor to end
+            const val = lastEditingInput.value;
+            lastEditingInput.setSelectionRange && lastEditingInput.setSelectionRange(val.length, val.length);
+        }
 
         // after render update scroll slider
         setTimeout(updateHorizontalScrollSlider, 40);
     }
 
+    // ----------------- Core actions -----------------
     function toggleEdit(id) {
         const item = state.items.find(i => i.id === id);
         if (!item) return;
@@ -550,22 +600,21 @@
         setTimeout(() => showMessage(''), 1500);
     }
 
+    // ----------------- State -----------------
     const state = {
         items: loadData(),
         maxMultiplierVisible: getSavedMaxMultiplier()
     };
 
-    // responsive Styles hinzufügen, bevor die Tabelle gerendert wird
+    // ----------------- Init -----------------
     addResponsiveStyles();
-
-    // create control and attach listeners
     ensureMultiplierControl();
     ensureTableWrapperAndSlider();
 
     if (addItemBtn) addItemBtn.addEventListener('click', addItem);
     if (resetBtn) resetBtn.addEventListener('click', resetToDefault);
 
-    // re-render on orientation/resize, to enforce landscape minimum
+    // re-render on resize/orientation, with minor debounce
     window.addEventListener('resize', () => {
         clearTimeout(window.__staffel_resize_timeout);
         window.__staffel_resize_timeout = setTimeout(() => {
@@ -573,8 +622,6 @@
             updateHorizontalScrollSlider();
         }, 120);
     });
-
-    // also re-sync on orientation change
     window.addEventListener('orientationchange', () => {
         setTimeout(() => {
             renderTable();
