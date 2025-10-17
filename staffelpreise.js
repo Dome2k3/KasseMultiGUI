@@ -154,13 +154,13 @@
   width: 100%;
 }
 
-/* Icon-Buttons links: kompakt, ohne Text */
+/* Icon-Buttons: kleinere Variante, damit sie leichter nebeneinander passen */
 #staffelTable .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;      /* kleiner als vorher (z.B. 28px -> 22px) */
+  height: 22px;
   padding: 0;
   margin: 0;
   border: none;
@@ -168,6 +168,7 @@
   cursor: pointer;
   color: inherit;
 }
+
 #staffelTable .icon-btn:focus {
   outline: 2px solid rgba(0,0,0,0.12);
   outline-offset: 2px;
@@ -182,7 +183,7 @@
 
 /* Abstände zwischen icon buttons */
 #staffelTable .btn-delete {
-  margin-left: 6px;
+  margin-left: 4px;
 }
 
 /* Multiplier control */
@@ -426,7 +427,7 @@
         const headRow = document.createElement('tr');
 
         // Head: Buttons | Name | Preis | multipliers 2..maxMult
-        ['', 'Name', 'Preis'].forEach((h, idx) => {
+        ['Config', 'Name', 'Preis'].forEach((h, idx) => {
             const th = document.createElement('th');
             if (idx === 0) th.className = 'left-col';
             if (idx === 1) th.className = 'name-col';
