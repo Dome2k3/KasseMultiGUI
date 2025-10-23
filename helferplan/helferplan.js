@@ -87,7 +87,7 @@ app.post('/api/helpers', async (req, res) => {
         if (!name || !team_id || !role) return res.status(400).json({ error: 'Name, Team-ID und Rolle sind erforderlich.' });
         const validRoles = ['Minderjaehrig', 'Erwachsen', 'Orga'];
         if (!validRoles.includes(role)) return res.status(400).json({ error: 'Ungueltige Rolle.' });
-        const result = await pool.query("INSERT INTO helpers (name, team_id, role) VALUES (?, ?, ?);", [name, team_id, role]);
+        const result = await pool.query("INSERT INTO helferplan_helpers (name, team_id, role) VALUES (?, ?, ?);", [name, team_id, role]);
         const insertResult = result[0];
         res.status(201).json({ id: Number(insertResult.insertId), name, team_id, role });
     } catch (err) {
@@ -115,7 +115,7 @@ app.post('/api/activity-groups', async (req, res) => {
     try {
         const { name } = req.body;
         if (!name) return res.status(400).json({ error: 'Name ist erforderlich.' });
-        const result = await pool.query("INSERT INTO activity_groups (name) VALUES (?);", [name]);
+        const result = await pool.query("INSERT INTO helferplan_activity_groups (name) VALUES (?);", [name]);
         const insertResult = result[0];
         res.status(201).json({ id: Number(insertResult.insertId), name });
     } catch (err) {
@@ -145,7 +145,7 @@ app.post('/api/activities', async (req, res) => {
     try {
         const { name, group_id, role_requirement } = req.body;
         if (!name || !group_id || !role_requirement) return res.status(400).json({ error: 'Name, Gruppen-ID und Rollen-Anforderung sind erforderlich.' });
-        const result = await pool.query("INSERT INTO activities (name, group_id, role_requirement) VALUES (?, ?, ?);", [name, group_id, role_requirement]);
+        const result = await pool.query("INSERT INTO helferplan_activities (name, group_id, role_requirement) VALUES (?, ?, ?);", [name, group_id, role_requirement]);
         const insertResult = result[0];
         res.status(201).json({ id: Number(insertResult.insertId), name, group_id, role_requirement });
     } catch (err) {
@@ -178,7 +178,7 @@ app.post('/api/tournament-shifts', async (req, res) => {
         if (!activity_id || !start_time || !end_time || !helper_id) return res.status(400).json({ error: 'Alle Felder sind erforderlich.' });
 
         const result = await pool.query(
-            "INSERT INTO tournament_shifts (activity_id, start_time, end_time, helper_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE helper_id = VALUES(helper_id);",
+            "INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE helper_id = VALUES(helper_id);",
             [activity_id, start_time, end_time, helper_id]
         );
         const execResult = result[0];
