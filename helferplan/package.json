@@ -2,9 +2,9 @@
   "name": "helferplan",
   "version": "1.0.0",
   "description": "Helferplan fuer Turniere",
-  "main": "server.js",
+  "main": "helferplan.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node helferplan.js"
   },
   "author": "",
   "license": "ISC",
