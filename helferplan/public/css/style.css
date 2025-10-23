@@ -1,3 +1,5 @@
+/* --- bestehender Inhalt oben bleibt --- */
+
 body {
     font-family: sans-serif;
     background-color: #f4f4f9;
@@ -57,73 +59,86 @@ button:hover {
     background-color: #004170;
 }
 
-#team-list, #group-list {
-    list-style: none;
-    padding: 0;
-    max-height: 200px;
-    overflow-y: auto;
+/* kleine Lösch-Buttons */
+.small-delete {
+    padding: 2px 6px;
+    font-size: 12px;
+    line-height: 1;
+    border-radius: 4px;
+    background: transparent;
+    color: #b00;
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+.small-delete:hover {
+    background: rgba(176,0,0,0.08);
+    border-color: rgba(176,0,0,0.15);
 }
 
-#team-list li {
+/* Tabellen: kleinere Zeilenhöhe bei Buttons */
+.table-wrapper table td, .table-wrapper table th {
+    padding: 6px 8px;
+}
+
+/* Team- / Helper-Pool auf Plan-Seite */
+.plan-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 12px;
+    align-items: start;
+}
+.left-panel {
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 6px;
+    background: #fff;
+    height: 75vh;
+    overflow: auto;
+}
+.team-list-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.team-item {
     display: flex;
     align-items: center;
-    padding: 10px 0;
+    gap: 8px;
 }
-
-.color-swatch {
-    width: 20px;
+.team-badge {
+    display: inline-block;
+    width: 34px;
     height: 20px;
-    margin-right: 15px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
-.table-wrapper {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid #eee;
-    margin-top: 10px;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-table th, table td {
-    text-align: left;
-    padding: 8px;
-    border-bottom: 1px solid #ddd;
-}
-
-.separator {
-    margin-top: 20px;
-    border-top: 1px solid #eee;
-    padding-top: 20px;
-}
-
-nav {
-    background-color: #004170;
-    padding: 10px 20px;
-}
-nav a {
     color: white;
-    text-decoration: none;
-    padding: 10px 15px;
-    border-radius: 4px;
-}
-nav a:hover {
-    background-color: #005A9F;
-}
-nav a.active {
-    background-color: #e87722;
     font-weight: bold;
+    text-align: center;
+    line-height: 20px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.05);
+}
+.helper-pool {
+    border-top: 1px solid #eee;
+    margin-top: 8px;
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.helper-item {
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #f6f9ff;
+    cursor: grab;
+    user-select: none;
+    border: 1px solid #e0e7ff;
+}
+.helper-item:active {
+    cursor: grabbing;
 }
 
-.plan-main {
-    max-width: 95%;
-}
-
+/* Plan Grid Anpassungen */
 #plan-container {
     position: relative;
     border: 1px solid #ccc;
