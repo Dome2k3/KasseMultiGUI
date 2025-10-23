@@ -1,0 +1,260 @@
+body {
+    font-family: sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+main {
+    max-width: 1200px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+h1, h2, h3 {
+    color: #005A9F;
+}
+
+h3 {
+    margin-top: 20px;
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 40px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+input, select, button {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+button {
+    border: none;
+    background-color: #005A9F;
+    color: white;
+    cursor: pointer;
+    padding: 10px 15px;
+}
+
+button:hover {
+    background-color: #004170;
+}
+
+#team-list, #group-list {
+    list-style: none;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#team-list li {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+}
+
+.color-swatch {
+    width: 20px;
+    height: 20px;
+    margin-right: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.table-wrapper {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    margin-top: 10px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table th, table td {
+    text-align: left;
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.separator {
+    margin-top: 20px;
+    border-top: 1px solid #eee;
+    padding-top: 20px;
+}
+
+nav {
+    background-color: #004170;
+    padding: 10px 20px;
+}
+nav a {
+    color: white;
+    text-decoration: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+}
+nav a:hover {
+    background-color: #005A9F;
+}
+nav a.active {
+    background-color: #e87722;
+    font-weight: bold;
+}
+
+.plan-main {
+    max-width: 95%;
+}
+
+#plan-container {
+    position: relative;
+    border: 1px solid #ccc;
+    font-size: 12px;
+}
+
+#timeline-header {
+    display: grid;
+    background-color: #f2f2f2;
+    border-bottom: 2px solid #ccc;
+    padding-left: 200px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+#timeline-header .hour-slot {
+    text-align: center;
+    padding: 5px 0;
+    border-right: 1px solid #ddd;
+    font-size: 10px;
+}
+#timeline-header .day-header {
+    text-align: center;
+    font-weight: bold;
+    padding: 5px;
+    background-color: #e0e0e0;
+    border-bottom: 1px solid #ccc;
+}
+
+#grid-container {
+    max-height: 75vh;
+    overflow: auto;
+    position: relative;
+}
+
+.activity-group-header {
+    font-weight: bold;
+    background-color: #eaf2f8;
+    padding: 10px 5px;
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 9;
+    width: 100%;
+    border-bottom: 2px solid #ccc;
+}
+
+.activity-row {
+    display: grid;
+    border-bottom: 1px solid #eee;
+}
+
+.activity-name {
+    padding: 8px 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background-color: #fdfdfd;
+    position: sticky;
+    left: 0;
+    width: 200px;
+    border-right: 2px solid #ccc;
+}
+
+.shift-slot {
+    border-right: 1px solid #eee;
+    min-height: 30px;
+    padding: 4px;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.shift-slot:hover {
+    background-color: #e8f0fe;
+}
+
+.shift-slot.filled {
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    line-height: 1.2;
+    font-size: 11px;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: white;
+    padding: 20px 30px;
+    border-radius: 8px;
+    width: 400px;
+}
+.modal-content h2, .modal-content p {
+    margin: 0 0 15px 0;
+    color: #005A9F;
+}
+.modal-content p {
+    color: #333;
+}
+#shift-form {
+    display: flex;
+    flex-direction: column;
+}
+#shift-form label {
+    margin-top: 10px;
+    font-weight: bold;
+}
+#shift-form select {
+    margin-top: 5px;
+    padding: 10px;
+}
+.modal-actions {
+    margin-top: 25px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.modal-actions .danger {
+    background-color: #d9534f;
+}
+.modal-actions .danger:hover {
+    background-color: #c9302c;
+}

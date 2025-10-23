@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helferplan - Admin</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="active">Admin: Stammdaten</a>
+        <a href="plan.html">Turnier-Planung</a>
+    </nav>
+    <main>
+        <h1>Admin-Dashboard: Stammdaten</h1>
+
+        <div class="grid-container">
+            <!-- Spalte 1: Teams -->
+            <section class="grid-item">
+                <h2>Teams</h2>
+                <ul id="team-list"></ul>
+                <h3>Neues Team</h3>
+                <form id="add-team-form">
+                    <input type="text" id="team-name-input" placeholder="Teamname" required>
+                    <input type="color" id="team-color-input" value="#e66465">
+                    <button type="submit">Anlegen</button>
+                </form>
+            </section>
+    
+            <!-- Spalte 2: Helfer -->
+            <section class="grid-item">
+                <h2>Helfer</h2>
+                <div class="table-wrapper">
+                    <table id="helper-table">
+                        <thead><tr><th>Name</th><th>Team</th><th>Rolle</th></tr></thead>
+                        <tbody id="helper-list-body"></tbody>
+                    </table>
+                </div>
+                <h3>Neuer Helfer</h3>
+                <form id="add-helper-form">
+                    <input type="text" id="helper-name-input" placeholder="Name" required>
+                    <select id="helper-team-select" required></select>
+                    <select id="helper-role-select" required>
+                        <option value="Erwachsen">Erwachsen</option>
+                        <option value="Minderjaehrig">Minderjaehrig</option>
+                        <option value="Orga">Orga</option>
+                    </select>
+                    <button type="submit">Anlegen</button>
+                </form>
+            </section>
+
+            <!-- Spalte 3: Taetigkeiten -->
+            <section class="grid-item">
+                <h2>T�tigkeiten</h2>
+                <ul id="group-list"></ul>
+                <h3>Neue Gruppe</h3>
+                <form id="add-group-form">
+                    <input type="text" id="group-name-input" placeholder="z.B. Getraenkeverkauf" required>
+                    <button type="submit">Anlegen</button>
+                </form>
+
+                <h3 class="separator">Taetigkeiten pro Gruppe</h3>
+                <div class="table-wrapper">
+                    <table id="activity-table">
+                        <thead><tr><th>Taetigkeit</th><th>Gruppe</th><th>Anforderung</th></tr></thead>
+                        <tbody id="activity-list-body"></tbody>
+                    </table>
+                </div>
+                <h3>Neue Taetigkeit</h3>
+                <form id="add-activity-form">
+                    <input type="text" id="activity-name-input" placeholder="z.B. Ausschank" required>
+                    <select id="activity-group-select" required></select>
+                    <select id="activity-role-select" required>
+                        <option value="Alle">Alle</option>
+                        <option value="Erwachsen">Nur Erwachsene</option>
+                        <option value="Orga">Nur Orga</option>
+                    </select>
+                    <button type="submit">Anlegen</button>
+                </form>
+            </section>
+        </div>
+
+    </main>
+    <script src="js/main.js" defer></script>
+</body>
+</html>

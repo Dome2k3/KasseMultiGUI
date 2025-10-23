@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helferplan - Turnier-Planung</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">Admin: Stammdaten</a>
+        <a href="plan.html" class="active">Turnier-Planung</a>
+    </nav>
+
+    <main class="plan-main">
+        <h1>Turnier-Planung (Fr 12:00 - So 17:00)</h1>
+        
+        <div id="plan-container">
+            <div id="timeline-header"></div>
+            <div id="grid-container"></div>
+        </div>
+    </main>
+
+    <div id="shift-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="modal-title">Schicht besetzen</h2>
+            <p id="modal-subtitle"></p>
+            <form id="shift-form">
+                <label for="modal-team-select">Team:</label>
+                <select id="modal-team-select" required></select>
+                
+                <label for="modal-helper-select">Helfer:</label>
+                <select id="modal-helper-select" required></select>
+
+                <div class="modal-actions">
+                    <button type="submit" id="save-shift-button">Speichern</button>
+                    <button type="button" id="delete-shift-button" class="danger">Schicht leeren</button>
+                    <button type="button" id="cancel-shift-button">Abbrechen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/plan.js" defer></script>
+</body>
+</html>

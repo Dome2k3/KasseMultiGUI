@@ -1,0 +1,83 @@
+-- Tabelle für die Einstellungen, z.B. Passwörter und Event-Daten
+CREATE TABLE helferplan.settings (
+    setting_key VARCHAR(50) PRIMARY KEY,
+    setting_value VARCHAR(255) NOT NULL
+) ENGINE=InnoDB;
+
+-- Tabelle für die Helfer-Teams
+CREATE TABLE helferplan.teams (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    color_hex VARCHAR(7) NOT NULL DEFAULT '#FFFFFF'
+) ENGINE=InnoDB;
+
+-- Tabelle für die Helfer (Personen)
+CREATE TABLE helferplan.helpers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    team_id INT,
+    role ENUM('Minderjährig', 'Erwachsen', 'Orga') NOT NULL,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Tabelle für die Tätigkeits-Gruppen (z.B. "Getränketheke")
+CREATE TABLE helferplan.activity_groups (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    sort_order INT DEFAULT 0
+) ENGINE=InnoDB;
+
+-- Tabelle für die konkreten Tätigkeiten/Schichten (z.B. "Theke-Schicht Ausschank")
+CREATE TABLE helferplan.activities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    group_id INT,
+    role_requirement ENUM('Minderjaehrig', 'Erwachsen', 'Orga', 'Alle') NOT NULL DEFAULT 'Alle',
+    sort_order INT DEFAULT 0,
+    FOREIGN KEY (group_id) REFERENCES activity_groups(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Kerntabelle für die Schichten am Turnierwochenende (1h-Slots)
+CREATE TABLE helferplan.tournament_shifts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    activity_id INT NOT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    helper_id INT,
+    is_override BOOLEAN DEFAULT FALSE,
+    UNIQUE(activity_id, start_time),
+    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+    FOREIGN KEY (helper_id) REFERENCES helpers(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Tabelle für die Schichten beim Auf- und Abbau (4h-Blöcke)
+CREATE TABLE helferplan.setup_cleanup_shifts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    day_type ENUM('Aufbau', 'Abbau') NOT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    helper_id INT,
+    FOREIGN KEY (helper_id) REFERENCES helpers(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Tabelle für die Kuchenspenden
+CREATE TABLE helferplan.cakes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    donation_day ENUM('Freitag', 'Samstag', 'Sonntag') NOT NULL,
+    helper_id INT,
+    cake_type VARCHAR(100),
+    contains_nuts BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (helper_id) REFERENCES helpers(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Tabelle für die Änderungshistorie (Changelog)
+CREATE TABLE helferplan.changelog (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    editor_name VARCHAR(100) NOT NULL,
+    change_description TEXT NOT NULL
+) ENGINE=InnoDB;
+
+-- Standard-Passwörter initial anlegen
+INSERT INTO helferplan.settings (setting_key, setting_value) VALUES ('admin_password', 'admin123');
+INSERT INTO helferplan.settings (setting_key, setting_value) VALUES ('edit_password', 'edit123');
