@@ -9,16 +9,16 @@ const cors = require('cors');
 const app = express();
 const port = Number(process.env.PORT) || 3003;
 
-// --- 3. DB-Pool einrichten ---
+
+// DB-Pool
 const pool = mysql.createPool({
-    host: process.env.MYSQL_HOST || '192.168.0.187',
-    port: Number(process.env.MYSQL_PORT) || 3306,
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || 'Dome1234.!',
-    database: process.env.MYSQL_DATABASE || 'volleyball_turnier',
+    host: process.env.MYSQL_HOST,
+    port: process.env.MYSQL_PORT || 3306,
+    user: process.env.MYSQL_USER,
+    password: process.env.MYSQL_PASSWORD,
+    database: process.env.MYSQL_DATABASE,
     waitForConnections: true,
-    connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT) || 5,
-    queueLimit: 0
+    connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT) || 5
 });
 
 // --- 3b. Sicherstellen, dass Settings-Tabelle existiert ---
