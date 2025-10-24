@@ -2,21 +2,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // API base for Helferplan
     // Lookup order:
     // 1) meta tag <meta name="api-url-helferplan" content="https://.../api">
-    // 2) runtime global window.__API_URL_HELFERPLAN (if you inject a small script)
+    // 2) runtime global window.__API_URL_HELFERPLAN (inject small script before this file)
     // 3) local dev convenience: if served from localhost, assume :3003
     // 4) default: same origin + /api (works with Cloudflare/Render tunnels)
     const API_URL_HELFERPLAN = (() => {
         const meta = document.querySelector('meta[name="api-url-helferplan"]');
         if (meta && meta.content) return meta.content.replace(/\/$/, '');
         if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
-        if (window.location.hostname === 'localhost' || window.location.hostname === '192.168.0.188') {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
             return `${window.location.protocol}//${window.location.hostname}:3003/api`;
         }
         return `${window.location.origin}/api`;
     })();
 
-    // Debug helper: quick visibility which API base is used
-    console.debug('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
+    // Expose for debugging / other scripts (accessible via console: window.API_URL_HELFERPLAN)
+    // Note: if you need it BEFORE DOMContentLoaded, set window.__API_URL_HELFERPLAN in a script tag before this file is loaded.
+    window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
+    console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
 
     // DOM elements
     const timelineHeader = document.getElementById('timeline-header');
