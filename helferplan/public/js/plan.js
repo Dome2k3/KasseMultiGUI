@@ -1,6 +1,22 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // API base
-    const API_URL = `${window.location.protocol}//${window.location.hostname}:3003/api`;
+    // API base for Helferplan
+    // Lookup order:
+    // 1) meta tag <meta name="api-url-helferplan" content="https://.../api">
+    // 2) runtime global window.__API_URL_HELFERPLAN (if you inject a small script)
+    // 3) local dev convenience: if served from localhost, assume :3003
+    // 4) default: same origin + /api (works with Cloudflare/Render tunnels)
+    const API_URL_HELFERPLAN = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '192.168.0.188') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
+
+    // Debug helper: quick visibility which API base is used
+    console.debug('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
 
     // DOM elements
     const timelineHeader = document.getElementById('timeline-header');
@@ -190,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function generateGrid(timelineConfig) {
-        const resp = await fetch(`${API_URL}/activities`);
+        const resp = await fetch(`${API_URL_HELFERPLAN}/activities`);
         if (!resp.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
         const activities = await resp.json();
 
@@ -262,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const startTime = hourIndexToDate(startIndex);
                             const endTime = hourIndexToDate(startIndex + 2); // min 2h
 
-                            const resp = await fetch(`${API_URL}/tournament-shifts`, {
+                            const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -358,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
             delete s.dataset.hiddenForSpan;
         });
 
-        const resp = await fetch(`${API_URL}/tournament-shifts`);
+        const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`);
         if (!resp.ok) {
             console.error('Fehler beim Laden der Schichten');
             return;
@@ -453,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const startTime = hourIndexToDate(hourIndex);
             const endTime = hourIndexToDate(hourIndex + 2);
 
-            const response = await fetch(`${API_URL}/tournament-shifts`, {
+            const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
@@ -474,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const hourIndex = parseInt(currentSlot.dataset.hourIndex);
             const startTime = hourIndexToDate(hourIndex);
 
-            const response = await fetch(`${API_URL}/tournament-shifts`, {
+            const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString() })
@@ -495,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function init() {
         // load settings to set EVENT_START_DATE
         try {
-            const sres = await fetch(`${API_URL}/settings`);
+            const sres = await fetch(`${API_URL_HELFERPLAN}/settings`);
             if (sres.ok) {
                 const settings = await sres.json();
                 if (settings.event_friday) EVENT_START_DATE = `${settings.event_friday}T12:00:00Z`;
@@ -506,8 +522,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // load data
         [allHelpers, allTeams] = await Promise.all([
-            fetch(`${API_URL}/helpers`).then(r => r.ok ? r.json() : []),
-            fetch(`${API_URL}/teams`).then(r => r.ok ? r.json() : [])
+            fetch(`${API_URL_HELFERPLAN}/helpers`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_URL_HELFERPLAN}/teams`).then(r => r.ok ? r.json() : [])
         ]);
 
         // map helpers by id
