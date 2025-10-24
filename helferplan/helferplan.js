@@ -24,9 +24,9 @@ const pool = mysql.createPool({
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS helferplan_settings (
-                setting_key VARCHAR(50) PRIMARY KEY,
+                                                               setting_key VARCHAR(50) PRIMARY KEY,
                 setting_value VARCHAR(255) NOT NULL
-            ) ENGINE=InnoDB;
+                ) ENGINE=InnoDB;
         `);
         console.log('helferplan_settings table OK');
     } catch (err) {
@@ -34,9 +34,35 @@ const pool = mysql.createPool({
     }
 })();
 
+// Optional: versuche einen Unique-Index auf helferplan_helpers.name zu erstellen (falls gewünscht/erlaubt).
+// Das ist optional, aber empfehlenswert als zusätzliche Datenbankgarantie.
+// Der Aufruf ist fehlerrobust (try/catch) und bricht nicht, falls die Tabelle/Spalte noch nicht existiert
+// oder falls der Index bereits existiert bzw. fehlende Rechte vorliegen.
+(async function ensureHelperNameUniqueIndex() {
+    try {
+        // Hinweis: falls deine MySQL-Variante anders ist oder die Tabelle noch nicht existiert,
+        // kann dieser Befehl fehlschlagen. Dann nur die serverseitige Prüfung verwenden.
+        await pool.query("ALTER TABLE helferplan_helpers ADD UNIQUE INDEX uniq_helper_name (name(191));");
+        console.log('Unique index on helferplan_helpers.name created/ensured');
+    } catch (err) {
+        // Fehlercode 1061 = index already exists, andere Fehler können z.B. fehlende Tabelle sein
+        if (err && err.errno === 1061) {
+            console.log('Unique index already exists');
+        } else {
+            console.log('Could not ensure unique index for helferplan_helpers.name (this may be okay):', err && err.message ? err.message : err);
+        }
+    }
+})();
+
 // --- 4. Middleware einrichten ---
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+    // Vorsicht: 'unsafe-eval' reduziert die CSP-Sicherheit. Nutze das nur falls nötig (z.B. Dev).
+    const csp = "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline';";
+    res.setHeader('Content-Security-Policy', csp);
+    next();
+});
 app.use(express.static('public'));
 
 // Hilfsfunktion: sichere Query-Ausführung mit Logging
@@ -107,13 +133,24 @@ app.post('/api/teams', async (req, res) => {
 
 // Team löschen
 app.delete('/api/teams/:id', async (req, res) => {
+    // Änderung: lösche zuerst alle Helfer die zu diesem Team gehören, danach das Team selbst.
+    // Ausführung innerhalb einer DB-Transaktion, damit beide Operationen atomar sind.
+    const id = req.params.id;
+    const conn = await pool.getConnection();
     try {
-        const id = req.params.id;
-        await pool.query("DELETE FROM helferplan_teams WHERE id = ?;", [id]);
-        res.status(200).json({ message: 'Team gelöscht' });
+        await conn.beginTransaction();
+        // Alle Helfer des Teams löschen
+        await conn.query("DELETE FROM helferplan_helpers WHERE team_id = ?;", [id]);
+        // Danach das Team löschen
+        await conn.query("DELETE FROM helferplan_teams WHERE id = ?;", [id]);
+        await conn.commit();
+        res.status(200).json({ message: 'Team und zugehörige Helfer gelöscht' });
     } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
         console.error('DB-Fehler DELETE /api/teams', err);
         res.status(500).json({ error: 'DB-Fehler beim Löschen des Teams' });
+    } finally {
+        conn.release();
     }
 });
 
@@ -121,9 +158,9 @@ app.delete('/api/teams/:id', async (req, res) => {
 app.get('/api/helpers', async (req, res) => {
     try {
         const rows = await safeQuery(`
-            SELECT h.id, h.name, h.role, h.team_id, t.name AS team_name 
+            SELECT h.id, h.name, h.role, h.team_id, t.name AS team_name
             FROM helferplan_helpers h
-            LEFT JOIN helferplan_teams t ON h.team_id = t.id
+                     LEFT JOIN helferplan_teams t ON h.team_id = t.id
             ORDER BY h.name;
         `);
         res.json(rows);
@@ -140,12 +177,26 @@ app.post('/api/helpers', async (req, res) => {
         if (!name || !team_id || !role) return res.status(400).json({ error: 'Name, Team-ID und Rolle sind erforderlich.' });
         const validRoles = ['Minderjaehrig', 'Erwachsen', 'Orga'];
         if (!validRoles.includes(role)) return res.status(400).json({ error: 'Ungueltige Rolle.' });
-        const result = await pool.query("INSERT INTO helferplan_helpers (name, team_id, role) VALUES (?, ?, ?);", [name, team_id, role]);
+
+        // Serverseitige Prüfung: Name darf nur einmal vorkommen (case-insensitive).
+        // Trim und prüfe mit LOWER(...) für case-insensitive Abgleich.
+        const trimmed = String(name).trim();
+        const [existing] = await pool.query("SELECT COUNT(*) as cnt FROM helferplan_helpers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?));", [trimmed]);
+        const cnt = existing && existing[0] && (existing[0].cnt || existing[0].CNT || existing[0].Cnt) ? Number(existing[0].cnt || existing[0].CNT || existing[0].Cnt) : 0;
+        if (cnt > 0) {
+            return res.status(409).json({ error: 'Name schon belegt.' });
+        }
+
+        const result = await pool.query("INSERT INTO helferplan_helpers (name, team_id, role) VALUES (?, ?, ?);", [trimmed, team_id, role]);
         const insertResult = result[0];
-        res.status(201).json({ id: Number(insertResult.insertId), name, team_id, role });
+        res.status(201).json({ id: Number(insertResult.insertId), name: trimmed, team_id, role });
     } catch (err) {
         if (err && err.errno === 1452) {
             return res.status(400).json({ error: `Team mit der ID ${req.body.team_id} existiert nicht.` });
+        }
+        // Wenn ein Unique-Index vorhanden ist und ein Duplicate-Insert doch durchrutscht, fange das ab:
+        if (err && (err.errno === 1062 || err.code === 'ER_DUP_ENTRY')) {
+            return res.status(409).json({ error: 'Name schon belegt.' });
         }
         console.error('DB-Fehler POST /api/helpers', err);
         res.status(500).json({ error: 'DB-Fehler beim Erstellen des Helfers' });
@@ -207,7 +258,7 @@ app.get('/api/activities', async (req, res) => {
         const rows = await safeQuery(`
             SELECT a.id, a.name, a.role_requirement, a.group_id, g.name AS group_name
             FROM helferplan_activities a
-            LEFT JOIN helferplan_activity_groups g ON a.group_id = g.id
+                     LEFT JOIN helferplan_activity_groups g ON a.group_id = g.id
             ORDER BY g.sort_order, g.name, a.sort_order, a.name;
         `);
         res.json(rows);
@@ -250,8 +301,8 @@ app.get('/api/tournament-shifts', async (req, res) => {
         const rows = await safeQuery(`
             SELECT ts.activity_id, ts.start_time, ts.end_time, ts.helper_id, h.name as helper_name, t.color_hex as team_color
             FROM helferplan_tournament_shifts ts
-            JOIN helferplan_helpers h ON ts.helper_id = h.id
-            JOIN helferplan_teams t ON h.team_id = t.id;
+                     JOIN helferplan_helpers h ON ts.helper_id = h.id
+                     JOIN helferplan_teams t ON h.team_id = t.id;
         `);
         const converted = rows.map(r => ({
             ...r,

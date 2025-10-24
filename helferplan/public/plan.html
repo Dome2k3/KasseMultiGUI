@@ -5,6 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Helferplan - Turnier-Planung</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Anpassungen für schmaleren Plan und bessere Ausrichtung/Lesbarkeit */
+        .plan-main { max-width: 1200px; margin: 0 auto; }
+        .plan-layout { display: flex; gap: 12px; align-items: flex-start; }
+
+        /* Left panel schmaler und fixe Breite */
+        .left-panel { width: 240px; flex: 0 0 240px; }
+
+        /* Timeline / Grid: sorgt dafür, dass header und grid exakt gleiche Spaltenbreite verwenden */
+        #plan-container { overflow-x: auto; flex: 1 1 auto; }
+        #timeline-header { position: sticky; top: 0; background: #fff; z-index: 3; }
+        #timeline-header, #grid-container { box-sizing: border-box; }
+
+        /* kleinere Schrift in Stunden/Slots */
+        .hour-slot { font-size: 12px; padding: 4px 6px; text-align: center; box-sizing: border-box; border-left: 1px solid #eee; }
+        .shift-slot { font-size: 12px; padding: 6px; box-sizing: border-box; border: 1px solid #eee; min-height: 36px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: background-color .12s, transform .08s, outline .08s; }
+        .shift-slot.filled { color: #fff; }
+
+        /* Team list: zeige Team-Name im farbigen Kasten */
+        .team-item { margin: 6px 0; display:flex; gap:8px; align-items:center; }
+        .team-item .team-color { padding: 6px 8px; border-radius: 6px; color: #fff; font-weight:600; display:inline-block; white-space:nowrap; }
+
+        /* Ansicht-Filter Styles */
+        .view-filter { margin-top: 8px; }
+
+        /* Wenn ein Team ausgeblendet/gedimmt werden soll */
+        .dimmed { opacity: 0.28 !important; filter: grayscale(80%); }
+
+        /* Hover / Drop-Visualisierung */
+        .shift-slot.potential-drop {
+            outline: 3px dashed rgba(33,150,243,0.9);
+            background-color: rgba(33,150,243,0.08);
+            transform: translateY(-1px);
+        }
+        .shift-slot.drop-target {
+            outline: 3px solid rgba(33,150,243,0.95);
+            background-color: rgba(33,150,243,0.14);
+            transform: translateY(-2px);
+        }
+
+        /* Falls die Folgeslots für ein gespannten Eintrag versteckt werden */
+        .slot-hidden { display: none !important; }
+    </style>
 </head>
 <body>
 <nav>
@@ -20,9 +63,14 @@
             <h3>Teams</h3>
             <div id="team-list-panel" class="team-list-panel"></div>
 
-            <h3>Wähle Team (Filter)</h3>
+            <h3>Wähle Team (Filter für Helfer)</h3>
             <select id="plan-team-filter">
                 <option value="">-- Team wählen --</option>
+            </select>
+
+            <h3 class="view-filter">Ansicht-Filter (nur Teamfarben hervorheben)</h3>
+            <select id="view-team-filter">
+                <option value="">Alle Teams</option>
             </select>
 
             <h3>Helfer (ziehen in Schichten)</h3>
@@ -51,7 +99,7 @@
             <select id="modal-helper-select" required></select>
 
             <div class="modal-actions">
-                <button type="submit" id="save-shift-button">Speichern</button>
+                <button type="submit" id="save-shift-button">Speichern (min. 2h)</button>
                 <button type="button" id="delete-shift-button" class="danger">Schicht leeren</button>
                 <button type="button" id="cancel-shift-button">Abbrechen</button>
             </div>

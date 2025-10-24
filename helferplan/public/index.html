@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Helferplan - Admin</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Ergänzte Styles für Event-Titel, Team-Name-Farbhintergrund und Auf/Abbau-Section */
+        #event-title-line {
+            font-weight: 600;
+            margin: 6px 0 12px;
+        }
+        .team-name {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #fff;
+            font-weight: 600;
+        }
+        .aufbau-day {
+            border: 1px solid #ddd;
+            padding: 8px;
+            margin: 8px 0;
+            border-radius: 6px;
+        }
+        .aufbau-slot {
+            display:inline-block;
+            padding:4px 8px;
+            background:#f6f6f6;
+            margin:4px;
+            border-radius:4px;
+        }
+        #aufbau-section { display: none; margin-top: 12px; }
+        .error-msg { color: #b00020; font-weight: 600; display: none; margin-left: 8px; }
+    </style>
 </head>
 <body>
 <nav>
@@ -13,6 +42,9 @@
 </nav>
 <main>
     <h1>Admin-Dashboard: Stammdaten</h1>
+
+    <!-- NEU: Event-Titel Anzeige (automatisch befüllt aus den Datumseinstellungen weiter unten) -->
+    <div id="event-title-line">Bergsträßer Volleyball Turnier</div>
 
     <div class="grid-container">
         <!-- Spalte 1: Teams -->
@@ -61,6 +93,7 @@
                     <option value="Orga">Orga</option>
                 </select>
                 <button type="submit">Anlegen</button>
+                <span id="helper-error" class="error-msg">Name schon belegt.</span>
             </form>
         </section>
 
@@ -105,6 +138,20 @@
             <label>Samstag: <input type="date" id="setting-saturday"></label>
             <label>Sonntag: <input type="date" id="setting-sunday"></label>
             <button id="save-settings-button">Speichern</button>
+        </div>
+
+        <!-- NEU: Auf-/Abbau Tage in Admin angeben -->
+        <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
+            <label>Aufbau-Tage: <input type="number" id="setup-days-input" min="0" value="3" style="width:60px"></label>
+            <label>Abbau-Tage: <input type="number" id="teardown-days-input" min="0" value="1" style="width:60px"></label>
+            <button id="save-builddays-button">Speichern (Auf-/Abbau)</button>
+            <button id="show-aufbau-button">Auf-/Abbau anzeigen</button>
+        </div>
+
+        <!-- NEU: Auf-/Abbau Anzeige (wird per JS befüllt) -->
+        <div id="aufbau-section">
+            <h3>Auf- und Abbau Übersicht</h3>
+            <div id="aufbau-container"></div>
         </div>
     </section>
 

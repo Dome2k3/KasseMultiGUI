@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Auf-/Abbau - Helferplan</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .aufbau-day { border: 1px solid #ddd; margin: 8px 0; padding: 8px; border-radius: 6px; }
+    .slots { margin-top: 6px; }
+    .slot-item { padding:4px 6px; margin:4px 2px; display:inline-block; background:#f0f0f0; border-radius:4px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Auf- und Abbau</h1>
+  <p id="eventTitleMini"></p>
+  <a href="index.html">Zurück zum Admin</a>
+</header>
+
+<main>
+  <div id="aufbauContainer">
+    <!-- Die Tage werden per JavaScript generiert -->
+  </div>
+</main>
+
+<script src="../helferplan.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Event Titel kurz anzeigen
+    const startIso = localStorage.getItem('eventStart');
+    const endIso = localStorage.getItem('eventEnd');
+    const titleEl = document.getElementById('eventTitleMini');
+    if (startIso && endIso && titleEl) {
+      titleEl.textContent = `Bergsträßer Volleyball Turnier vom ${new Date(startIso + 'T00:00:00').toLocaleDateString('de-DE')} bis ${new Date(endIso + 'T00:00:00').toLocaleDateString('de-DE')}`;
+    }
+    // Generiere die Tage (Aufbau/Abbau) in Container
+    if (typeof generateAufbauPlanDOM === 'function') {
+      generateAufbauPlanDOM('aufbauContainer');
+    }
+  });
+</script>
+</body>
+</html>

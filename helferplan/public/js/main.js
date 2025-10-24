@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addHelperForm = document.getElementById('add-helper-form');
     const helperTeamSelect = document.getElementById('helper-team-select');
     const helperFilterTeam = document.getElementById('helper-filter-team');
+    const helperError = document.getElementById('helper-error');
 
     // Elemente fuer Taetigkeiten
     const groupList = document.getElementById('group-list');
@@ -29,6 +30,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingSunday = document.getElementById('setting-sunday');
     const saveSettingsButton = document.getElementById('save-settings-button');
 
+    // Auf-/Abbau inputs
+    const setupDaysInput = document.getElementById('setup-days-input');
+    const teardownDaysInput = document.getElementById('teardown-days-input');
+    const saveBuildDaysButton = document.getElementById('save-builddays-button');
+    const showAufbauButton = document.getElementById('show-aufbau-button');
+    const aufbauSection = document.getElementById('aufbau-section');
+    const aufbauContainer = document.getElementById('aufbau-container');
+
+    // Event title line element
+    const eventTitleLine = document.getElementById('event-title-line');
+
+    /* Hilfsfunktion: setzt die Hintergrundfarbe bei Elementen .team-name und sorgt für Lesbarkeit */
+    function applyTeamColors() {
+        document.querySelectorAll('.team-name').forEach(el => {
+            const color = el.getAttribute('data-color') || el.dataset.color;
+            if (!color) return;
+            el.style.backgroundColor = color;
+            // einfacher Kontrastcheck
+            try {
+                const c = color.startsWith('#') ? color.slice(1) : color;
+                if (c.length === 6) {
+                    const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+                    const luminance = (0.299*r + 0.587*g + 0.114*b);
+                    el.style.color = luminance > 160 ? '#111' : '#fff';
+                } else {
+                    el.style.color = '#fff';
+                }
+            } catch (e) {
+                el.style.color = '#fff';
+            }
+        });
+    }
+
     async function fetchAndRenderTeams() {
         try {
             const response = await fetch(`${API_URL}/teams`);
@@ -40,7 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
             helperFilterTeam.innerHTML = '<option value="">Alle</option>';
             teams.forEach(team => {
                 const li = document.createElement('li');
-                li.innerHTML = `<div class="color-swatch" style="background-color: ${team.color_hex};"></div> ${team.name}`;
+                // team-name erhält data-color, damit JS/CSS den Hintergrund setzen kann
+                li.innerHTML = `<div class="color-swatch" style="background-color: ${team.color_hex}; width:14px; height:14px; display:inline-block; margin-right:8px; vertical-align:middle; border-radius:3px;"></div>
+                                <span class="team-name" data-color="${team.color_hex}">${team.name}</span>`;
                 teamList.appendChild(li);
 
                 const option = document.createElement('option');
@@ -55,6 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const filterOption = option.cloneNode(true);
                 helperFilterTeam.appendChild(filterOption);
             });
+            // Farben anwenden nachdem die Elemente im DOM sind
+            applyTeamColors();
         } catch (error) { console.error('Fehler Teams:', error); }
     }
 
@@ -205,11 +243,50 @@ document.addEventListener('DOMContentLoaded', () => {
         color_hex: e.target.elements['team-color-input'].value
     }, async () => { await fetchAndRenderTeams(); await fetchAndRenderHelpers(); }));
 
-    addHelperForm.addEventListener('submit', (e) => handleFormSubmit(e, `${API_URL}/helpers`, {
-        name: e.target.elements['helper-name-input'].value,
-        team_id: e.target.elements['helper-team-select'].value,
-        role: e.target.elements['helper-role-select'].value
-    }, fetchAndRenderHelpers));
+    // HELFER: Vor dem Anlegen prüfen, ob der Name bereits existiert (einmalig)
+    addHelperForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = e.target.elements['helper-name-input'].value && e.target.elements['helper-name-input'].value.trim();
+        const team_id = e.target.elements['helper-team-select'].value;
+        const role = e.target.elements['helper-role-select'].value;
+        if (!name) return;
+
+        try {
+            // Hole alle Helfer und prüfe auf Doppelten Namen (case-insensitive)
+            const res = await fetch(`${API_URL}/helpers`);
+            if (!res.ok) throw new Error('Fehler beim Prüfen vorhandener Helfer');
+            const helpers = await res.json();
+            const exists = helpers.some(h => (h.name || '').trim().toLowerCase() === name.toLowerCase());
+            if (exists) {
+                // Zeige Nachricht Inline (falls vorhanden) oder als alert
+                if (helperError) {
+                    helperError.style.display = 'inline';
+                    setTimeout(() => helperError.style.display = 'none', 3500);
+                } else {
+                    alert('Name schon belegt.');
+                }
+                return;
+            }
+
+            // Wenn Name frei: sende POST
+            const postRes = await fetch(`${API_URL}/helpers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, team_id, role })
+            });
+            if (!postRes.ok) {
+                const text = await postRes.text();
+                let err;
+                try { err = JSON.parse(text); } catch (_) { err = { error: text }; }
+                throw new Error(err.error || 'Ein Fehler ist aufgetreten.');
+            }
+            e.target.reset();
+            await fetchAndRenderHelpers();
+        } catch (err) {
+            console.error('Fehler beim Anlegen Helfer:', err);
+            alert(err.message || 'Speichern fehlgeschlagen');
+        }
+    });
 
     addGroupForm.addEventListener('submit', (e) => handleFormSubmit(e, `${API_URL}/activity-groups`, {
         name: e.target.elements['group-name-input'].value,
@@ -222,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
         role_requirement: e.target.elements['activity-role-select'].value
     }, fetchAndRenderActivities));
 
-    // Settings: load and save
+    // Settings: load and save (inkl. Aufbau/Abbau Tage)
     async function loadSettings() {
         try {
             const res = await fetch(`${API_URL}/settings`);
@@ -231,6 +308,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (settings.event_friday) settingFriday.value = settings.event_friday;
             if (settings.event_saturday) settingSaturday.value = settings.event_saturday;
             if (settings.event_sunday) settingSunday.value = settings.event_sunday;
+            // optional neue Keys: setup_days, teardown_days
+            if (typeof settings.setup_days !== 'undefined' && setupDaysInput) setupDaysInput.value = settings.setup_days;
+            if (typeof settings.teardown_days !== 'undefined' && teardownDaysInput) teardownDaysInput.value = settings.teardown_days;
+            // Aktualisiere Titelzeile direkt nach Laden
+            updateEventTitleLine();
         } catch (err) { console.error('Fehler beim Laden der Einstellungen:', err); }
     }
 
@@ -248,7 +330,108 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!res.ok) throw new Error('Speichern fehlgeschlagen');
             alert('Einstellungen gespeichert');
+            updateEventTitleLine();
         } catch (err) { console.error('Fehler beim Speichern Settings:', err); alert('Speichern fehlgeschlagen'); }
+    });
+
+    // Speichern der Aufbau/Abbau Tage in settings
+    saveBuildDaysButton.addEventListener('click', async () => {
+        try {
+            const payload = {
+                setup_days: Number(setupDaysInput.value || 0),
+                teardown_days: Number(teardownDaysInput.value || 0)
+            };
+            const res = await fetch(`${API_URL}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: payload })
+            });
+            if (!res.ok) throw new Error('Speichern fehlgeschlagen');
+            alert('Auf-/Abbau Tage gespeichert');
+        } catch (err) { console.error('Fehler beim Speichern Aufbau/Abbau:', err); alert('Speichern fehlgeschlagen'); }
+    });
+
+    // Erzeugt die lesbare Event-Titelzeile aus Freitag und Sonntag (inkl. Wochentag)
+    function formatDateWithWeekday(isoDate) {
+        if (!isoDate) return '';
+        const d = new Date(isoDate + 'T00:00:00');
+        const opts = { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' };
+        return new Intl.DateTimeFormat('de-DE', opts).format(d);
+    }
+    function updateEventTitleLine() {
+        const f = settingFriday.value;
+        const s = settingSunday.value;
+        if (f && s) {
+            const startFormatted = formatDateWithWeekday(f);
+            const endFormatted = formatDateWithWeekday(s);
+            eventTitleLine.textContent = `Bergsträßer Volleyball Turnier vom ${startFormatted} bis ${endFormatted}`;
+        } else {
+            // Falls Werte fehlen, belasse Default
+            // Wenn einzelne Werte gesetzt sind, versuche diese anzuzeigen
+            if (f && !s) eventTitleLine.textContent = `Bergsträßer Volleyball Turnier am ${formatDateWithWeekday(f)}`;
+            else if (!f && s) eventTitleLine.textContent = `Bergsträßer Volleyball Turnier am ${formatDateWithWeekday(s)}`;
+        }
+    }
+
+    // Erzeuge Auf-/Abbau-Ansicht basierend auf Einstellungen (sichtbar im Admin)
+    function generateAufbauView() {
+        if (!aufbauContainer) return;
+        aufbauContainer.innerHTML = '';
+        const friday = settingFriday.value ? new Date(settingFriday.value + 'T00:00:00') : null;
+        const sunday = settingSunday.value ? new Date(settingSunday.value + 'T00:00:00') : null;
+        const setupDays = Number(setupDaysInput.value || 0);
+        const teardownDays = Number(teardownDaysInput.value || 0);
+
+        // Aufbau: Tage vor Freitag (1..setupDays)
+        if (friday && setupDays > 0) {
+            for (let i = setupDays; i >= 1; i--) {
+                const d = new Date(friday);
+                d.setDate(friday.getDate() - i);
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'aufbau-day';
+                dayDiv.innerHTML = `<h4>Aufbau: ${d.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</h4>
+                    <div class="slots" data-date="${d.toISOString().slice(0,10)}">
+                        <em>Hier können Helfer zugewiesen werden (später implementieren)</em>
+                    </div>`;
+                aufbauContainer.appendChild(dayDiv);
+            }
+        }
+
+        // Veranstaltungstage: Freitag-Sonntag anzeigen als Referenz
+        if (friday && sunday) {
+            const dayRangeDiv = document.createElement('div');
+            dayRangeDiv.className = 'aufbau-day';
+            dayRangeDiv.innerHTML = `<h4>Veranstaltung: ${friday.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })} — ${sunday.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</h4>`;
+            aufbauContainer.appendChild(dayRangeDiv);
+        }
+
+        // Abbau: Tage nach Sonntag (1..teardownDays)
+        if (sunday && teardownDays > 0) {
+            for (let i = 1; i <= teardownDays; i++) {
+                const d = new Date(sunday);
+                d.setDate(sunday.getDate() + i);
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'aufbau-day';
+                dayDiv.innerHTML = `<h4>Abbau: ${d.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</h4>
+                    <div class="slots" data-date="${d.toISOString().slice(0,10)}">
+                        <em>Hier können Helfer zugewiesen werden (später implementieren)</em>
+                    </div>`;
+                aufbauContainer.appendChild(dayDiv);
+            }
+        }
+    }
+
+    // Button um Auf-/Abbau-Section sichtbar zu machen / aktualisieren
+    showAufbauButton.addEventListener('click', () => {
+        if (!aufbauSection) return;
+        if (aufbauSection.style.display === 'none' || aufbauSection.style.display === '') {
+            generateAufbauView();
+            aufbauSection.style.display = 'block';
+            showAufbauButton.textContent = 'Auf-/Abbau verbergen';
+        } else {
+            aufbauSection.style.display = 'none';
+            showAufbauButton.textContent = 'Auf-/Abbau anzeigen';
+        }
     });
 
     async function initialLoad() {
