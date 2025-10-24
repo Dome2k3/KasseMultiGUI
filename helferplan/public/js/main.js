@@ -1,6 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    const API_URL_HELFERPLAN = (() => {
+    // API base (runtime lookup)
+    // Lookup order:
+    // 1) meta tag <meta name="api-url-helferplan" content="https://.../api">
+    // 2) runtime global window.__API_URL_HELFERPLAN (set by config.js loaded before this script)
+    // 3) local dev convenience: if served from localhost, assume :3003
+    // 4) default: same origin + '/api' (works with Cloudflare/Render tunnels)
+    const API_URL = (() => {
         const meta = document.querySelector('meta[name="api-url-helferplan"]');
         if (meta && meta.content) return meta.content.replace(/\/$/, '');
         if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
@@ -9,6 +15,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return `${window.location.origin}/api`;
     })();
+
+    // expose for debugging / other scripts
+    window.API_URL = API_URL;
+    console.info('API_URL =', API_URL);
 
     // Elemente für Teams
     const teamList = document.getElementById('team-list');
@@ -82,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
             teams.forEach(team => {
                 const li = document.createElement('li');
                 // team-name erhält data-color, damit JS/CSS den Hintergrund setzen kann
-                li.innerHTML = `<div class="color-swatch" style="background-color: ${team.color_hex}; width:14px; height:14px; display:inline-block; margin-right:8px; vertical-align:middle; border-radius:3px;"></div>
+                li.innerHTML = `<div class="color-swatch" style="background-color: ${team.color_hex}; width:14px; height:14px; display:inline-block; margin-right:8px; vertical-align:middle; border-rad[...]
                                 <span class="team-name" data-color="${team.color_hex}">${team.name}</span>`;
                 teamList.appendChild(li);
 
