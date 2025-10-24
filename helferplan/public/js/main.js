@@ -1,7 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // Verwende immer Port 3003 auf dem aktuellen Host
-    const API_URL = `${window.location.protocol}//${window.location.hostname}:3003/api`;
+    const API_URL_HELFERPLAN = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
 
     // Elemente für Teams
     const teamList = document.getElementById('team-list');
