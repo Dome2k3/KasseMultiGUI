@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let helperById = {};
     let EVENT_START_DATE = '2024-07-19T12:00:00Z'; // fallback
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
+    let allShifts = []; // cache latest shifts from server
 
     // --- Helpers ---
     function hourIndexToDate(index) {
@@ -349,6 +350,13 @@ document.addEventListener('DOMContentLoaded', () => {
         highlightedSlots = [];
     }
 
+    // --- NEW: helper to fetch shifts (returns array) ---
+    async function getShifts() {
+        const r = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`);
+        if (!r.ok) throw new Error('Fehler beim Laden der Schichten');
+        return await r.json();
+    }
+
     // Fetch shifts and render them into the grid, using grid-column spans
     async function fetchAndRenderAllShifts() {
         document.querySelectorAll('.shift-slot').forEach(s => {
@@ -363,41 +371,40 @@ document.addEventListener('DOMContentLoaded', () => {
             delete s.dataset.startTime;
         });
 
-        const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`);
-        if (!resp.ok) {
-            console.error('Fehler beim Laden der Schichten');
-            return;
-        }
-        const shifts = await resp.json();
+        try {
+            const shifts = await getShifts();
+            // cache for delete/matching logic
+            allShifts = shifts || [];
+            shifts.forEach(shift => {
+                const startIdx = dateToHourIndex(shift.start_time);
+                const endIdx = dateToHourIndex(shift.end_time);
+                const duration = Math.max(1, endIdx - startIdx);
 
-        shifts.forEach(shift => {
-            const startIdx = dateToHourIndex(shift.start_time);
-            const endIdx = dateToHourIndex(shift.end_time);
-            const duration = Math.max(1, endIdx - startIdx);
+                const startSlot = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${startIdx}']`);
+                if (!startSlot) return;
 
-            const startSlot = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${startIdx}']`);
-            if (!startSlot) return;
+                startSlot.innerHTML = shift.helper_name ? shift.helper_name.split(' ')[0] : '—';
+                startSlot.classList.add('filled');
+                startSlot.style.backgroundColor = shift.team_color || '#666';
+                startSlot.dataset.helperId = shift.helper_id || '';
+                // save exact server start_time for reliable deletes
+                startSlot.dataset.startTime = shift.start_time;
 
-            startSlot.innerHTML = shift.helper_name ? shift.helper_name.split(' ')[0] : '—';
-            startSlot.classList.add('filled');
-            startSlot.style.backgroundColor = shift.team_color || '#666';
-            startSlot.dataset.helperId = shift.helper_id || '';
-            // save exact server start_time for reliable deletes
-            startSlot.dataset.startTime = shift.start_time;
-
-            if (duration > 1) {
-                startSlot.style.gridColumn = `span ${duration}`;
-                for (let k=1;k<duration;k++){
-                    const follow = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${startIdx + k}']`);
-                    if (follow) {
-                        follow.classList.add('slot-hidden');
-                        follow.dataset.hiddenForSpan = 'true';
+                if (duration > 1) {
+                    startSlot.style.gridColumn = `span ${duration}`;
+                    for (let k=1;k<duration;k++){
+                        const follow = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${startIdx + k}']`);
+                        if (follow) {
+                            follow.classList.add('slot-hidden');
+                            follow.dataset.hiddenForSpan = 'true';
+                        }
                     }
                 }
-            }
-        });
-
-        applyViewFilter();
+            });
+            applyViewFilter();
+        } catch (err) {
+            console.error('fetchAndRenderAllShifts error', err);
+        }
     }
 
     // View filter dims non-selected team slots
@@ -492,44 +499,130 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // DELETE handler: send helper_id to make delete unambiguous; log server response
+        // DELETE handler: robust multi-format attempts + helper_id + end_time if available
         modal.querySelector('#delete-shift-button').addEventListener('click', async () => {
-            if (!currentSlot.dataset.helperId) { modal.style.display = 'none'; return; }
+            if (!currentSlot || !currentSlot.dataset.helperId) { modal.style.display = 'none'; return; }
             if (!confirm('Soll die Schicht wirklich geleert werden?')) return;
 
             const activityId = currentSlot.dataset.activityId;
             const helperId = currentSlot.dataset.helperId;
-            const startTimeIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
+            const requestedStartIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
 
+            // Find candidate shift in cached allShifts (match by activity, helper and time equality)
+            let candidate = allShifts.find(s => String(s.activity_id) === String(activityId)
+                && String(s.helper_id) === String(helperId)
+                && Date.parse(s.start_time) === Date.parse(requestedStartIso));
+
+            // Fallback: match by activity + helper + same hour index
+            if (!candidate) {
+                const reqHour = dateToHourIndex(requestedStartIso);
+                candidate = allShifts.find(s => String(s.activity_id) === String(activityId)
+                    && String(s.helper_id) === String(helperId)
+                    && dateToHourIndex(s.start_time) === reqHour);
+            }
+
+            // Build array of payload variants to try
+            const payloads = [];
+            // primary: server-provided ISO if candidate exists else requestedStartIso
+            const primaryStart = candidate ? candidate.start_time : requestedStartIso;
+            payloads.push({ activity_id: activityId, start_time: primaryStart, helper_id: helperId, end_time: candidate ? candidate.end_time : undefined });
+
+            // variant: remove milliseconds (some servers store without)
+            const isoNoMs = primaryStart.replace(/\.\d{3}Z$/,'Z');
+            if (isoNoMs !== primaryStart) payloads.push({ activity_id: activityId, start_time: isoNoMs, helper_id: helperId, end_time: candidate ? candidate.end_time : undefined });
+
+            // variant: SQL datetime (no T, no Z) - some servers expect local DB format
             try {
-                console.info('Deleting shift', { activityId, startTimeIso, helperId });
-                const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ activity_id: activityId, start_time: startTimeIso, helper_id: helperId })
-                });
-
-                const text = await response.text().catch(()=>null);
-                let json = null;
-                try { json = text ? JSON.parse(text) : null; } catch(e) { /* not JSON */ }
-
-                console.log('DELETE response', response.status, text, json);
-
-                // determine deleted: server may return explicit flag or simply 200
-                const deleted = (json && (json.deleted === true || json.deletedCount > 0 || json.success === true)) || response.ok;
-
-                if (!deleted) {
-                    alert('Server meldet: Löschung möglicherweise nicht erfolgt. Siehe Konsole für Details.');
-                    await fetchAndRenderAllShifts();
-                    return;
+                const dt = new Date(primaryStart);
+                if (!isNaN(dt)) {
+                    const sqlDt = dt.getUTCFullYear() + '-' +
+                        String(dt.getUTCMonth()+1).padStart(2,'0') + '-' +
+                        String(dt.getUTCDate()).padStart(2,'0') + ' ' +
+                        String(dt.getUTCHours()).padStart(2,'0') + ':' +
+                        String(dt.getUTCMinutes()).padStart(2,'0') + ':' +
+                        String(dt.getUTCSeconds()).padStart(2,'0');
+                    payloads.push({ activity_id: activityId, start_time: sqlDt, helper_id: helperId, end_time: candidate ? candidate.end_time : undefined });
                 }
+            } catch(e){}
 
-                // refresh list and close modal
+            // dedupe payloads by JSON string
+            const seen = new Set();
+            const uniquePayloads = [];
+            for (const p of payloads) {
+                const key = JSON.stringify(p);
+                if (!seen.has(key)) { seen.add(key); uniquePayloads.push(p); }
+            }
+
+            // Try each payload sequentially until shift disappears
+            let deleted = false;
+            let lastResp = null;
+            for (const p of uniquePayloads) {
+                try {
+                    console.info('Attempting DELETE with payload:', p);
+                    const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(p)
+                    });
+                    lastResp = resp;
+                    const text = await resp.text().catch(()=>null);
+                    let body = null;
+                    try { body = text ? JSON.parse(text) : null; } catch(e){ body = text; }
+                    console.log('DELETE response', resp.status, body);
+
+                    // Immediately fetch latest shifts and check if candidate still present
+                    const latest = await getShifts();
+                    allShifts = latest;
+                    const still = latest.find(s => String(s.activity_id) === String(activityId)
+                        && String(s.helper_id) === String(helperId)
+                        && (Date.parse(s.start_time) === Date.parse(p.start_time) || dateToHourIndex(s.start_time) === dateToHourIndex(p.start_time)));
+                    if (!still) {
+                        deleted = true;
+                        console.info('Shift deleted successfully with payload:', p);
+                        break;
+                    } else {
+                        console.warn('Shift still present after delete attempt with payload:', p);
+                    }
+                } catch (err) {
+                    console.error('Error during DELETE attempt with payload', p, err);
+                }
+            }
+
+            if (!deleted) {
+                // final attempt: try deleting by activity + start_time only (without helper) as last resort
+                try {
+                    const fallbackPayload = { activity_id: activityId, start_time: requestedStartIso };
+                    console.info('Final fallback DELETE attempt', fallbackPayload);
+                    const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(fallbackPayload)
+                    });
+                    const text = await resp.text().catch(()=>null);
+                    let body = null;
+                    try { body = text ? JSON.parse(text) : null; } catch(e){ body = text; }
+                    console.log('Fallback DELETE response', resp.status, body);
+
+                    const latest = await getShifts();
+                    allShifts = latest;
+                    const still = latest.find(s => String(s.activity_id) === String(activityId)
+                        && (Date.parse(s.start_time) === Date.parse(requestedStartIso) || dateToHourIndex(s.start_time) === dateToHourIndex(requestedStartIso)));
+                    if (!still) deleted = true;
+                } catch (err) {
+                    console.error('Fallback delete failed', err);
+                }
+            }
+
+            // final reporting
+            if (deleted) {
                 await fetchAndRenderAllShifts();
                 modal.style.display = 'none';
-            } catch (err) {
-                console.error('Delete Fehler:', err);
-                alert('Fehler beim Löschen der Schicht (siehe Konsole).');
+                return;
+            } else {
+                // show debug info to user and console
+                console.error('Delete attempts exhausted - shift still present. Last response:', lastResp);
+                alert('Löschen fehlgeschlagen — die Schicht ist weiterhin vorhanden. Bitte Konsole prüfen (Network/Console).');
+                await fetchAndRenderAllShifts();
             }
         });
 
@@ -538,6 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initialization ---
     async function init() {
+        // load settings to set EVENT_START_DATE
         try {
             const sres = await fetch(`${API_URL_HELFERPLAN}/settings`);
             if (sres.ok) {
@@ -548,11 +642,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // ignore, keep fallback
         }
 
+        // load data
         [allHelpers, allTeams] = await Promise.all([
             fetch(`${API_URL_HELFERPLAN}/helpers`).then(r => r.ok ? r.json() : []),
             fetch(`${API_URL_HELFERPLAN}/teams`).then(r => r.ok ? r.json() : [])
         ]);
 
+        // map helpers by id
         helperById = {};
         allHelpers.forEach(h => helperById[h.id] = h);
 
@@ -566,6 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchAndRenderAllShifts();
         setupModalListeners();
 
+        // bind filters
         planTeamFilter.addEventListener('change', () => renderHelperPool());
         viewTeamFilter.addEventListener('change', () => applyViewFilter());
     }
