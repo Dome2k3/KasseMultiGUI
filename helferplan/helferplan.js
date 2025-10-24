@@ -142,28 +142,109 @@ app.post('/api/teams', async (req, res) => {
 });
 
 // Team löschen
-app.delete('/api/teams/:id', async (req, res) => {
-    // Änderung: lösche zuerst alle Helfer die zu diesem Team gehören, danach das Team selbst.
-    // Ausführung innerhalb einer DB-Transaktion, damit beide Operationen atomar sind.
-    const id = req.params.id;
-    const conn = await pool.getConnection();
-    try {
-        await conn.beginTransaction();
-        // Alle Helfer des Teams löschen
-        await conn.query("DELETE FROM helferplan_helpers WHERE team_id = ?;", [id]);
-        // Danach das Team löschen
-        await conn.query("DELETE FROM helferplan_teams WHERE id = ?;", [id]);
-        await conn.commit();
-        res.status(200).json({message: 'Team und zugehörige Helfer gelöscht'});
-    } catch (err) {
+// Patch: robustere DELETE /api/tournament-shifts handler
+// Insert/replace this route in your Express server (helferplan.js)
+
+app.delete('/api/tournament-shifts', async (req, res) => {
+    // Expect JSON body: { activity_id, start_time, helper_id? }
+    const { activity_id, start_time, helper_id } = req.body || {};
+
+    if (!activity_id || !start_time) {
+        return res.status(400).json({ error: 'activity_id und start_time erforderlich' });
+    }
+
+    // Helper to run a parameterized delete query and return affectedRows
+    async function runDelete(sql, params) {
         try {
-            await conn.rollback();
-        } catch (_) {
+            const [result] = await pool.query(sql, params);
+            // mysql2 promise pool returns result with affectedRows
+            return result && result.affectedRows ? result.affectedRows : 0;
+        } catch (err) {
+            console.error('DB delete error', err, sql, params);
+            throw err;
         }
-        console.error('DB-Fehler DELETE /api/teams', err);
-        res.status(500).json({error: 'DB-Fehler beim Löschen des Teams'});
-    } finally {
-        conn.release();
+    }
+
+    // Normalize some variants of the start_time to try:
+    const variants = [];
+    // 1) server-provided ISO
+    variants.push(start_time);
+    // 2) ISO without milliseconds (e.g. 2025-10-31T13:00:00Z)
+    const isoNoMs = start_time.replace(/\.\d{3}Z$/, 'Z');
+    if (isoNoMs !== start_time) variants.push(isoNoMs);
+    // 3) SQL datetime (UTC) "YYYY-MM-DD HH:MM:SS"
+    try {
+        const d = new Date(start_time);
+        if (!isNaN(d)) {
+            const sqlDt = d.getUTCFullYear() + '-' +
+                String(d.getUTCMonth()+1).padStart(2,'0') + '-' +
+                String(d.getUTCDate()).padStart(2,'0') + ' ' +
+                String(d.getUTCHours()).padStart(2,'0') + ':' +
+                String(d.getUTCMinutes()).padStart(2,'0') + ':' +
+                String(d.getUTCSeconds()).padStart(2,'0');
+            if (!variants.includes(sqlDt)) variants.push(sqlDt);
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    // We'll keep tried payloads for debugging
+    const attempts = [];
+
+    try {
+        // 1) Exact match (activity + start_time + helper_id) if helper_id provided
+        if (helper_id) {
+            for (const st of variants) {
+                const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ? AND helper_id = ?';
+                attempts.push({ sql, params: [activity_id, st, helper_id] });
+                const affected = await runDelete(sql, [activity_id, st, helper_id]);
+                if (affected > 0) {
+                    return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
+                }
+            }
+        }
+
+        // 2) Tolerant time match within +/- 1 hour with helper_id (if provided)
+        if (helper_id) {
+            // Use TIMESTAMPDIFF to find rows within 1 hour (3600 seconds)
+            const sql = `DELETE ts FROM helferplan_tournament_shifts ts
+                   WHERE ts.activity_id = ?
+                     AND ts.helper_id = ?
+                     AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
+            attempts.push({ sql, params: [activity_id, helper_id, start_time] });
+            const affected2 = await runDelete(sql, [activity_id, helper_id, start_time]);
+            if (affected2 > 0) {
+                return res.json({ message: 'Schicht geloescht (fuzzy match helper)', deletedCount: affected2, attempts });
+            }
+        }
+
+        // 3) Exact match without helper_id
+        for (const st of variants) {
+            const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ?';
+            attempts.push({ sql, params: [activity_id, st] });
+            const affected = await runDelete(sql, [activity_id, st]);
+            if (affected > 0) {
+                return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
+            }
+        }
+
+        // 4) Tolerant time match without helper_id
+        {
+            const sql = `DELETE ts FROM helferplan_tournament_shifts ts
+                   WHERE ts.activity_id = ?
+                     AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
+            attempts.push({ sql, params: [activity_id, start_time] });
+            const affected = await runDelete(sql, [activity_id, start_time]);
+            if (affected > 0) {
+                return res.json({ message: 'Schicht geloescht (fuzzy match)', deletedCount: affected, attempts });
+            }
+        }
+
+        // Nothing deleted
+        return res.status(404).json({ message: 'Keine passende Schicht gefunden', deletedCount: 0, attempts });
+    } catch (err) {
+        console.error('DELETE /api/tournament-shifts error:', err);
+        return res.status(500).json({ error: 'Serverfehler beim Loeschen', detail: err && err.message, attempts });
     }
 });
 
