@@ -1,90 +1,44 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Verwende immer Port 3003 auf dem aktuellen Host
+    // API base
     const API_URL = `${window.location.protocol}//${window.location.hostname}:3003/api`;
 
+    // DOM elements
     const timelineHeader = document.getElementById('timeline-header');
     const gridContainer = document.getElementById('grid-container');
+    const teamListPanel = document.getElementById('team-list-panel');
+    const planTeamFilter = document.getElementById('plan-team-filter');
+    const viewTeamFilter = document.getElementById('view-team-filter');
+    const helperPool = document.getElementById('helper-pool');
+
     const modal = document.getElementById('shift-modal');
     const modalTitle = document.getElementById('modal-title');
     const modalSubtitle = document.getElementById('modal-subtitle');
     const teamSelect = document.getElementById('modal-team-select');
     const helperSelect = document.getElementById('modal-helper-select');
 
-    // Neue Elemente: left panel
-    const teamListPanel = document.getElementById('team-list-panel');
-    const planTeamFilter = document.getElementById('plan-team-filter'); // filter für Helper-Pool
-    const viewTeamFilter = document.getElementById('view-team-filter'); // Ansicht-Filter
-    const helperPool = document.getElementById('helper-pool');
+    // Config
+    const HOUR_PX = 40;      // width per hour column
+    const LEFT_COL_PX = 200; // left name column width
 
+    // State
     let allHelpers = [];
     let allTeams = [];
     let helperById = {};
-    let currentSlot = null;
+    let EVENT_START_DATE = '2024-07-19T12:00:00Z'; // fallback
+    let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
 
-    // Fallback falls kein Setting vorhanden ist
-    const FALLBACK_EVENT_START = '2024-07-19T12:00:00Z'; // fallback: Friday 12:00 UTC
-
-    // Wird später per Setting gesetzt
-    let EVENT_START_DATE = FALLBACK_EVENT_START;
-
-    // Breite pro Stunde (verkleinert, Plan insgesamt schmaler)
-    const HOUR_PX = 40; // kleiner als vorher (60 -> 40)
-
-    // Tracking highlight beim Drag
-    let highlightedSlots = [];
-
+    // --- Helpers ---
     function hourIndexToDate(index) {
-        const startDate = new Date(EVENT_START_DATE);
-        startDate.setHours(startDate.getHours() + index);
-        return startDate;
+        const start = new Date(EVENT_START_DATE);
+        start.setHours(start.getHours() + index);
+        return start;
     }
 
     function dateToHourIndex(dateString) {
-        const startDate = new Date(EVENT_START_DATE);
-        const shiftDate = new Date(dateString);
-        const diffHours = (shiftDate - startDate) / (1000 * 60 * 60);
-        // Runde auf ganze Stunden
-        return Math.round(diffHours);
-    }
-
-    async function init() {
-        // Lade Settings zuerst, um EVENT_START_DATE setzen zu können
-        try {
-            const settingsRes = await fetch(`${API_URL}/settings`);
-            if (settingsRes.ok) {
-                const settings = await settingsRes.json();
-                if (settings.event_friday) {
-                    EVENT_START_DATE = `${settings.event_friday}T12:00:00Z`;
-                }
-            }
-        } catch (err) {
-            console.warn('Konnte Settings nicht laden, benutze Fallback.', err);
-            EVENT_START_DATE = FALLBACK_EVENT_START;
-        }
-
-        [allHelpers, allTeams] = await Promise.all([
-            fetch(`${API_URL}/helpers`).then(res => res.json()),
-            fetch(`${API_URL}/teams`).then(res => res.json())
-        ]);
-
-        // build helperById map
-        helperById = {};
-        allHelpers.forEach(h => { helperById[h.id] = h; });
-
-        renderTeamListPanel();
-        populateModalTeamSelect();
-        populatePlanTeamFilter();
-        populateViewTeamFilter();
-
-        const timelineConfig = generateTimeline();
-        await generateGrid(timelineConfig);
-        await fetchAndRenderAllShifts();
-        setupModalListeners();
-
-        // Filter change: render helper pool
-        planTeamFilter.addEventListener('change', () => renderHelperPool());
-        // Ansicht-Filter: aktualisiert Darstellung der Farben
-        viewTeamFilter.addEventListener('change', () => applyViewFilter());
+        const start = new Date(EVENT_START_DATE);
+        const d = new Date(dateString);
+        const diff = (d - start) / (1000 * 60 * 60);
+        return Math.round(diff);
     }
 
     function luminanceForHex(hex) {
@@ -97,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { return 0; }
     }
 
+    // --- Rendering helpers ---
     function renderTeamListPanel() {
         teamListPanel.innerHTML = '';
         allTeams.forEach(team => {
@@ -106,9 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
             colorBox.className = 'team-color';
             const color = team.color_hex || '#666';
             colorBox.style.backgroundColor = color;
-            const lum = luminanceForHex(color);
-            colorBox.style.color = lum > 160 ? '#111' : '#fff';
-            colorBox.textContent = team.name; // jetzt der Teamname in der Teamfarbe
+            colorBox.style.color = luminanceForHex(color) > 160 ? '#111' : '#fff';
+            colorBox.textContent = team.name;
             div.appendChild(colorBox);
             teamListPanel.appendChild(div);
         });
@@ -116,22 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function populatePlanTeamFilter() {
         planTeamFilter.innerHTML = '<option value="">-- Team wählen --</option>';
-        allTeams.forEach(team => {
-            const opt = document.createElement('option');
-            opt.value = team.id;
-            opt.textContent = team.name;
-            planTeamFilter.appendChild(opt);
-        });
+        allTeams.forEach(team => planTeamFilter.appendChild(new Option(team.name, team.id)));
     }
 
     function populateViewTeamFilter() {
         viewTeamFilter.innerHTML = '<option value="">Alle Teams</option>';
-        allTeams.forEach(team => {
-            const opt = document.createElement('option');
-            opt.value = team.id;
-            opt.textContent = team.name;
-            viewTeamFilter.appendChild(opt);
-        });
+        allTeams.forEach(team => viewTeamFilter.appendChild(new Option(team.name, team.id)));
     }
 
     function populateModalTeamSelect() {
@@ -163,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
             div.draggable = true;
             div.dataset.helperId = h.id;
             div.dataset.helperName = h.name;
-            // find team color
             const team = allTeams.find(t => t.id == h.team_id);
             const color = team ? team.color_hex : '#888';
             div.dataset.teamColor = color;
@@ -177,285 +120,307 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Timeline / Grid generation ---
     function generateTimeline() {
-        const days = ['Freitag', 'Samstag', 'Sonntag'];
-        // Stunden pro Tag wie vorher: 12/24/18
-        let hoursCountByDay = [12, 24, 18];
-        let totalHours = hoursCountByDay.reduce((a, b) => a + b, 0);
+        // hours per day: Fri 12..23 -> 12h, Sat -> 24h, Sun -> 18h
+        const hoursCountByDay = [12, 24, 18];
+        const days = ['Freitag','Samstag','Sonntag'];
+        const totalHours = hoursCountByDay.reduce((a,b)=>a+b,0);
 
-        // Verwende HOUR_PX statt feste 60px
-        const gridTemplateColumns = `200px repeat(${totalHours}, ${HOUR_PX}px)`;
-        timelineHeader.style.gridTemplateColumns = gridTemplateColumns;
+        // gridTemplateColumns string reused for header and rows
+        const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${totalHours}, ${HOUR_PX}px)`;
+
+        // header is single grid that uses same template
         timelineHeader.innerHTML = '';
+        timelineHeader.style.display = 'grid';
+        timelineHeader.style.gridTemplateColumns = gridTemplateColumns;
+        timelineHeader.style.gridGap = '0';
 
-        // Tag-Header
-        let dayHeaders = document.createElement('div');
-        dayHeaders.className = 'day-headers-wrapper';
-        dayHeaders.style.gridColumn = '1 / -1';
-        dayHeaders.style.display = 'grid';
-        dayHeaders.style.gridTemplateColumns = gridTemplateColumns;
+        // IMPORTANT: ensure header has no padding (removes that green offset)
+        timelineHeader.style.paddingLeft = '0';
+        timelineHeader.style.paddingInlineStart = '0';
 
+        // left placeholder (must be a fixed-width transparent block)
         const placeholder = document.createElement('div');
-        dayHeaders.appendChild(placeholder);
+        placeholder.className = 'left-placeholder';
+        placeholder.style.background = 'transparent';
+        placeholder.style.margin = '0';
+        placeholder.style.padding = '0';
+        // explicitly set width so browser doesn't apply padding to header instead
+        placeholder.style.width = `${LEFT_COL_PX}px`;
+        placeholder.style.minWidth = `${LEFT_COL_PX}px`;
+        placeholder.style.maxWidth = `${LEFT_COL_PX}px`;
+        timelineHeader.appendChild(placeholder);
 
+        // day headers wrapper: uses the right-side columns only
         const daysWrapper = document.createElement('div');
         daysWrapper.style.display = 'grid';
         daysWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
-        daysWrapper.style.gridColumn = `2 / ${2 + totalHours}`;
+        daysWrapper.style.gridColumn = '2 / -1';
         daysWrapper.style.gap = '0';
-        // Fill day wrappers by grouping hours (visual only)
+
         let offset = 0;
         hoursCountByDay.forEach((count, idx) => {
-            const dayHeader = document.createElement('div');
-            dayHeader.className = 'day-header';
-            dayHeader.style.gridColumn = `${offset + 1} / ${offset + 1 + count}`;
-            dayHeader.style.textAlign = 'center';
-            dayHeader.textContent = days[idx];
-            daysWrapper.appendChild(dayHeader);
+            const dh = document.createElement('div');
+            dh.className = 'day-header';
+            dh.style.gridColumn = `${offset+1} / ${offset+1+count}`;
+            dh.style.textAlign = 'center';
+            dh.style.padding = '6px 0';
+            dh.textContent = days[idx] || '';
+            daysWrapper.appendChild(dh);
             offset += count;
         });
-        dayHeaders.appendChild(daysWrapper);
-        timelineHeader.appendChild(dayHeaders);
+        timelineHeader.appendChild(daysWrapper);
 
-        // Stundenzeile
-        const hourSlotsWrapper = document.createElement('div');
-        hourSlotsWrapper.className = 'hour-slots-wrapper';
-        hourSlotsWrapper.style.gridColumn = '1 / -1';
-        hourSlotsWrapper.style.display = 'grid';
-        hourSlotsWrapper.style.gridTemplateColumns = gridTemplateColumns;
-        hourSlotsWrapper.style.alignItems = 'center';
-
-        const hourPlaceholder = document.createElement('div');
-        hourSlotsWrapper.appendChild(hourPlaceholder);
-
-        for (let i = 0; i < totalHours; i++) {
-            const hourSlot = document.createElement('div');
-            hourSlot.className = 'hour-slot';
-            let currentHour = (12 + i) % 24;
-            hourSlot.textContent = `${currentHour}:00`;
-            hourSlotsWrapper.appendChild(hourSlot);
+        // hour row (right side)
+        const hoursWrapper = document.createElement('div');
+        hoursWrapper.style.display = 'grid';
+        hoursWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
+        hoursWrapper.style.gridColumn = '2 / -1';
+        hoursWrapper.style.gap = '0';
+        for (let i=0;i<totalHours;i++){
+            const hour = document.createElement('div');
+            hour.className = 'hour-slot';
+            hour.textContent = `${(12 + i) % 24}:00`;
+            hoursWrapper.appendChild(hour);
         }
-        timelineHeader.appendChild(hourSlotsWrapper);
+        timelineHeader.appendChild(hoursWrapper);
 
         return { totalHours, gridTemplateColumns };
     }
 
     async function generateGrid(timelineConfig) {
-        try {
-            const response = await fetch(`${API_URL}/activities`);
-            if (!response.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
-            const activities = await response.json();
+        const resp = await fetch(`${API_URL}/activities`);
+        if (!resp.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
+        const activities = await resp.json();
 
-            const groupedActivities = activities.reduce((acc, activity) => {
-                const groupName = activity.group_name || 'Ohne Gruppe';
-                if (!acc[groupName]) acc[groupName] = [];
-                acc[groupName].push(activity);
-                return acc;
-            }, {});
+        // group activities by group_name
+        const groups = activities.reduce((acc, a) => {
+            const g = a.group_name || 'Ohne Gruppe';
+            (acc[g] || (acc[g]=[])).push(a);
+            return acc;
+        }, {});
 
-            gridContainer.innerHTML = '';
+        gridContainer.innerHTML = '';
 
-            for (const groupName in groupedActivities) {
-                const groupHeader = document.createElement('div');
-                groupHeader.className = 'activity-group-header';
-                groupHeader.textContent = groupName;
-                gridContainer.appendChild(groupHeader);
+        for (const groupName in groups) {
+            const groupHeader = document.createElement('div');
+            groupHeader.className = 'activity-group-header';
+            groupHeader.textContent = groupName;
+            gridContainer.appendChild(groupHeader);
 
-                groupedActivities[groupName].forEach(activity => {
-                    const row = document.createElement('div');
-                    row.className = 'activity-row';
-                    // wichtige Anpassung: jede Zeile verwendet gleiche Spalten wie header
-                    row.style.display = 'grid';
-                    row.style.gridTemplateColumns = timelineConfig.gridTemplateColumns;
-                    row.style.gridAutoFlow = 'column';
+            groups[groupName].forEach(activity => {
+                const row = document.createElement('div');
+                row.className = 'activity-row';
+                row.style.display = 'grid';
+                row.style.gridTemplateColumns = timelineConfig.gridTemplateColumns;
+                row.style.gridGap = '0';
 
-                    const nameCell = document.createElement('div');
-                    nameCell.className = 'activity-name';
-                    nameCell.textContent = activity.name;
-                    // nameCell style bleibt in CSS, links feste Breite 200px durch template
-                    row.appendChild(nameCell);
+                // name cell (part of the grid - ensures exact column alignment)
+                const nameCell = document.createElement('div');
+                nameCell.className = 'activity-name';
+                nameCell.textContent = activity.name;
+                row.appendChild(nameCell);
 
-                    for (let i = 0; i < timelineConfig.totalHours; i++) {
-                        const shiftSlot = document.createElement('div');
-                        shiftSlot.className = 'shift-slot';
-                        shiftSlot.dataset.activityId = activity.id;
-                        shiftSlot.dataset.hourIndex = i;
+                for (let i=0;i<timelineConfig.totalHours;i++){
+                    const slot = document.createElement('div');
+                    slot.className = 'shift-slot';
+                    slot.dataset.activityId = activity.id;
+                    slot.dataset.hourIndex = i;
 
-                        // Drag & Drop handlers
-                        shiftSlot.addEventListener('dragover', (e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'copy';
-                            // frequently update highlight based on hovered slot
-                            handleHoverHighlight(shiftSlot);
-                        });
-                        shiftSlot.addEventListener('dragenter', (e) => {
-                            e.preventDefault();
-                            handleHoverHighlight(shiftSlot);
-                        });
-                        shiftSlot.addEventListener('dragleave', (e) => {
-                            // remove highlight when leaving the slot area
-                            clearHoverHighlight();
-                        });
-                        shiftSlot.addEventListener('drop', async (e) => {
-                            e.preventDefault();
-                            clearHoverHighlight();
-                            try {
-                                const data = JSON.parse(e.dataTransfer.getData('application/json'));
-                                if (!data || !data.helper_id) return;
-                                // Build start/end times: min. 2 hours
-                                const startIndex = parseInt(shiftSlot.dataset.hourIndex);
-                                const startTime = hourIndexToDate(startIndex);
-                                const endTime = hourIndexToDate(startIndex + 2); // standard 2h duration
-                                // POST assign
-                                const resp = await fetch(`${API_URL}/tournament-shifts`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        activity_id: activity.id,
-                                        start_time: startTime.toISOString(),
-                                        end_time: endTime.toISOString(),
-                                        helper_id: data.helper_id
-                                    })
-                                });
-                                if (!resp.ok) throw new Error('Server Fehler');
-                                // Re-render komplette Schichten (sauberer)
-                                await fetchAndRenderAllShifts();
-                            } catch (err) {
-                                console.error('Drop Fehler:', err);
-                                alert('Fehler beim Eintragen der Schicht');
+                    // Drag handlers - highlight and drop logic
+                    slot.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        handleHoverHighlight(slot);
+                    });
+                    slot.addEventListener('dragenter', (e) => {
+                        e.preventDefault();
+                        handleHoverHighlight(slot);
+                    });
+                    slot.addEventListener('dragleave', (e) => {
+                        clearHoverHighlight();
+                    });
+                    // --- DROP handler: compute startIndex from the slot under mouse, not from highlightedSlots ---
+                    slot.addEventListener('drop', async (e) => {
+                        e.preventDefault();
+                        try {
+                            const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                            if (!data || !data.helper_id) return;
+
+                            // derive startIndex from the slot under mouse
+                            let startIndex = parseInt(slot.dataset.hourIndex);
+
+                            // if that slot is hidden (it may be a follow-slot of a span) walk left to find visible start
+                            while (startIndex > 0) {
+                                const cand = row.querySelector(`.shift-slot[data-hour-index='${startIndex}']`);
+                                if (!cand) break;
+                                if (!cand.classList.contains('slot-hidden')) break;
+                                startIndex--;
                             }
-                        });
 
-                        shiftSlot.addEventListener('click', () => openShiftModal(shiftSlot, activity));
-                        row.appendChild(shiftSlot);
-                    }
-                    gridContainer.appendChild(row);
-                });
-            }
-        } catch (error) { console.error(error); gridContainer.innerHTML = 'Fehler beim Aufbau des Rasters.'; }
+                            const startTime = hourIndexToDate(startIndex);
+                            const endTime = hourIndexToDate(startIndex + 2); // min 2h
+
+                            const resp = await fetch(`${API_URL}/tournament-shifts`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    activity_id: activity.id,
+                                    start_time: startTime.toISOString(),
+                                    end_time: endTime.toISOString(),
+                                    helper_id: data.helper_id
+                                })
+                            });
+                            if (!resp.ok) {
+                                const txt = await resp.text();
+                                throw new Error(txt || 'Server Fehler');
+                            }
+                            await fetchAndRenderAllShifts();
+                        } catch (err) {
+                            console.error('Drop Fehler:', err);
+                            alert('Fehler beim Eintragen der Schicht');
+                        } finally {
+                            clearHoverHighlight();
+                        }
+                    });
+
+                    slot.addEventListener('click', () => openShiftModal(slot, activity));
+                    row.appendChild(slot);
+                }
+
+                gridContainer.appendChild(row);
+            });
+        }
     }
 
-    // highlight helper: show the start slot and the following slot(s) for min 2h (and handle available span)
+    // Hover: highlight exactly 2 cells (start + next).
     function handleHoverHighlight(slot) {
         clearHoverHighlight();
+
         const idx = parseInt(slot.dataset.hourIndex);
-        const activityId = slot.dataset.activityId;
-        // highlight start slot
-        const startSlot = document.querySelector(`.shift-slot[data-activity-id='${activityId}'][data-hour-index='${idx}']`);
-        if (startSlot) {
+        const row = slot.parentElement;
+        if (!row) return;
+
+        // figure out visible start slot
+        let startIdx = idx;
+        let startSlot = row.querySelector(`.shift-slot[data-hour-index='${startIdx}']`);
+        if (!startSlot) return;
+
+        if (startSlot.classList.contains('slot-hidden')) {
+            // walk left until visible slot found
+            let back = startIdx - 1;
+            while (back >= 0) {
+                const cand = row.querySelector(`.shift-slot[data-hour-index='${back}']`);
+                if (!cand) { back--; continue; }
+                if (!cand.classList.contains('slot-hidden')) {
+                    startIdx = back;
+                    startSlot = cand;
+                    break;
+                }
+                back--;
+            }
+        }
+
+        if (startSlot && !startSlot.classList.contains('slot-hidden')) {
+            highlightedSlots.push({ el: startSlot, originalBg: startSlot.style.backgroundColor || '', hourIndex: startIdx });
             startSlot.classList.add('potential-drop');
-            highlightedSlots.push(startSlot);
         }
-        // highlight second hour (min 2h)
-        const nextSlot = document.querySelector(`.shift-slot[data-activity-id='${activityId}'][data-hour-index='${idx + 1}']`);
+
+        const nextIdx = startIdx + 1;
+        const nextSlot = row.querySelector(`.shift-slot[data-hour-index='${nextIdx}']`);
         if (nextSlot && !nextSlot.classList.contains('slot-hidden')) {
+            highlightedSlots.push({ el: nextSlot, originalBg: nextSlot.style.backgroundColor || '', hourIndex: nextIdx });
             nextSlot.classList.add('potential-drop');
-            highlightedSlots.push(nextSlot);
-        }
-        // if there is a third hour available, give a faint hint (optional)
-        const thirdSlot = document.querySelector(`.shift-slot[data-activity-id='${activityId}'][data-hour-index='${idx + 2}']`);
-        if (thirdSlot && !thirdSlot.classList.contains('slot-hidden')) {
-            thirdSlot.classList.add('potential-drop');
-            thirdSlot.style.backgroundColor = 'rgba(33,150,243,0.04)';
-            highlightedSlots.push(thirdSlot);
         }
     }
 
     function clearHoverHighlight() {
-        highlightedSlots.forEach(s => {
-            s.classList.remove('potential-drop');
-            s.classList.remove('drop-target');
-            s.style.backgroundColor = '';
+        highlightedSlots.forEach(item => {
+            item.el.classList.remove('potential-drop');
+            item.el.classList.remove('drop-target');
+            item.el.style.backgroundColor = item.originalBg || '';
         });
         highlightedSlots = [];
     }
 
+    // Fetch shifts and render them into the grid, using grid-column spans
     async function fetchAndRenderAllShifts() {
-        // Reset: zeige alle Slots und entferne Spans/Hidden-Klassen
-        document.querySelectorAll('.shift-slot').forEach(slot => {
-            slot.innerHTML = '';
-            slot.classList.remove('filled');
-            slot.style.backgroundColor = '';
-            slot.style.gridColumn = '';
-            slot.classList.remove('slot-hidden');
-            slot.classList.remove('dimmed');
-            delete slot.dataset.helperId;
-            delete slot.dataset.hiddenForSpan;
+        // clear all slots
+        document.querySelectorAll('.shift-slot').forEach(s => {
+            s.innerHTML = '';
+            s.classList.remove('filled');
+            s.style.backgroundColor = '';
+            s.style.gridColumn = '';
+            s.classList.remove('slot-hidden');
+            s.classList.remove('dimmed');
+            delete s.dataset.helperId;
+            delete s.dataset.hiddenForSpan;
         });
 
-        const shifts = await fetch(`${API_URL}/tournament-shifts`).then(res => res.json());
-        // shifts enthalten: activity_id, start_time, end_time, helper_id, helper_name, team_color
-        shifts.forEach(shift => {
-            const startDate = new Date(shift.start_time);
-            const endDate = new Date(shift.end_time);
-            const duration = Math.max(1, Math.round((endDate - startDate) / (1000 * 60 * 60))); // Stunden
-            const hourIndex = dateToHourIndex(shift.start_time);
+        const resp = await fetch(`${API_URL}/tournament-shifts`);
+        if (!resp.ok) {
+            console.error('Fehler beim Laden der Schichten');
+            return;
+        }
+        const shifts = await resp.json();
 
-            // Finde das Start-Slot-Element
-            const startSlot = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${hourIndex}']`);
+        shifts.forEach(shift => {
+            const startIdx = dateToHourIndex(shift.start_time);
+            const endIdx = dateToHourIndex(shift.end_time);
+            const duration = Math.max(1, endIdx - startIdx);
+
+            const startSlot = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${startIdx}']`);
             if (!startSlot) return;
 
-            // Setze Anzeige im Start-Slot und span über duration Stunden
             startSlot.innerHTML = shift.helper_name ? shift.helper_name.split(' ')[0] : '—';
             startSlot.classList.add('filled');
             startSlot.style.backgroundColor = shift.team_color || '#666';
             startSlot.dataset.helperId = shift.helper_id || '';
 
-            // Breite über mehrere Stunden
             if (duration > 1) {
                 startSlot.style.gridColumn = `span ${duration}`;
-                // Verstecke die Folgeslots, damit keine doppelten Kacheln erscheinen
-                for (let k = 1; k < duration; k++) {
-                    const followSlot = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${hourIndex + k}']`);
-                    if (followSlot) {
-                        followSlot.classList.add('slot-hidden');
-                        followSlot.dataset.hiddenForSpan = 'true';
+                for (let k=1;k<duration;k++){
+                    const follow = document.querySelector(`.shift-slot[data-activity-id='${shift.activity_id}'][data-hour-index='${startIdx + k}']`);
+                    if (follow) {
+                        follow.classList.add('slot-hidden');
+                        follow.dataset.hiddenForSpan = 'true';
                     }
                 }
             }
         });
 
-        // Wende View-Filter an (falls gesetzt)
         applyViewFilter();
     }
 
+    // View filter dims non-selected team slots
     function applyViewFilter() {
         const viewTeamId = viewTeamFilter.value;
         if (!viewTeamId) {
-            // entferne Dimmung
-            document.querySelectorAll('.shift-slot').forEach(slot => {
-                slot.classList.remove('dimmed');
-            });
+            document.querySelectorAll('.shift-slot').forEach(s => s.classList.remove('dimmed'));
             return;
         }
-        // Für jede gefüllte Slot: finde helper (über dataset.helperId) und dessen team_id
-        document.querySelectorAll('.shift-slot').forEach(slot => {
-            const helperId = slot.dataset.helperId;
-            if (!helperId) {
-                // leere Slots: normal lassen
-                slot.classList.remove('dimmed');
-                return;
-            }
+        document.querySelectorAll('.shift-slot').forEach(s => {
+            const helperId = s.dataset.helperId;
+            if (!helperId) { s.classList.remove('dimmed'); return; }
             const helper = helperById[helperId];
             const tid = helper ? String(helper.team_id) : null;
-            if (tid && tid === String(viewTeamId)) {
-                slot.classList.remove('dimmed');
-            } else {
-                slot.classList.add('dimmed');
-            }
+            if (tid && tid === String(viewTeamId)) s.classList.remove('dimmed'); else s.classList.add('dimmed');
         });
     }
 
+    // --- Modal logic (click-to-edit) ---
+    let currentSlot = null;
     function openShiftModal(slotElement, activity) {
         currentSlot = slotElement;
         const hourIndex = parseInt(slotElement.dataset.hourIndex);
         const startTime = hourIndexToDate(hourIndex);
 
         modalTitle.textContent = `${activity.name}`;
-        modalSubtitle.textContent = `${startTime.toLocaleString('de-DE', { weekday: 'long', hour: '2-digit', minute: '2-digit' })} Uhr`;
+        modalSubtitle.textContent = `${startTime.toLocaleString('de-DE', { weekday:'long', hour:'2-digit', minute:'2-digit' })} Uhr`;
 
         teamSelect.innerHTML = '<option value="">Team auswaehlen</option>';
-        allTeams.forEach(team => teamSelect.add(new Option(team.name, team.id)));
+        allTeams.forEach(t => teamSelect.add(new Option(t.name, t.id)));
 
         const existingHelperId = slotElement.dataset.helperId;
         if (existingHelperId) {
@@ -465,33 +430,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateHelperDropdown(helper.team_id);
                 helperSelect.value = helper.id;
             }
-        } else {
-            updateHelperDropdown('');
-        }
+        } else updateHelperDropdown('');
+
         modal.style.display = 'flex';
     }
 
     function updateHelperDropdown(teamId) {
         helperSelect.innerHTML = '<option value="">Helfer auswawhlen</option>';
-        if (teamId) {
-            allHelpers.filter(h => h.team_id == teamId).forEach(helper => helperSelect.add(new Option(helper.name, helper.id)));
-        }
+        if (teamId) allHelpers.filter(h => h.team_id == teamId).forEach(h => helperSelect.add(new Option(h.name, h.id)));
     }
 
     function setupModalListeners() {
         teamSelect.addEventListener('change', () => updateHelperDropdown(teamSelect.value));
         modal.querySelector('#cancel-shift-button').addEventListener('click', () => modal.style.display = 'none');
-        modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
 
         modal.querySelector('#shift-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const helperId = helperSelect.value;
             if (!helperId) { alert('Bitte einen Helfer auswawhlen.'); return; }
-
             const activityId = currentSlot.dataset.activityId;
             const hourIndex = parseInt(currentSlot.dataset.hourIndex);
             const startTime = hourIndexToDate(hourIndex);
-            const endTime = hourIndexToDate(hourIndex + 2); // min. 2h
+            const endTime = hourIndexToDate(hourIndex + 2);
 
             const response = await fetch(`${API_URL}/tournament-shifts`, {
                 method: 'POST',
@@ -502,13 +462,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 modal.style.display = 'none';
                 await fetchAndRenderAllShifts();
-            } else { alert('Fehler beim Speichern der Schicht.'); }
+            } else {
+                alert('Fehler beim Speichern der Schicht.');
+            }
         });
 
         modal.querySelector('#delete-shift-button').addEventListener('click', async () => {
             if (!currentSlot.dataset.helperId) { modal.style.display = 'none'; return; }
             if (!confirm('Soll die Schicht wirklich geleert werden?')) return;
-
             const activityId = currentSlot.dataset.activityId;
             const hourIndex = parseInt(currentSlot.dataset.hourIndex);
             const startTime = hourIndexToDate(hourIndex);
@@ -522,9 +483,51 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 modal.style.display = 'none';
                 await fetchAndRenderAllShifts();
-            } else { alert('Fehler beim Loeschen der Schicht.'); }
+            } else {
+                alert('Fehler beim Loeschen der Schicht.');
+            }
         });
+
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
     }
 
-    init();
+    // --- Initialization ---
+    async function init() {
+        // load settings to set EVENT_START_DATE
+        try {
+            const sres = await fetch(`${API_URL}/settings`);
+            if (sres.ok) {
+                const settings = await sres.json();
+                if (settings.event_friday) EVENT_START_DATE = `${settings.event_friday}T12:00:00Z`;
+            }
+        } catch (e) {
+            // ignore, keep fallback
+        }
+
+        // load data
+        [allHelpers, allTeams] = await Promise.all([
+            fetch(`${API_URL}/helpers`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_URL}/teams`).then(r => r.ok ? r.json() : [])
+        ]);
+
+        // map helpers by id
+        helperById = {};
+        allHelpers.forEach(h => helperById[h.id] = h);
+
+        renderTeamListPanel();
+        populateModalTeamSelect();
+        populatePlanTeamFilter();
+        populateViewTeamFilter();
+
+        const timelineConfig = generateTimeline();
+        await generateGrid(timelineConfig);
+        await fetchAndRenderAllShifts();
+        setupModalListeners();
+
+        // bind filters
+        planTeamFilter.addEventListener('change', () => renderHelperPool());
+        viewTeamFilter.addEventListener('change', () => applyViewFilter());
+    }
+
+    init().catch(err => console.error('Init error:', err));
 });
