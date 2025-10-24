@@ -1,10 +1,6 @@
+// https://github.com/Dome2k3/KasseMultiGUI/blob/main/helferplan/public/js/plan.js
 document.addEventListener('DOMContentLoaded', () => {
     // API base for Helferplan
-    // Lookup order:
-    // 1) meta tag <meta name="api-url-helferplan" content="https://.../api">
-    // 2) runtime global window.__API_URL_HELFERPLAN (inject small script before this file)
-    // 3) local dev convenience: if served from localhost, assume :3003
-    // 4) default: same origin + /api (works with Cloudflare/Render tunnels)
     const API_URL_HELFERPLAN = (() => {
         const meta = document.querySelector('meta[name="api-url-helferplan"]');
         if (meta && meta.content) return meta.content.replace(/\/$/, '');
@@ -14,12 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return `${window.location.origin}/api`;
     })();
-
-    // Expose for debugging / other scripts (accessible via console: window.API_URL_HELFERPLAN)
-    // Note: if you need it BEFORE DOMContentLoaded, set window.__API_URL_HELFERPLAN in a script tag before this file is loaded.
     window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
     console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
 
+    // DOM elements
     const timelineHeader = document.getElementById('timeline-header');
     const gridContainer = document.getElementById('grid-container');
     const teamListPanel = document.getElementById('team-list-panel');
@@ -33,15 +27,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const teamSelect = document.getElementById('modal-team-select');
     const helperSelect = document.getElementById('modal-helper-select');
 
-    const HOUR_PX = 40;
-    const LEFT_COL_PX = 200;
+    // Config
+    const HOUR_PX = 40;      // width per hour column
+    const LEFT_COL_PX = 200; // left name column width
 
+    // State
     let allHelpers = [];
     let allTeams = [];
     let helperById = {};
-    let EVENT_START_DATE = '2024-07-19T12:00:00Z';
+    let EVENT_START_DATE = '2024-07-19T12:00:00Z'; // fallback
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
 
+    // --- Helpers ---
     function hourIndexToDate(index) {
         const start = new Date(EVENT_START_DATE);
         start.setHours(start.getHours() + index);
@@ -65,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { return 0; }
     }
 
+    // --- Rendering helpers ---
     function renderTeamListPanel() {
         teamListPanel.innerHTML = '';
         allTeams.forEach(team => {
@@ -133,28 +131,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Timeline / Grid generation ---
     function generateTimeline() {
+        // hours per day: Fri 12..23 -> 12h, Sat -> 24h, Sun -> 18h
         const hoursCountByDay = [12, 24, 18];
         const days = ['Freitag','Samstag','Sonntag'];
         const totalHours = hoursCountByDay.reduce((a,b)=>a+b,0);
+
+        // gridTemplateColumns string reused for header and rows
         const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${totalHours}, ${HOUR_PX}px)`;
+
+        // header is single grid that uses same template
         timelineHeader.innerHTML = '';
         timelineHeader.style.display = 'grid';
         timelineHeader.style.gridTemplateColumns = gridTemplateColumns;
         timelineHeader.style.gridGap = '0';
+
+        // IMPORTANT: ensure header has no padding (removes that green offset)
         timelineHeader.style.paddingLeft = '0';
         timelineHeader.style.paddingInlineStart = '0';
 
+        // left placeholder (must be a fixed-width transparent block)
         const placeholder = document.createElement('div');
         placeholder.className = 'left-placeholder';
         placeholder.style.background = 'transparent';
         placeholder.style.margin = '0';
         placeholder.style.padding = '0';
+        // explicitly set width so browser doesn't apply padding to header instead
         placeholder.style.width = `${LEFT_COL_PX}px`;
         placeholder.style.minWidth = `${LEFT_COL_PX}px`;
         placeholder.style.maxWidth = `${LEFT_COL_PX}px`;
         timelineHeader.appendChild(placeholder);
 
+        // day headers wrapper: uses the right-side columns only
         const daysWrapper = document.createElement('div');
         daysWrapper.style.display = 'grid';
         daysWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
@@ -174,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         timelineHeader.appendChild(daysWrapper);
 
+        // hour row (right side)
         const hoursWrapper = document.createElement('div');
         hoursWrapper.style.display = 'grid';
         hoursWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
@@ -191,15 +201,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function generateGrid(timelineConfig) {
-        const resp = await fetch(`${API_URL}/activities`);
+        const resp = await fetch(`${API_URL_HELFERPLAN}/activities`);
         if (!resp.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
         const activities = await resp.json();
 
+        // group activities by group_name
         const groups = activities.reduce((acc, a) => {
             const g = a.group_name || 'Ohne Gruppe';
             (acc[g] || (acc[g]=[])).push(a);
             return acc;
         }, {});
+
         gridContainer.innerHTML = '';
 
         for (const groupName in groups) {
@@ -215,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.style.gridTemplateColumns = timelineConfig.gridTemplateColumns;
                 row.style.gridGap = '0';
 
+                // name cell (part of the grid - ensures exact column alignment)
                 const nameCell = document.createElement('div');
                 nameCell.className = 'activity-name';
                 nameCell.textContent = activity.name;
@@ -226,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     slot.dataset.activityId = activity.id;
                     slot.dataset.hourIndex = i;
 
+                    // Drag handlers - highlight and drop logic
                     slot.addEventListener('dragover', (e) => {
                         e.preventDefault();
                         e.dataTransfer.dropEffect = 'copy';
@@ -235,27 +249,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         e.preventDefault();
                         handleHoverHighlight(slot);
                     });
-                    slot.addEventListener('dragleave', () => {
+                    slot.addEventListener('dragleave', (e) => {
                         clearHoverHighlight();
                     });
-
-                    // Drop: use highlights for same row when available => consistent with hover
+                    // --- DROP handler: determine start matching the hover for same row ---
                     slot.addEventListener('drop', async (e) => {
                         e.preventDefault();
                         try {
                             const data = JSON.parse(e.dataTransfer.getData('application/json'));
                             if (!data || !data.helper_id) return;
 
-                            const rowEl = slot.parentElement;
-                            // Use highlighted slots that belong to this same row if present
-                            const relevantHighlights = highlightedSlots.filter(h => h.el.closest('.activity-row') === rowEl);
+                            const rowEl = slot.closest('.activity-row');
+                            // pick start from highlights that belong to this row (hover visualization)
+                            const relevant = highlightedSlots.filter(h => h.el && h.el.closest('.activity-row') === rowEl);
                             let startIndex;
-                            if (relevantHighlights.length > 0) {
-                                // take smallest hourIndex (start)
-                                startIndex = Math.min(...relevantHighlights.map(h => h.hourIndex));
+                            if (relevant.length > 0) {
+                                startIndex = Math.min(...relevant.map(h => h.hourIndex));
                             } else {
+                                // fallback: derive from target slot index, walk left if hidden
                                 startIndex = parseInt(slot.dataset.hourIndex);
-                                // walk left if hidden
                                 while (startIndex > 0) {
                                     const cand = rowEl.querySelector(`.shift-slot[data-hour-index='${startIndex}']`);
                                     if (!cand) break;
@@ -265,9 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             const startTime = hourIndexToDate(startIndex);
-                            const endTime = hourIndexToDate(startIndex + 2);
+                            const endTime = hourIndexToDate(startIndex + 2); // min 2h
 
-                            const resp = await fetch(`${API_URL}/tournament-shifts`, {
+                            const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -299,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Hover: highlight exactly 2 cells (start + next).
     function handleHoverHighlight(slot) {
         clearHoverHighlight();
 
@@ -306,6 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = slot.parentElement;
         if (!row) return;
 
+        // figure out visible start slot (walk left if the hovered slot is a hidden follow-slot)
         let startIdx = idx;
         let startSlot = row.querySelector(`.shift-slot[data-hour-index='${startIdx}']`);
         if (!startSlot) return;
@@ -339,14 +353,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearHoverHighlight() {
         highlightedSlots.forEach(item => {
-            item.el.classList.remove('potential-drop');
-            item.el.classList.remove('drop-target');
-            item.el.style.backgroundColor = item.originalBg || '';
+            if (item.el) {
+                item.el.classList.remove('potential-drop');
+                item.el.classList.remove('drop-target');
+                item.el.style.backgroundColor = item.originalBg || '';
+            }
         });
         highlightedSlots = [];
     }
 
+    // Fetch shifts and render them into the grid, using grid-column spans
     async function fetchAndRenderAllShifts() {
+        // clear all slots
         document.querySelectorAll('.shift-slot').forEach(s => {
             s.innerHTML = '';
             s.classList.remove('filled');
@@ -359,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
             delete s.dataset.startTime;
         });
 
-        const resp = await fetch(`${API_URL}/tournament-shifts`);
+        const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`);
         if (!resp.ok) {
             console.error('Fehler beim Laden der Schichten');
             return;
@@ -378,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startSlot.classList.add('filled');
             startSlot.style.backgroundColor = shift.team_color || '#666';
             startSlot.dataset.helperId = shift.helper_id || '';
-            // save exact start_time ISO from server to ensure deletes match DB exactly
+            // save exact server start_time so deletes match DB exactly
             startSlot.dataset.startTime = shift.start_time;
 
             if (duration > 1) {
@@ -396,6 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyViewFilter();
     }
 
+    // View filter dims non-selected team slots
     function applyViewFilter() {
         const viewTeamId = viewTeamFilter.value;
         if (!viewTeamId) {
@@ -411,11 +430,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Modal logic (click-to-edit) ---
     let currentSlot = null;
     function openShiftModal(slotElement, activity) {
-        currentSlot = slotElement;
-        const hourIndex = parseInt(slotElement.dataset.hourIndex);
-        const startTime = hourIndexToDate(hourIndex);
+        // If the clicked slot is a hidden follow-slot, find its start slot (leftwards)
+        let slot = slotElement;
+        if (slot.dataset.hiddenForSpan === 'true' || slot.classList.contains('slot-hidden')) {
+            const row = slot.closest('.activity-row');
+            let idx = parseInt(slot.dataset.hourIndex);
+            while (idx >= 0) {
+                const cand = row.querySelector(`.shift-slot[data-hour-index='${idx}']`);
+                if (cand && !cand.classList.contains('slot-hidden')) {
+                    slot = cand;
+                    break;
+                }
+                idx--;
+            }
+        }
+
+        currentSlot = slot;
+        // If server provided exact start_time, use it; otherwise compute from hourIndex
+        const startIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
+        const startTime = new Date(startIso);
 
         modalTitle.textContent = `${activity.name}`;
         modalSubtitle.textContent = `${startTime.toLocaleString('de-DE', { weekday:'long', hour:'2-digit', minute:'2-digit' })} Uhr`;
@@ -423,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
         teamSelect.innerHTML = '<option value="">Team auswaehlen</option>';
         allTeams.forEach(t => teamSelect.add(new Option(t.name, t.id)));
 
-        const existingHelperId = slotElement.dataset.helperId;
+        const existingHelperId = currentSlot.dataset.helperId;
         if (existingHelperId) {
             const helper = allHelpers.find(h => h.id == existingHelperId);
             if (helper) {
@@ -454,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const startTime = hourIndexToDate(hourIndex);
             const endTime = hourIndexToDate(hourIndex + 2);
 
-            const response = await fetch(`${API_URL}/tournament-shifts`, {
+            const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
@@ -477,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // prefer exact start_time saved from server if available
             const startTimeIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
 
-            const response = await fetch(`${API_URL}/tournament-shifts`, {
+            const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ activity_id: activityId, start_time: startTimeIso })
@@ -487,6 +523,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 modal.style.display = 'none';
                 await fetchAndRenderAllShifts();
             } else {
+                // show server message if available
+                let txt = '';
+                try { txt = await response.text(); } catch (e) {}
+                console.error('Delete failed', response.status, txt);
                 alert('Fehler beim Loeschen der Schicht.');
             }
         });
@@ -494,20 +534,26 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
     }
 
+    // --- Initialization ---
     async function init() {
+        // load settings to set EVENT_START_DATE
         try {
-            const sres = await fetch(`${API_URL}/settings`);
+            const sres = await fetch(`${API_URL_HELFERPLAN}/settings`);
             if (sres.ok) {
                 const settings = await sres.json();
                 if (settings.event_friday) EVENT_START_DATE = `${settings.event_friday}T12:00:00Z`;
             }
-        } catch (e) {}
+        } catch (e) {
+            // ignore, keep fallback
+        }
 
+        // load data
         [allHelpers, allTeams] = await Promise.all([
-            fetch(`${API_URL}/helpers`).then(r => r.ok ? r.json() : []),
-            fetch(`${API_URL}/teams`).then(r => r.ok ? r.json() : [])
+            fetch(`${API_URL_HELFERPLAN}/helpers`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_URL_HELFERPLAN}/teams`).then(r => r.ok ? r.json() : [])
         ]);
 
+        // map helpers by id
         helperById = {};
         allHelpers.forEach(h => helperById[h.id] = h);
 
@@ -521,6 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchAndRenderAllShifts();
         setupModalListeners();
 
+        // bind filters
         planTeamFilter.addEventListener('change', () => renderHelperPool());
         viewTeamFilter.addEventListener('change', () => applyViewFilter());
     }
