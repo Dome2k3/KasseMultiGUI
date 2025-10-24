@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let helperById = {};
     let EVENT_START_DATE = '2024-07-19T12:00:00Z'; // fallback
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
-    let allShifts = []; // cache latest shifts from server
+    let allShifts = []; // cached shift array from server; used to find shift ids
 
     // --- Helpers ---
     function hourIndexToDate(index) {
@@ -136,7 +136,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const hoursCountByDay = [12, 24, 18];
         const days = ['Freitag','Samstag','Sonntag'];
         const totalHours = hoursCountByDay.reduce((a,b)=>a+b,0);
-
         const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${totalHours}, ${HOUR_PX}px)`;
 
         timelineHeader.innerHTML = '';
@@ -267,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const startTime = hourIndexToDate(startIndex);
                             const endTime = hourIndexToDate(startIndex + 2);
 
+                            // POST create shift
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -277,10 +277,56 @@ document.addEventListener('DOMContentLoaded', () => {
                                     helper_id: data.helper_id
                                 })
                             });
+
+                            // If server responds with 409 conflict and sends existing_shift -> ask user to overwrite
+                            if (resp.status === 409) {
+                                let body = null;
+                                try { body = await resp.json(); } catch(e){ body = null; }
+                                const existing = body && (body.existing_shift || body.conflicting_shift);
+                                if (existing) {
+                                    const who = existing.helper_name || existing.helper_id || ' unbekannt';
+                                    if (confirm(`Es existiert bereits eine Schicht (${who}) in diesem Zeitraum. Überschreiben?`)) {
+                                        // delete that existing shift by id if provided, else fallback to previous delete flow
+                                        if (existing.id) {
+                                            const delResp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE' });
+                                            if (delResp.ok) {
+                                                // try create again
+                                                const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        activity_id: activity.id,
+                                                        start_time: startTime.toISOString(),
+                                                        end_time: endTime.toISOString(),
+                                                        helper_id: data.helper_id
+                                                    })
+                                                });
+                                                if (!retry.ok) throw new Error('Neues Anlegen nach Löschung fehlgeschlagen');
+                                                await fetchAndRenderAllShifts();
+                                            } else {
+                                                const t = await delResp.text().catch(()=>null);
+                                                throw new Error('Konnte bestehende Schicht nicht löschen: ' + (t||delResp.status));
+                                            }
+                                        } else {
+                                            // server didn't provide id: inform user that overwrite cannot be automatic
+                                            alert('Server lieferte keine ID der existierenden Schicht; Überschreiben nicht automatisch möglich.');
+                                        }
+                                    }
+                                } else {
+                                    const t = await resp.text().catch(()=>null);
+                                    console.warn('409 returned, but no existing_shift provided', t);
+                                    alert('Konflikt beim Anlegen der Schicht (409). Siehe Konsole.');
+                                }
+                                await fetchAndRenderAllShifts();
+                                return;
+                            }
+
                             if (!resp.ok) {
                                 const txt = await resp.text().catch(()=>null);
-                                throw new Error(txt || 'Server Fehler');
+                                throw new Error(txt || 'Server Fehler beim Anlegen');
                             }
+
+                            // success: server should return created shift (with id). We refresh
                             await fetchAndRenderAllShifts();
                         } catch (err) {
                             console.error('Drop Fehler:', err);
@@ -369,11 +415,11 @@ document.addEventListener('DOMContentLoaded', () => {
             delete s.dataset.helperId;
             delete s.dataset.hiddenForSpan;
             delete s.dataset.startTime;
+            delete s.dataset.shiftId;
         });
 
         try {
             const shifts = await getShifts();
-            // cache for delete/matching logic
             allShifts = shifts || [];
             shifts.forEach(shift => {
                 const startIdx = dateToHourIndex(shift.start_time);
@@ -387,8 +433,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 startSlot.classList.add('filled');
                 startSlot.style.backgroundColor = shift.team_color || '#666';
                 startSlot.dataset.helperId = shift.helper_id || '';
-                // save exact server start_time for reliable deletes
+                // store server-provided start and id (if server returns id)
                 startSlot.dataset.startTime = shift.start_time;
+                if (shift.id) startSlot.dataset.shiftId = shift.id;
+                if (shift.shift_id) startSlot.dataset.shiftId = shift.shift_id; // alt name
 
                 if (duration > 1) {
                     startSlot.style.gridColumn = `span ${duration}`;
@@ -488,6 +536,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
             });
 
+            if (response.status === 409) {
+                // Conflict: server should provide existing_shift in body
+                let body = null;
+                try { body = await response.json(); } catch(e){ body = null; }
+                const existing = body && (body.existing_shift || body.conflicting_shift || body.existing);
+                if (existing) {
+                    const who = existing.helper_name || existing.helper_id || 'unbekannt';
+                    if (confirm(`Konflikt: Es existiert bereits eine Schicht (${who}). Überschreiben?`)) {
+                        // attempt delete by id if server provided it
+                        if (existing.id) {
+                            const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE' });
+                            if (!del.ok) alert('Löschen der bestehenden Schicht fehlgeschlagen; siehe Konsole.');
+                            else {
+                                // retry create
+                                const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
+                                });
+                                if (!retry.ok) alert('Erneutes Anlegen nach Löschung fehlgeschlagen.');
+                            }
+                        } else {
+                            alert('Server lieferte keine ID; automatisches Überschreiben nicht möglich.');
+                        }
+                    }
+                } else {
+                    alert('Konflikt beim Anlegen (409). Siehe Konsole.');
+                }
+                await fetchAndRenderAllShifts();
+                return;
+            }
+
             if (response.ok) {
                 modal.style.display = 'none';
                 await fetchAndRenderAllShifts();
@@ -499,130 +579,50 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // DELETE handler: robust multi-format attempts + helper_id + end_time if available
+        // DELETE handler: prefer deleting by shift id if available
         modal.querySelector('#delete-shift-button').addEventListener('click', async () => {
             if (!currentSlot || !currentSlot.dataset.helperId) { modal.style.display = 'none'; return; }
             if (!confirm('Soll die Schicht wirklich geleert werden?')) return;
 
-            const activityId = currentSlot.dataset.activityId;
-            const helperId = currentSlot.dataset.helperId;
-            const requestedStartIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
-
-            // Find candidate shift in cached allShifts (match by activity, helper and time equality)
-            let candidate = allShifts.find(s => String(s.activity_id) === String(activityId)
-                && String(s.helper_id) === String(helperId)
-                && Date.parse(s.start_time) === Date.parse(requestedStartIso));
-
-            // Fallback: match by activity + helper + same hour index
-            if (!candidate) {
-                const reqHour = dateToHourIndex(requestedStartIso);
-                candidate = allShifts.find(s => String(s.activity_id) === String(activityId)
-                    && String(s.helper_id) === String(helperId)
-                    && dateToHourIndex(s.start_time) === reqHour);
-            }
-
-            // Build array of payload variants to try
-            const payloads = [];
-            // primary: server-provided ISO if candidate exists else requestedStartIso
-            const primaryStart = candidate ? candidate.start_time : requestedStartIso;
-            payloads.push({ activity_id: activityId, start_time: primaryStart, helper_id: helperId, end_time: candidate ? candidate.end_time : undefined });
-
-            // variant: remove milliseconds (some servers store without)
-            const isoNoMs = primaryStart.replace(/\.\d{3}Z$/,'Z');
-            if (isoNoMs !== primaryStart) payloads.push({ activity_id: activityId, start_time: isoNoMs, helper_id: helperId, end_time: candidate ? candidate.end_time : undefined });
-
-            // variant: SQL datetime (no T, no Z) - some servers expect local DB format
-            try {
-                const dt = new Date(primaryStart);
-                if (!isNaN(dt)) {
-                    const sqlDt = dt.getUTCFullYear() + '-' +
-                        String(dt.getUTCMonth()+1).padStart(2,'0') + '-' +
-                        String(dt.getUTCDate()).padStart(2,'0') + ' ' +
-                        String(dt.getUTCHours()).padStart(2,'0') + ':' +
-                        String(dt.getUTCMinutes()).padStart(2,'0') + ':' +
-                        String(dt.getUTCSeconds()).padStart(2,'0');
-                    payloads.push({ activity_id: activityId, start_time: sqlDt, helper_id: helperId, end_time: candidate ? candidate.end_time : undefined });
-                }
-            } catch(e){}
-
-            // dedupe payloads by JSON string
-            const seen = new Set();
-            const uniquePayloads = [];
-            for (const p of payloads) {
-                const key = JSON.stringify(p);
-                if (!seen.has(key)) { seen.add(key); uniquePayloads.push(p); }
-            }
-
-            // Try each payload sequentially until shift disappears
-            let deleted = false;
-            let lastResp = null;
-            for (const p of uniquePayloads) {
+            const shiftId = currentSlot.dataset.shiftId;
+            if (shiftId) {
                 try {
-                    console.info('Attempting DELETE with payload:', p);
-                    const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(p)
-                    });
-                    lastResp = resp;
-                    const text = await resp.text().catch(()=>null);
-                    let body = null;
-                    try { body = text ? JSON.parse(text) : null; } catch(e){ body = text; }
-                    console.log('DELETE response', resp.status, body);
-
-                    // Immediately fetch latest shifts and check if candidate still present
-                    const latest = await getShifts();
-                    allShifts = latest;
-                    const still = latest.find(s => String(s.activity_id) === String(activityId)
-                        && String(s.helper_id) === String(helperId)
-                        && (Date.parse(s.start_time) === Date.parse(p.start_time) || dateToHourIndex(s.start_time) === dateToHourIndex(p.start_time)));
-                    if (!still) {
-                        deleted = true;
-                        console.info('Shift deleted successfully with payload:', p);
-                        break;
+                    const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${shiftId}`, { method: 'DELETE' });
+                    const text = await del.text().catch(()=>null);
+                    console.log('DELETE by id response', del.status, text);
+                    if (!del.ok) {
+                        // fallback to previous behavior if server doesn't support DELETE by id
+                        console.warn('DELETE by id failed; falling back to body-delete');
                     } else {
-                        console.warn('Shift still present after delete attempt with payload:', p);
+                        await fetchAndRenderAllShifts();
+                        modal.style.display = 'none';
+                        return;
                     }
                 } catch (err) {
-                    console.error('Error during DELETE attempt with payload', p, err);
+                    console.error('DELETE by id failed', err);
                 }
             }
 
-            if (!deleted) {
-                // final attempt: try deleting by activity + start_time only (without helper) as last resort
-                try {
-                    const fallbackPayload = { activity_id: activityId, start_time: requestedStartIso };
-                    console.info('Final fallback DELETE attempt', fallbackPayload);
-                    const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(fallbackPayload)
-                    });
-                    const text = await resp.text().catch(()=>null);
-                    let body = null;
-                    try { body = text ? JSON.parse(text) : null; } catch(e){ body = text; }
-                    console.log('Fallback DELETE response', resp.status, body);
+            // fallback: body-based delete (existing robust logic)
+            const activityId = currentSlot.dataset.activityId;
+            const helperId = currentSlot.dataset.helperId;
+            const startTimeIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
 
-                    const latest = await getShifts();
-                    allShifts = latest;
-                    const still = latest.find(s => String(s.activity_id) === String(activityId)
-                        && (Date.parse(s.start_time) === Date.parse(requestedStartIso) || dateToHourIndex(s.start_time) === dateToHourIndex(requestedStartIso)));
-                    if (!still) deleted = true;
-                } catch (err) {
-                    console.error('Fallback delete failed', err);
-                }
-            }
-
-            // final reporting
-            if (deleted) {
+            // simple delete attempt
+            try {
+                const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ activity_id: activityId, start_time: startTimeIso, helper_id: helperId })
+                });
+                const text = await resp.text().catch(()=>null);
+                console.log('DELETE fallback response', resp.status, text);
+                // refresh list
                 await fetchAndRenderAllShifts();
                 modal.style.display = 'none';
-                return;
-            } else {
-                // show debug info to user and console
-                console.error('Delete attempts exhausted - shift still present. Last response:', lastResp);
-                alert('Löschen fehlgeschlagen — die Schicht ist weiterhin vorhanden. Bitte Konsole prüfen (Network/Console).');
-                await fetchAndRenderAllShifts();
+            } catch (err) {
+                console.error('Fallback delete failed', err);
+                alert('Fehler beim Löschen der Schicht.');
             }
         });
 
@@ -631,7 +631,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initialization ---
     async function init() {
-        // load settings to set EVENT_START_DATE
         try {
             const sres = await fetch(`${API_URL_HELFERPLAN}/settings`);
             if (sres.ok) {
@@ -642,13 +641,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // ignore, keep fallback
         }
 
-        // load data
         [allHelpers, allTeams] = await Promise.all([
             fetch(`${API_URL_HELFERPLAN}/helpers`).then(r => r.ok ? r.json() : []),
             fetch(`${API_URL_HELFERPLAN}/teams`).then(r => r.ok ? r.json() : [])
         ]);
 
-        // map helpers by id
         helperById = {};
         allHelpers.forEach(h => helperById[h.id] = h);
 
@@ -662,7 +659,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchAndRenderAllShifts();
         setupModalListeners();
 
-        // bind filters
         planTeamFilter.addEventListener('change', () => renderHelperPool());
         viewTeamFilter.addEventListener('change', () => applyViewFilter());
     }

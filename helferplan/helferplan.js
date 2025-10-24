@@ -1,24 +1,27 @@
+// helferplan server (Express) - merged & updated
+// Based on user's provided starting point - added robust shift ID handling,
+// POST conflict detection (409 + existing_shift), DELETE by id, and tolerant DELETE fallback.
+
 // --- 1. Abhaengigkeiten importieren ---
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 
-<script src="../config.js"></script>
 
 // --- 2. Express-App initialisieren ---
 const app = express();
 const port = Number(process.env.PORT) || 3003;
 
-
 // DB-Pool
 const pool = mysql.createPool({
-    host: process.env.MYSQL_HOST,
+    host: process.env.MYSQL_HOST || 'localhost',
     port: process.env.MYSQL_PORT || 3306,
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
+    user: process.env.MYSQL_USER || 'root',
+    password: process.env.MYSQL_PASSWORD || '',
+    database: process.env.MYSQL_DATABASE || 'volleyball_turnier',
     waitForConnections: true,
-    connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT) || 5
+    connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT) || 5,
+    timezone: 'Z'
 });
 
 // --- 3b. Sicherstellen, dass Settings-Tabelle existiert ---
@@ -27,16 +30,9 @@ const pool = mysql.createPool({
         await pool.query(`
             CREATE TABLE IF NOT EXISTS helferplan_settings
             (
-                setting_key
-                VARCHAR
-            (
-                50
-            ) PRIMARY KEY,
-                setting_value VARCHAR
-            (
-                255
-            ) NOT NULL
-                ) ENGINE=InnoDB;
+                setting_key VARCHAR(50) PRIMARY KEY,
+                setting_value VARCHAR(255) NOT NULL
+            ) ENGINE=InnoDB;
         `);
         console.log('helferplan_settings table OK');
     } catch (err) {
@@ -44,18 +40,12 @@ const pool = mysql.createPool({
     }
 })();
 
-// Optional: versuche einen Unique-Index auf helferplan_helpers.name zu erstellen (falls gewünscht/erlaubt).
-// Das ist optional, aber empfehlenswert als zusätzliche Datenbankgarantie.
-// Der Aufruf ist fehlerrobust (try/catch) und bricht nicht, falls die Tabelle/Spalte noch nicht existiert
-// oder falls der Index bereits existiert bzw. fehlende Rechte vorliegen.
+// Optional: try to create unique index on helper name (best-effort)
 (async function ensureHelperNameUniqueIndex() {
     try {
-        // Hinweis: falls deine MySQL-Variante anders ist oder die Tabelle noch nicht existiert,
-        // kann dieser Befehl fehlschlagen. Dann nur die serverseitige Prüfung verwenden.
         await pool.query("ALTER TABLE helferplan_helpers ADD UNIQUE INDEX uniq_helper_name (name(191));");
         console.log('Unique index on helferplan_helpers.name created/ensured');
     } catch (err) {
-        // Fehlercode 1061 = index already exists, andere Fehler können z.B. fehlende Tabelle sein
         if (err && err.errno === 1061) {
             console.log('Unique index already exists');
         } else {
@@ -68,7 +58,6 @@ const pool = mysql.createPool({
 app.use(cors());
 app.use(express.json());
 app.use((req, res, next) => {
-    // Vorsicht: 'unsafe-eval' reduziert die CSP-Sicherheit. Nutze das nur falls nötig (z.B. Dev).
     const csp = "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline';";
     res.setHeader('Content-Security-Policy', csp);
     next();
@@ -81,6 +70,7 @@ async function safeQuery(sql, params = []) {
         const [rows] = await pool.query(sql, params);
         return rows;
     } catch (err) {
+        console.error('safeQuery error:', err, sql, params);
         throw err;
     }
 }
@@ -103,6 +93,7 @@ function mySQLDatetimeToISOString(mysqlDt) {
     if (!mysqlDt) return null;
     if (mysqlDt instanceof Date) return mysqlDt.toISOString();
     if (typeof mysqlDt === 'string') {
+        // Try converting "YYYY-MM-DD HH:MM:SS" to "YYYY-MM-DDTHH:MM:SSZ"
         const isoCandidate = mysqlDt.replace(' ', 'T') + 'Z';
         const parsed = new Date(isoCandidate);
         if (!isNaN(parsed)) return parsed.toISOString();
@@ -112,6 +103,19 @@ function mySQLDatetimeToISOString(mysqlDt) {
     const parsed = new Date(mysqlDt);
     if (!isNaN(parsed)) return parsed.toISOString();
     return null;
+}
+
+// Helper to map DB row to API shift object (with id)
+function mapShiftRow(row) {
+    return {
+        id: row.id,
+        activity_id: row.activity_id,
+        start_time: mySQLDatetimeToISOString(row.start_time),
+        end_time: mySQLDatetimeToISOString(row.end_time),
+        helper_id: row.helper_id,
+        helper_name: row.helper_name,
+        team_color: row.team_color
+    };
 }
 
 // --- 5. API-Endpunkte ---
@@ -132,119 +136,11 @@ app.post('/api/teams', async (req, res) => {
     try {
         const {name, color_hex} = req.body;
         if (!name || !color_hex) return res.status(400).json({error: 'Name und Farbwert sind erforderlich.'});
-        const result = await pool.query("INSERT INTO helferplan_teams (name, color_hex) VALUES (?, ?);", [name, color_hex]);
-        const insertResult = result[0];
-        res.status(201).json({id: Number(insertResult.insertId), name, color_hex});
+        const [result] = await pool.query("INSERT INTO helferplan_teams (name, color_hex) VALUES (?, ?);", [name, color_hex]);
+        res.status(201).json({id: Number(result.insertId), name, color_hex});
     } catch (err) {
         console.error('DB-Fehler POST /api/teams', err);
         res.status(500).json({error: 'DB-Fehler beim Erstellen des Teams'});
-    }
-});
-
-// Team löschen
-// Patch: robustere DELETE /api/tournament-shifts handler
-// Insert/replace this route in your Express server (helferplan.js)
-
-app.delete('/api/tournament-shifts', async (req, res) => {
-    // Expect JSON body: { activity_id, start_time, helper_id? }
-    const { activity_id, start_time, helper_id } = req.body || {};
-
-    if (!activity_id || !start_time) {
-        return res.status(400).json({ error: 'activity_id und start_time erforderlich' });
-    }
-
-    // Helper to run a parameterized delete query and return affectedRows
-    async function runDelete(sql, params) {
-        try {
-            const [result] = await pool.query(sql, params);
-            // mysql2 promise pool returns result with affectedRows
-            return result && result.affectedRows ? result.affectedRows : 0;
-        } catch (err) {
-            console.error('DB delete error', err, sql, params);
-            throw err;
-        }
-    }
-
-    // Normalize some variants of the start_time to try:
-    const variants = [];
-    // 1) server-provided ISO
-    variants.push(start_time);
-    // 2) ISO without milliseconds (e.g. 2025-10-31T13:00:00Z)
-    const isoNoMs = start_time.replace(/\.\d{3}Z$/, 'Z');
-    if (isoNoMs !== start_time) variants.push(isoNoMs);
-    // 3) SQL datetime (UTC) "YYYY-MM-DD HH:MM:SS"
-    try {
-        const d = new Date(start_time);
-        if (!isNaN(d)) {
-            const sqlDt = d.getUTCFullYear() + '-' +
-                String(d.getUTCMonth()+1).padStart(2,'0') + '-' +
-                String(d.getUTCDate()).padStart(2,'0') + ' ' +
-                String(d.getUTCHours()).padStart(2,'0') + ':' +
-                String(d.getUTCMinutes()).padStart(2,'0') + ':' +
-                String(d.getUTCSeconds()).padStart(2,'0');
-            if (!variants.includes(sqlDt)) variants.push(sqlDt);
-        }
-    } catch (e) {
-        // ignore
-    }
-
-    // We'll keep tried payloads for debugging
-    const attempts = [];
-
-    try {
-        // 1) Exact match (activity + start_time + helper_id) if helper_id provided
-        if (helper_id) {
-            for (const st of variants) {
-                const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ? AND helper_id = ?';
-                attempts.push({ sql, params: [activity_id, st, helper_id] });
-                const affected = await runDelete(sql, [activity_id, st, helper_id]);
-                if (affected > 0) {
-                    return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
-                }
-            }
-        }
-
-        // 2) Tolerant time match within +/- 1 hour with helper_id (if provided)
-        if (helper_id) {
-            // Use TIMESTAMPDIFF to find rows within 1 hour (3600 seconds)
-            const sql = `DELETE ts FROM helferplan_tournament_shifts ts
-                   WHERE ts.activity_id = ?
-                     AND ts.helper_id = ?
-                     AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
-            attempts.push({ sql, params: [activity_id, helper_id, start_time] });
-            const affected2 = await runDelete(sql, [activity_id, helper_id, start_time]);
-            if (affected2 > 0) {
-                return res.json({ message: 'Schicht geloescht (fuzzy match helper)', deletedCount: affected2, attempts });
-            }
-        }
-
-        // 3) Exact match without helper_id
-        for (const st of variants) {
-            const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ?';
-            attempts.push({ sql, params: [activity_id, st] });
-            const affected = await runDelete(sql, [activity_id, st]);
-            if (affected > 0) {
-                return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
-            }
-        }
-
-        // 4) Tolerant time match without helper_id
-        {
-            const sql = `DELETE ts FROM helferplan_tournament_shifts ts
-                   WHERE ts.activity_id = ?
-                     AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
-            attempts.push({ sql, params: [activity_id, start_time] });
-            const affected = await runDelete(sql, [activity_id, start_time]);
-            if (affected > 0) {
-                return res.json({ message: 'Schicht geloescht (fuzzy match)', deletedCount: affected, attempts });
-            }
-        }
-
-        // Nothing deleted
-        return res.status(404).json({ message: 'Keine passende Schicht gefunden', deletedCount: 0, attempts });
-    } catch (err) {
-        console.error('DELETE /api/tournament-shifts error:', err);
-        return res.status(500).json({ error: 'Serverfehler beim Loeschen', detail: err && err.message, attempts });
     }
 });
 
@@ -272,8 +168,6 @@ app.post('/api/helpers', async (req, res) => {
         const validRoles = ['Minderjaehrig', 'Erwachsen', 'Orga'];
         if (!validRoles.includes(role)) return res.status(400).json({error: 'Ungueltige Rolle.'});
 
-        // Serverseitige Prüfung: Name darf nur einmal vorkommen (case-insensitive).
-        // Trim und prüfe mit LOWER(...) für case-insensitive Abgleich.
         const trimmed = String(name).trim();
         const [existing] = await pool.query("SELECT COUNT(*) as cnt FROM helferplan_helpers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?));", [trimmed]);
         const cnt = existing && existing[0] && (existing[0].cnt || existing[0].CNT || existing[0].Cnt) ? Number(existing[0].cnt || existing[0].CNT || existing[0].Cnt) : 0;
@@ -281,14 +175,12 @@ app.post('/api/helpers', async (req, res) => {
             return res.status(409).json({error: 'Name schon belegt.'});
         }
 
-        const result = await pool.query("INSERT INTO helferplan_helpers (name, team_id, role) VALUES (?, ?, ?);", [trimmed, team_id, role]);
-        const insertResult = result[0];
-        res.status(201).json({id: Number(insertResult.insertId), name: trimmed, team_id, role});
+        const [result] = await pool.query("INSERT INTO helferplan_helpers (name, team_id, role) VALUES (?, ?, ?);", [trimmed, team_id, role]);
+        res.status(201).json({id: Number(result.insertId), name: trimmed, team_id, role});
     } catch (err) {
         if (err && err.errno === 1452) {
             return res.status(400).json({error: `Team mit der ID ${req.body.team_id} existiert nicht.`});
         }
-        // Wenn ein Unique-Index vorhanden ist und ein Duplicate-Insert doch durchrutscht, fange das ab:
         if (err && (err.errno === 1062 || err.code === 'ER_DUP_ENTRY')) {
             return res.status(409).json({error: 'Name schon belegt.'});
         }
@@ -309,7 +201,7 @@ app.delete('/api/helpers/:id', async (req, res) => {
     }
 });
 
-// Taetigkeits-Gruppen abrufen (inkl. sort_order)
+// Activity groups
 app.get('/api/activity-groups', async (req, res) => {
     try {
         const rows = await safeQuery("SELECT id, name, sort_order FROM helferplan_activity_groups ORDER BY sort_order ASC, name;");
@@ -320,21 +212,18 @@ app.get('/api/activity-groups', async (req, res) => {
     }
 });
 
-// Eine neue Taetigkeits-Gruppe erstellen (mit sort_order)
 app.post('/api/activity-groups', async (req, res) => {
     try {
         const {name, sort_order} = req.body;
         if (!name) return res.status(400).json({error: 'Name ist erforderlich.'});
-        const result = await pool.query("INSERT INTO helferplan_activity_groups (name, sort_order) VALUES (?, ?);", [name, sort_order || 0]);
-        const insertResult = result[0];
-        res.status(201).json({id: Number(insertResult.insertId), name, sort_order: Number(sort_order) || 0});
+        const [result] = await pool.query("INSERT INTO helferplan_activity_groups (name, sort_order) VALUES (?, ?);", [name, sort_order || 0]);
+        res.status(201).json({id: Number(result.insertId), name, sort_order: Number(sort_order) || 0});
     } catch (err) {
         console.error('DB-Fehler POST /api/activity-groups', err);
         res.status(500).json({error: 'DB-Fehler beim Erstellen der Gruppe'});
     }
 });
 
-// Gruppe löschen
 app.delete('/api/activity-groups/:id', async (req, res) => {
     try {
         const id = req.params.id;
@@ -346,7 +235,7 @@ app.delete('/api/activity-groups/:id', async (req, res) => {
     }
 });
 
-// Alle Taetigkeiten abrufen
+// Activities
 app.get('/api/activities', async (req, res) => {
     try {
         const rows = await safeQuery(`
@@ -362,14 +251,12 @@ app.get('/api/activities', async (req, res) => {
     }
 });
 
-// Eine neue Taetigkeit erstellen
 app.post('/api/activities', async (req, res) => {
     try {
         const {name, group_id, role_requirement} = req.body;
         if (!name || !group_id || !role_requirement) return res.status(400).json({error: 'Name, Gruppen-ID und Rollen-Anforderung sind erforderlich.'});
-        const result = await pool.query("INSERT INTO helferplan_activities (name, group_id, role_requirement) VALUES (?, ?, ?);", [name, group_id, role_requirement]);
-        const insertResult = result[0];
-        res.status(201).json({id: Number(insertResult.insertId), name, group_id, role_requirement});
+        const [result] = await pool.query("INSERT INTO helferplan_activities (name, group_id, role_requirement) VALUES (?, ?, ?);", [name, group_id, role_requirement]);
+        res.status(201).json({id: Number(result.insertId), name, group_id, role_requirement});
     } catch (err) {
         if (err && err.errno === 1452) return res.status(400).json({error: `Gruppe mit der ID ${req.body.group_id} existiert nicht.`});
         console.error('DB-Fehler POST /api/activities', err);
@@ -377,7 +264,6 @@ app.post('/api/activities', async (req, res) => {
     }
 });
 
-// Taetigkeit löschen
 app.delete('/api/activities/:id', async (req, res) => {
     try {
         const id = req.params.id;
@@ -389,11 +275,12 @@ app.delete('/api/activities/:id', async (req, res) => {
     }
 });
 
-// Alle zugewiesenen Turnierschichten abrufen
+// --- Shift endpoints ---
+// Return all tournament shifts (including shift id)
 app.get('/api/tournament-shifts', async (req, res) => {
     try {
         const rows = await safeQuery(`
-            SELECT ts.activity_id,
+            SELECT ts.id, ts.activity_id,
                    ts.start_time,
                    ts.end_time,
                    ts.helper_id,
@@ -401,13 +288,10 @@ app.get('/api/tournament-shifts', async (req, res) => {
                    t.color_hex as team_color
             FROM helferplan_tournament_shifts ts
                      JOIN helferplan_helpers h ON ts.helper_id = h.id
-                     JOIN helferplan_teams t ON h.team_id = t.id;
+                     LEFT JOIN helferplan_teams t ON h.team_id = t.id
+            ORDER BY ts.start_time ASC;
         `);
-        const converted = rows.map(r => ({
-            ...r,
-            start_time: mySQLDatetimeToISOString(r.start_time),
-            end_time: mySQLDatetimeToISOString(r.end_time)
-        }));
+        const converted = rows.map(mapShiftRow);
         res.json(converted);
     } catch (err) {
         console.error('DB-Fehler /api/tournament-shifts', err);
@@ -415,7 +299,11 @@ app.get('/api/tournament-shifts', async (req, res) => {
     }
 });
 
-// Eine Schicht erstellen oder aktualisieren
+/**
+ * POST /api/tournament-shifts
+ * - If conflict (overlap) found: return 409 + existing_shift (do not overwrite)
+ * - Else insert shift and return created shift (including id)
+ */
 app.post('/api/tournament-shifts', async (req, res) => {
     try {
         const {activity_id, start_time, end_time, helper_id} = req.body;
@@ -425,37 +313,172 @@ app.post('/api/tournament-shifts', async (req, res) => {
         const endMy = isoToMySQLDatetime(end_time);
         if (!startMy || !endMy) return res.status(400).json({error: 'Ungueltiges Datumsformat.'});
 
-        const result = await pool.query(
-            "INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE helper_id = VALUES(helper_id);",
-            [activity_id, startMy, endMy, helper_id]
+        // Conflict check: existing.start < new.end AND existing.end > new.start (overlap)
+        const [confRows] = await pool.query(
+            `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
+             FROM helferplan_tournament_shifts
+             WHERE activity_id = ?
+               AND (start_time < ? AND end_time > ?)
+             LIMIT 1`,
+            [activity_id, endMy, startMy]
         );
-        const execResult = result[0];
-        res.status(201).json({message: 'Schicht gespeichert', affectedRows: execResult.affectedRows});
+
+        if (confRows && confRows.length > 0) {
+            // return 409 with existing shift so client can ask user whether to overwrite
+            const existing = mapShiftRow(confRows[0]);
+            return res.status(409).json({ conflict: true, existing_shift: existing });
+        }
+
+        // Insert new shift. Try to populate helper_name and team_color if available from helpers/teams
+        // We'll attempt to get helper_name and team_color first
+        let helperName = null;
+        let teamColor = null;
+        try {
+            const [hrows] = await pool.query("SELECT name, team_id FROM helferplan_helpers WHERE id = ? LIMIT 1", [helper_id]);
+            if (hrows && hrows.length) {
+                helperName = hrows[0].name;
+                const teamId = hrows[0].team_id;
+                if (teamId) {
+                    const [trows] = await pool.query("SELECT color_hex FROM helferplan_teams WHERE id = ? LIMIT 1", [teamId]);
+                    if (trows && trows.length) teamColor = trows[0].color_hex;
+                }
+            }
+        } catch (err) {
+            // non-fatal: continue without helperName/teamColor
+            console.warn('Could not resolve helper/team meta:', err && err.message ? err.message : err);
+        }
+
+        const [insertRes] = await pool.query(
+            `INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id, helper_name, team_color)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [activity_id, startMy, endMy, helper_id, helperName, teamColor]
+        );
+
+        const [rows] = await pool.query(
+            `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
+             FROM helferplan_tournament_shifts WHERE id = ? LIMIT 1`,
+            [insertRes.insertId]
+        );
+
+        if (!rows || rows.length === 0) {
+            return res.status(500).json({ error: 'Schicht angelegt, aber konnte nicht geladen werden' });
+        }
+
+        const created = mapShiftRow(rows[0]);
+        return res.status(201).json(created);
+
     } catch (err) {
         console.error('DB-Fehler POST /api/tournament-shifts', err);
         res.status(500).json({error: 'DB-Fehler beim Speichern der Schicht'});
     }
 });
 
-// Eine Schicht loeschen
-app.delete('/api/tournament-shifts', async (req, res) => {
+/**
+ * DELETE by shift id (most reliable)
+ */
+app.delete('/api/tournament-shifts/:id', async (req, res) => {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'shift id required' });
     try {
-        const {activity_id, start_time} = req.body;
-        if (!activity_id || !start_time) return res.status(400).json({error: 'Activity ID und Startzeit sind erforderlich.'});
-
-        const startMy = isoToMySQLDatetime(start_time);
-        if (!startMy) return res.status(400).json({error: 'Ungueltiges Datumsformat.'});
-
-        await pool.query("DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ?;", [activity_id, startMy]);
-        res.status(200).json({message: 'Schicht geloescht'});
+        const [result] = await pool.query("DELETE FROM helferplan_tournament_shifts WHERE id = ?", [id]);
+        return res.json({ deletedCount: result.affectedRows || 0 });
     } catch (err) {
-        console.error('DB-Fehler DELETE /api/tournament-shifts', err);
-        res.status(500).json({error: 'DB-Fehler beim Loeschen der Schicht'});
+        console.error('DELETE /api/tournament-shifts/:id error', err);
+        return res.status(500).json({ error: 'Fehler beim Löschen der Schicht', detail: err.message });
     }
 });
 
-// --- Settings: GET/POST ---
-// GET: liefert alle Einstellungen als object { key: value }
+/**
+ * Body-based DELETE (legacy fallback). Tries multiple match strategies (exact, tolerant)
+ */
+app.delete('/api/tournament-shifts', async (req, res) => {
+    // Expect JSON body: { activity_id, start_time, helper_id? }
+    const { activity_id, start_time, helper_id } = req.body || {};
+
+    if (!activity_id || !start_time) {
+        return res.status(400).json({ error: 'activity_id und start_time erforderlich' });
+    }
+
+    // Helper to run a parameterized delete query and return affectedRows
+    async function runDelete(sql, params) {
+        try {
+            const [result] = await pool.query(sql, params);
+            return result && result.affectedRows ? result.affectedRows : 0;
+        } catch (err) {
+            console.error('DB delete error', err, sql, params);
+            throw err;
+        }
+    }
+
+    const variants = [];
+    variants.push(start_time);
+    const isoNoMs = start_time.replace(/\.\d{3}Z$/, 'Z');
+    if (isoNoMs !== start_time) variants.push(isoNoMs);
+    try {
+        const d = new Date(start_time);
+        if (!isNaN(d)) {
+            const sqlDt = d.getUTCFullYear() + '-' +
+                String(d.getUTCMonth()+1).padStart(2,'0') + '-' +
+                String(d.getUTCDate()).padStart(2,'0') + ' ' +
+                String(d.getUTCHours()).padStart(2,'0') + ':' +
+                String(d.getUTCMinutes()).padStart(2,'0') + ':' +
+                String(d.getUTCSeconds()).padStart(2,'0');
+            if (!variants.includes(sqlDt)) variants.push(sqlDt);
+        }
+    } catch (e) {}
+
+    const attempts = [];
+
+    try {
+        if (helper_id) {
+            for (const st of variants) {
+                const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ? AND helper_id = ?';
+                attempts.push({ sql, params: [activity_id, st, helper_id] });
+                const affected = await runDelete(sql, [activity_id, st, helper_id]);
+                if (affected > 0) {
+                    return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
+                }
+            }
+
+            const sql = `DELETE ts FROM helferplan_tournament_shifts ts
+                   WHERE ts.activity_id = ?
+                     AND ts.helper_id = ?
+                     AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
+            attempts.push({ sql, params: [activity_id, helper_id, start_time] });
+            const affected2 = await runDelete(sql, [activity_id, helper_id, start_time]);
+            if (affected2 > 0) {
+                return res.json({ message: 'Schicht geloescht (fuzzy match helper)', deletedCount: affected2, attempts });
+            }
+        }
+
+        for (const st of variants) {
+            const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ?';
+            attempts.push({ sql, params: [activity_id, st] });
+            const affected = await runDelete(sql, [activity_id, st]);
+            if (affected > 0) {
+                return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
+            }
+        }
+
+        {
+            const sql = `DELETE ts FROM helferplan_tournament_shifts ts
+                   WHERE ts.activity_id = ?
+                     AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
+            attempts.push({ sql, params: [activity_id, start_time] });
+            const affected = await runDelete(sql, [activity_id, start_time]);
+            if (affected > 0) {
+                return res.json({ message: 'Schicht geloescht (fuzzy match)', deletedCount: affected, attempts });
+            }
+        }
+
+        return res.status(404).json({ message: 'Keine passende Schicht gefunden', deletedCount: 0, attempts });
+    } catch (err) {
+        console.error('DELETE /api/tournament-shifts error:', err);
+        return res.status(500).json({ error: 'Serverfehler beim Loeschen', detail: err && err.message, attempts });
+    }
+});
+
+// --- Settings endpoints ---
 app.get('/api/settings', async (req, res) => {
     try {
         const rows = await safeQuery("SELECT setting_key, setting_value FROM helferplan_settings;");
@@ -470,7 +493,6 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-// POST: body { key: value } or { settings: { key: value, ... } }
 app.post('/api/settings', async (req, res) => {
     try {
         const payload = req.body;
