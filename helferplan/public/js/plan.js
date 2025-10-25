@@ -433,10 +433,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 startSlot.classList.add('filled');
                 startSlot.style.backgroundColor = shift.team_color || '#666';
                 startSlot.dataset.helperId = shift.helper_id || '';
-                // store server-provided start and id (if server returns id)
+                // store server-provided start and id (server now reliably returns id)
                 startSlot.dataset.startTime = shift.start_time;
                 if (shift.id) startSlot.dataset.shiftId = shift.id;
-                if (shift.shift_id) startSlot.dataset.shiftId = shift.shift_id; // alt name
 
                 if (duration > 1) {
                     startSlot.style.gridColumn = `span ${duration}`;

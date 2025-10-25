@@ -15,7 +15,7 @@ const port = Number(process.env.PORT) || 3003;
 // DB-Pool
 const pool = mysql.createPool({
     host: process.env.MYSQL_HOST || 'localhost',
-    port: process.env.MYSQL_PORT || 3306,
+    port: Number(process.env.MYSQL_PORT) || 3306,
     user: process.env.MYSQL_USER || ,
     password: process.env.MYSQL_PASSWORD || ,
     database: process.env.MYSQL_DATABASE || ,
@@ -196,6 +196,10 @@ app.delete('/api/helpers/:id', async (req, res) => {
         await pool.query("DELETE FROM helferplan_helpers WHERE id = ?;", [id]);
         res.status(200).json({message: 'Helfer gelöscht'});
     } catch (err) {
+        // If ON DELETE RESTRICT is in place and there are shifts referencing this helper, MySQL returns errno 1451
+        if (err && err.errno === 1451) {
+            return res.status(400).json({ error: 'Helfer kann nicht gelöscht werden: Er ist noch in Schichten eingetragen.' });
+        }
         console.error('DB-Fehler DELETE /api/helpers', err);
         res.status(500).json({error: 'DB-Fehler beim Löschen des Helfers'});
     }
@@ -348,11 +352,36 @@ app.post('/api/tournament-shifts', async (req, res) => {
             console.warn('Could not resolve helper/team meta:', err && err.message ? err.message : err);
         }
 
-        const [insertRes] = await pool.query(
-            `INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id, helper_name, team_color)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [activity_id, startMy, endMy, helper_id, helperName, teamColor]
-        );
+        let insertRes;
+        try {
+            [insertRes] = await pool.query(
+                `INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id, helper_name, team_color)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [activity_id, startMy, endMy, helper_id, helperName, teamColor]
+            );
+        } catch (err) {
+            // Handle duplicate key race (unique constraint on activity_id,start_time,helper_id)
+            if (err && (err.errno === 1062 || err.code === 'ER_DUP_ENTRY')) {
+                try {
+                    // Try to return the existing conflicting row to client
+                    const [rows] = await pool.query(
+                        `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
+                         FROM helferplan_tournament_shifts
+                         WHERE activity_id = ? AND start_time = ? AND helper_id = ?
+                         LIMIT 1`,
+                        [activity_id, startMy, helper_id]
+                    );
+                    if (rows && rows.length) {
+                        const existing = mapShiftRow(rows[0]);
+                        return res.status(409).json({ conflict: true, existing_shift: existing });
+                    }
+                } catch (e2) {
+                    console.warn('Failed to load existing shift after duplicate key:', e2);
+                }
+                return res.status(409).json({ conflict: true, message: 'Konflikt: Schicht existiert bereits.' });
+            }
+            throw err;
+        }
 
         const [rows] = await pool.query(
             `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
