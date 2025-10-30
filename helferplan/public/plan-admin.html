@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title><!DOCTYPE html>
+      <html lang="de">
+      <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Admin: Zeitblöcke verwalten</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-main { max-width: 1200px; margin: 0 auto; }
+    .admin-layout { display: flex; gap: 12px; align-items: flex-start; }
+    .left-panel { width: 240px; flex: 0 0 240px; }
+    .shift-slot { cursor: pointer; }
+
+    /* Farben für Blöcke */
+    .shift-slot.not-allowed { background-color: #f4f4f4; color: #aaa; }
+    .shift-slot.allowed { background-color: #cce5ff; color: #004085; }
+    .shift-slot.existing { background-color: #ffeeba; color: #856404; }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="index.html">Zurück zum Admin</a>
+  <a href="plan-admin.html" class="active">Zeitblöcke verwalten</a>
+</nav>
+
+<main class="admin-main">
+  <h1>Admin: Zeitblöcke verwalten</h1>
+
+  <div>
+    <label for="admin-password">Admin-Passwort:</label>
+    <input type="password" id="admin-password" placeholder="Passwort eingeben">
+    <button id="admin-login-button">Login</button>
+    <p id="admin-error" style="color: red; display: none;">Ungültiges Passwort</p>
+  </div>
+
+  <div id="admin-layout" class="admin-layout" style="display: none;">
+    <div class="left-panel">
+      <h3>Aktivitäten</h3>
+      <ul id="activity-list"></ul>
+    </div>
+
+    <div id="plan-container">
+      <div id="timeline-header" aria-hidden="true"></div>
+      <div id="grid-container" role="grid"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  const API_URL = '/api'; // Basis-URL für die API
+  const ADMIN_PASSWORD = '1881'; // Standard-Admin-Passwort
+
+  let selectedActivity = null;
+
+  document.getElementById('admin-login-button').addEventListener('click', () => {
+    const password = document.getElementById('admin-password').value;
+    if (password === ADMIN_PASSWORD) {
+      document.getElementById('admin-layout').style.display = 'flex';
+      document.getElementById('admin-error').style.display = 'none';
+      loadActivities();
+    } else {
+      document.getElementById('admin-error').style.display = 'block';
+    }
+  });
+
+  async function loadActivities() {
+    const res = await fetch(`${API_URL}/activities`);
+    const activities = await res.json();
+    const list = document.getElementById('activity-list');
+    list.innerHTML = '';
+    activities.forEach(activity => {
+      const li = document.createElement('li');
+      li.textContent = activity.name;
+      li.style.cursor = 'pointer';
+      li.addEventListener('click', () => {
+        selectedActivity = activity;
+        renderGrid(activity);
+      });
+      list.appendChild(li);
+    });
+  }
+
+  async function renderGrid(activity) {
+    const res = await fetch(`${API_URL}/activities/${activity.id}/allowed-time-blocks`);
+    const allowedBlocks = await res.json();
+
+    // Lade bestehende Schichten
+    const shiftsRes = await fetch(`${API_URL}/tournament-shifts?activity_id=${activity.id}`);
+    const existingShifts = await shiftsRes.json();
+
+    const grid = document.getElementById('grid-container');
+    grid.innerHTML = '';
+
+    for (let hour = 0; hour < 48; hour++) { // Beispiel: 48 Stunden
+      const slot = document.createElement('div');
+      slot.className = 'shift-slot';
+      slot.dataset.hour = hour;
+
+      const isAllowed = allowedBlocks.some(block => hour >= block.start && hour < block.end);
+      const isExisting = existingShifts.some(shift => hour >= shift.start_time && hour < shift.end_time);
+
+      if (isExisting) {
+        slot.classList.add('existing');
+        slot.textContent = `Schicht (${hour}:00)`;
+      } else if (isAllowed) {
+        slot.classList.add('allowed');
+        slot.textContent = `Erlaubt (${hour}:00)`;
+      } else {
+        slot.classList.add('not-allowed');
+        slot.textContent = `Nicht erlaubt (${hour}:00)`;
+      }
+
+      slot.addEventListener('click', () => toggleBlock(hour));
+      grid.appendChild(slot);
+    }
+  }
+
+  function toggleBlock(hour) {
+    // Blöcke umschalten (Allowed/Not Allowed)
+    console.log(`Block umschalten: ${hour}`);
+  }
+</script>
+</body>
+</html></title>
+</head>
+<body>
+
+</body>
+</html>
