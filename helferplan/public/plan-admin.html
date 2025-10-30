@@ -6,87 +6,47 @@
   <title>Admin: Zeitblöcke verwalten</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    html, body {
-      overflow-x: hidden;
-    }
+    html, body { overflow-x: hidden; }
+    .plan-main { max-width: 1200px; margin: 0 auto; }
+    .plan-layout { display: flex; gap: 12px; align-items: flex-start; }
+    .left-panel { width: 240px; flex: 0 0 240px; }
 
-    .plan-main {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
+    #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; }
+    #timeline-header { position: sticky; top: 0; background: #fff; z-index: 10; display:block; }
 
-    .plan-layout {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-    }
+    /* wichtig: alle relevant boxen box-sizing border-box */
+    #timeline-header, #grid-container, .hour-slot, .shift-slot, .activity-name { box-sizing: border-box; }
 
-    .left-panel {
-      width: 240px;
-      flex: 0 0 240px;
-    }
+    .hour-slot { font-size:12px; padding:4px 6px; text-align:center; background:#fafafa; }
+    .shift-slot { font-size:12px; padding:6px; min-height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: transform .08s, outline .08s; }
+    .shift-slot.filled { color:#fff; }
 
-    #plan-container {
-      overflow-x: auto;
-      flex: 1 1 auto;
-      position: relative;
-    }
+    .dimmed { opacity: .28; filter: grayscale(80%); }
 
-    #timeline-header {
-      position: sticky;
-      top: 0;
-      background: #fff;
-      z-index: 10;
-      display: block;
-    }
+    .shift-slot.potential-drop { outline:3px dashed rgba(33,150,243,0.9); transform: translateY(-1px); box-shadow:0 0 0 3px rgba(33,150,243,0.04) inset; }
+    .shift-slot.drop-target { outline:3px solid rgba(33,150,243,0.95); transform: translateY(-2px); box-shadow:0 0 0 3px rgba(33,150,243,0.08) inset; }
 
-    .hour-slot {
-      font-size: 12px;
-      padding: 4px 6px;
-      text-align: center;
-      background: #fafafa;
-    }
+    .slot-hidden { display:none !important; }
 
-    .shift-slot {
-      font-size: 12px;
-      padding: 6px;
-      min-height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      overflow: hidden;
-      transition: transform 0.08s, outline 0.08s;
-    }
+    /* die linke placeholder-zelle im header (falls sichtbar) auf transparent setzen */
+    .left-placeholder { background: transparent !important; }
 
-    .shift-slot.allowed {
-      background-color: #cce5ff;
-      border: 1px solid #004085;
-    }
-
-    .shift-slot.not-allowed {
-      background-color: #f4f4f4;
-      border: 1px dashed #aaa;
-    }
-
-    .shift-slot.hover {
-      outline: 3px dashed #007bff;
-    }
-
+    /* Die linke Spalte (activity name) ist sticky, Teil des selben Grids */
     .activity-name {
-      padding: 8px;
       background: #fff;
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      padding: 8px;
       border-right: 1px solid #e6e6e6;
-      font-weight: 600;
-      text-align: center;
+      min-height: 36px;
+      display:flex;
+      align-items:center;
+      font-weight:600;
     }
 
-    .activity-row {
-      display: grid;
-      grid-template-columns: 240px auto;
-      align-items: center;
-      border-bottom: 1px solid #ddd;
-    }
+    .activity-group-header { padding:8px 0 4px 0; font-weight:700; grid-column:1 / -1; background: transparent; }
+    #grid-container { overflow: visible; }
   </style>
 </head>
 <body>
@@ -110,18 +70,9 @@
     </div>
   </div>
 </main>
+
 <script src="/helferplan/public/config.js"></script>
 <script>
-  const API_URL_HELFERPLAN = (() => {
-    const meta = document.querySelector('meta[name="api-url-helferplan"]');
-    if (meta && meta.content) return meta.content.replace(/\/$/, '');
-    if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return `${window.location.protocol}//${window.location.hostname}:3003/api`;
-    }
-    return `${window.location.origin}/api`;
-  })();
-
   document.addEventListener('DOMContentLoaded', async () => {
     const timelineHeader = document.getElementById('timeline-header');
     const gridContainer = document.getElementById('grid-container');
@@ -130,23 +81,27 @@
     let allowedBlocks = {};
 
     async function fetchActivities() {
-      const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
+      const res = await fetch(`${window.API_URL_HELFERPLAN}/activities`);
       activities = await res.json();
     }
 
     async function fetchAllowedBlocks() {
       for (const activity of activities) {
-        const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+        const res = await fetch(`${window.API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
         allowedBlocks[activity.id] = await res.json();
       }
     }
 
     function renderTimeline() {
       timelineHeader.innerHTML = '';
-      for (let hour = 0; hour < 48; hour++) {
+      const totalHours = 48; // Beispiel für 2 Tage
+      timelineHeader.style.gridTemplateColumns = `repeat(${totalHours}, 40px)`;
+
+      for (let hour = 0; hour < totalHours; hour++) {
         const hourSlot = document.createElement('div');
         hourSlot.className = 'hour-slot';
-        hourSlot.textContent = `${12 + (hour % 24)}:00`;
+        const time = `${12 + (hour % 24)}:00`; // Uhrzeit berechnen
+        hourSlot.textContent = time;
         timelineHeader.appendChild(hourSlot);
       }
     }
@@ -156,15 +111,13 @@
       activities.forEach(activity => {
         const row = document.createElement('div');
         row.className = 'activity-row';
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = `200px repeat(48, 40px)`; // 200px für Aktivitätsnamen, 48 für Stunden
 
         const nameCell = document.createElement('div');
         nameCell.className = 'activity-name';
         nameCell.textContent = activity.name;
         row.appendChild(nameCell);
-
-        const grid = document.createElement('div');
-        grid.style.display = 'grid';
-        grid.style.gridTemplateColumns = `repeat(48, 40px)`;
 
         for (let hour = 0; hour < 48; hour++) {
           const slot = document.createElement('div');
@@ -193,7 +146,7 @@
               slot.classList.remove('not-allowed');
               slot.classList.add('allowed');
             }
-            await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, {
+            await fetch(`${window.API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ blocks: updatedBlocks })
@@ -201,10 +154,9 @@
             allowedBlocks[activity.id] = updatedBlocks;
           });
 
-          grid.appendChild(slot);
+          row.appendChild(slot);
         }
 
-        row.appendChild(grid);
         gridContainer.appendChild(row);
       });
     }
