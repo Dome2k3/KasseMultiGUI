@@ -24,6 +24,9 @@ const pool = mysql.createPool({
     timezone: 'Z'
 });
 
+// Admin-Passwort (Standard: 1881)
+const ADMIN_PASSWORD = '1881';
+
 // --- 3b. Sicherstellen, dass Settings-Tabelle existiert ---
 (async function ensureSettingsTable() {
     try {
@@ -507,6 +510,58 @@ app.post('/api/settings', async (req, res) => {
         res.status(500).json({error: 'DB-Fehler beim Speichern der Einstellungen'});
     }
 });
+
+
+// --- Zusätzliche API-Endpunkte für allowed_time_blocks ---
+
+
+// 1. GET: Erlaubte Zeitblöcke für eine Aktivität abrufen
+app.get('/api/activities/:id/allowed-time-blocks', async (req, res) => {
+    const activityId = req.params.id;
+    try {
+        const [result] = await pool.query(
+            "SELECT allowed_time_blocks FROM helferplan_activities WHERE id = ?",
+            [activityId]
+        );
+        if (result.length === 0) {
+            return res.status(404).json({ error: 'Aktivität nicht gefunden.' });
+        }
+        const allowedTimeBlocks = result[0].allowed_time_blocks
+            ? JSON.parse(result[0].allowed_time_blocks)
+            : [];
+        res.json(allowedTimeBlocks);
+    } catch (err) {
+        console.error('GET /api/activities/:id/allowed-time-blocks Fehler:', err);
+        res.status(500).json({ error: 'Serverfehler beim Abrufen der Zeitblöcke.' });
+    }
+});
+
+// 2. POST: Erlaubte Zeitblöcke für eine Aktivität aktualisieren
+app.post('/api/activities/:id/allowed-time-blocks', async (req, res) => {
+    const activityId = req.params.id;
+    const { blocks, password } = req.body;
+
+    if (password !== ADMIN_PASSWORD) {
+        return res.status(403).json({ error: 'Ungültiges Admin-Passwort.' });
+    }
+
+    if (!Array.isArray(blocks)) {
+        return res.status(400).json({ error: 'blocks muss ein Array sein.' });
+    }
+
+    try {
+        const blocksJson = JSON.stringify(blocks);
+        await pool.query(
+            "UPDATE helferplan_activities SET allowed_time_blocks = ? WHERE id = ?",
+            [blocksJson, activityId]
+        );
+        res.status(200).json({ success: true });
+    } catch (err) {
+        console.error('POST /api/activities/:id/allowed-time-blocks Fehler:', err);
+        res.status(500).json({ error: 'Serverfehler beim Aktualisieren der Zeitblöcke.' });
+    }
+});
+
 
 // --- 6. Server starten ---
 app.listen(port, () => {
