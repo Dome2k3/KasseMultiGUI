@@ -221,10 +221,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (shiftDate !== date) return false;
                 
                 // Check if this shift's start time matches our slot index
-                // Expected format: "2024-07-19T08:XX:00.000Z" where XX = slotIndex
+                // We use minute offset (0-39) to uniquely identify each slot
                 const startTime = new Date(s.start_time);
-                const expectedMinutes = i % 60; // Handle overflow if needed
-                return startTime.getMinutes() === expectedMinutes;
+                return startTime.getMinutes() === i;
             });
             
             const slotHtml = `
@@ -260,9 +259,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     async function saveShift(date, dayType, slotIndex, helperId) {
         try {
+            // NOTE: We use minute offsets (0-39) to create unique shift records for each slot.
+            // This is a pragmatic solution that works for up to 60 slots without schema changes.
+            // For a production system, consider adding a 'slot_index' column to the database.
+            // 
             // Calculate start and end times with unique minutes for each slot
-            // This allows us to have 40 different shift records per day
-            // Start at 8:00, each slot is offset by 1 minute (purely for uniqueness)
+            // Start at 8:00, each slot is offset by slotIndex minutes
             const baseDate = new Date(date + 'T08:00:00Z');
             baseDate.setMinutes(baseDate.getMinutes() + slotIndex);
             const startTime = baseDate.toISOString();
