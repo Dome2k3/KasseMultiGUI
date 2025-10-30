@@ -71,16 +71,16 @@
 
   let selectedActivity = null;
 
-  document.getElementById('admin-login-button').addEventListener('click', () => {
-    const password = document.getElementById('admin-password').value;
-    if (password === ADMIN_PASSWORD) {
-      document.getElementById('admin-layout').style.display = 'flex';
-      document.getElementById('admin-error').style.display = 'none';
-      loadActivities();
-    } else {
-      document.getElementById('admin-error').style.display = 'block';
-    }
-  });
+  //document.getElementById('admin-login-button').addEventListener('click', () => {
+  //  const password = document.getElementById('admin-password').value;
+  //  if (password === ADMIN_PASSWORD) {
+   //   document.getElementById('admin-layout').style.display = 'flex';
+  //    document.getElementById('admin-error').style.display = 'none';
+   //   loadActivities();
+   // } else {
+   //   document.getElementById('admin-error').style.display = 'block';
+  //  }
+  //});
 
   async function loadActivities() {
     const res = await fetch(`${API_URL}/activities`);
