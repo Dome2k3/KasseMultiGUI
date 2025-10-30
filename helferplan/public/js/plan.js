@@ -644,6 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
     }
 
+
     // --- Initialization ---
     async function init() {
         try {
