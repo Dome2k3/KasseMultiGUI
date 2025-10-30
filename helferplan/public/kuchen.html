@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuchen-Spenden Planung</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .cakes-container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .day-column {
+            flex: 1;
+            min-width: 300px;
+            border: 1px solid #ddd;
+            padding: 16px;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .day-column h3 {
+            margin-top: 0;
+            color: #005A9F;
+            border-bottom: 2px solid #005A9F;
+            padding-bottom: 8px;
+            text-align: center;
+        }
+        .cake-row {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .cake-row.filled {
+            border-color: #4CAF50;
+            background-color: #e8f5e9;
+        }
+        .cake-field {
+            margin-bottom: 8px;
+        }
+        .cake-field label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .cake-field select,
+        .cake-field input[type="text"] {
+            width: 100%;
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .cake-field input[type="checkbox"] {
+            margin-right: 6px;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: #333;
+        }
+        .row-number {
+            font-size: 11px;
+            color: #999;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .clear-cake-btn {
+            background: #d32f2f;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .clear-cake-btn:hover {
+            background: #b71c1c;
+        }
+        .info-text {
+            font-size: 13px;
+            color: #666;
+            font-style: italic;
+            margin-bottom: 16px;
+        }
+        .team-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: white;
+            font-size: 11px;
+            margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="index.html">Admin: Stammdaten</a>
+    <a href="plan.html">Turnier-Planung</a>
+    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="aufbau-abbau.html">Auf-/Abbau</a>
+    <a href="kuchen.html" class="active">Kuchen</a>
+</nav>
+
+<main>
+    <h1>Kuchen-Spenden Planung</h1>
+    <p class="info-text">Tragen Sie hier ein, welche Helfer an welchem Tag einen Kuchen spenden. Die Anzahl der benötigten Kuchen pro Tag wird in den Admin-Einstellungen festgelegt.</p>
+    
+    <div id="cakes-container" class="cakes-container">
+        <!-- Day columns will be generated dynamically -->
+    </div>
+</main>
+
+<!-- Lade runtime config vor den App-Skripten -->
+<script src="/helferplan/public/config.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    // API URL setup (same pattern as plan.js)
+    const API_URL = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
+    
+    const container = document.getElementById('cakes-container');
+    
+    let helpers = [];
+    let teams = [];
+    let cakes = [];
+    let settings = {};
+    
+    // Fetch all required data
+    async function loadData() {
+        try {
+            // Load helpers
+            const helpersRes = await fetch(`${API_URL}/helpers`);
+            helpers = await helpersRes.json();
+            
+            // Load teams
+            const teamsRes = await fetch(`${API_URL}/teams`);
+            teams = await teamsRes.json();
+            
+            // Load settings
+            const settingsRes = await fetch(`${API_URL}/settings`);
+            settings = await settingsRes.json();
+            
+            // Load existing cakes
+            const cakesRes = await fetch(`${API_URL}/cakes`);
+            cakes = await cakesRes.json();
+        } catch (err) {
+            console.error('Error loading data:', err);
+            alert('Fehler beim Laden der Daten');
+        }
+    }
+    
+    function getTeamColor(teamId) {
+        const team = teams.find(t => t.id === teamId);
+        return team ? team.color_hex : '#999';
+    }
+    
+    function renderDays() {
+        container.innerHTML = '';
+        
+        const days = ['Freitag', 'Samstag', 'Sonntag'];
+        const settingsKeys = ['cakes_friday', 'cakes_saturday', 'cakes_sunday'];
+        
+        days.forEach((day, idx) => {
+            const count = parseInt(settings[settingsKeys[idx]] || 0);
+            if (count > 0) {
+                renderDayColumn(day, count);
+            }
+        });
+    }
+    
+    function renderDayColumn(day, count) {
+        const column = document.createElement('div');
+        column.className = 'day-column';
+        column.innerHTML = `<h3>${day}</h3>`;
+        
+        // Get existing cakes for this day
+        const dayCakes = cakes.filter(c => c.donation_day === day);
+        
+        // Create rows for the specified count
+        for (let i = 0; i < count; i++) {
+            const existingCake = dayCakes[i] || null;
+            const row = createCakeRow(day, i + 1, existingCake);
+            column.appendChild(row);
+        }
+        
+        container.appendChild(column);
+    }
+    
+    function createCakeRow(day, rowNumber, existingCake) {
+        const row = document.createElement('div');
+        row.className = 'cake-row';
+        if (existingCake && existingCake.helper_id) {
+            row.classList.add('filled');
+        }
+        
+        const cakeId = existingCake ? existingCake.id : null;
+        const helperId = existingCake ? existingCake.helper_id : '';
+        const cakeType = existingCake ? existingCake.cake_type : '';
+        const containsNuts = existingCake ? existingCake.contains_nuts : 0;
+        
+        row.innerHTML = `
+            <div class="row-number">Kuchen ${rowNumber}</div>
+            
+            <div class="cake-field">
+                <label>Helfer:</label>
+                <select class="helper-select" data-day="${day}" data-id="${cakeId || ''}" data-row="${rowNumber}">
+                    <option value="">-- Helfer wählen --</option>
+                    ${helpers.map(h => {
+                        const selected = h.id == helperId ? 'selected' : '';
+                        const teamName = h.team_name ? ` - ${h.team_name}` : '';
+                        return `<option value="${h.id}" ${selected}>${h.name}${teamName}</option>`;
+                    }).join('')}
+                </select>
+            </div>
+            
+            <div class="cake-field">
+                <label>Kuchenname:</label>
+                <input type="text" class="cake-type-input" data-day="${day}" data-id="${cakeId || ''}" 
+                       value="${cakeType || ''}" placeholder="z.B. Apfelkuchen">
+            </div>
+            
+            <div class="cake-field">
+                <label class="checkbox-label">
+                    <input type="checkbox" class="nuts-checkbox" data-day="${day}" data-id="${cakeId || ''}"
+                           ${containsNuts ? 'checked' : ''}>
+                    Enthält Nüsse
+                </label>
+            </div>
+            
+            ${existingCake ? `<button class="clear-cake-btn" data-id="${cakeId}">Kuchen entfernen</button>` : ''}
+        `;
+        
+        // Add event listeners
+        const helperSelect = row.querySelector('.helper-select');
+        const cakeTypeInput = row.querySelector('.cake-type-input');
+        const nutsCheckbox = row.querySelector('.nuts-checkbox');
+        const clearBtn = row.querySelector('.clear-cake-btn');
+        
+        helperSelect.addEventListener('change', () => saveCake(day, cakeId, helperSelect.value, cakeTypeInput.value, nutsCheckbox.checked));
+        cakeTypeInput.addEventListener('blur', () => saveCake(day, cakeId, helperSelect.value, cakeTypeInput.value, nutsCheckbox.checked));
+        nutsCheckbox.addEventListener('change', () => saveCake(day, cakeId, helperSelect.value, cakeTypeInput.value, nutsCheckbox.checked));
+        
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => deleteCake(cakeId));
+        }
+        
+        return row;
+    }
+    
+    async function saveCake(day, cakeId, helperId, cakeType, containsNuts) {
+        try {
+            const payload = {
+                donation_day: day,
+                helper_id: helperId || null,
+                cake_type: cakeType || null,
+                contains_nuts: containsNuts ? 1 : 0
+            };
+            
+            if (cakeId) {
+                payload.id = cakeId;
+            }
+            
+            const response = await fetch(`${API_URL}/cakes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) throw new Error('Speichern fehlgeschlagen');
+            
+            const result = await response.json();
+            console.log('Kuchen gespeichert:', result);
+            
+            // Reload data and re-render
+            await loadData();
+            renderDays();
+        } catch (err) {
+            console.error('Error saving cake:', err);
+            alert('Fehler beim Speichern des Kuchens');
+        }
+    }
+    
+    async function deleteCake(cakeId) {
+        if (!confirm('Möchten Sie diesen Kuchen-Eintrag wirklich löschen?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${API_URL}/cakes/${cakeId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) throw new Error('Löschen fehlgeschlagen');
+            
+            console.log('Kuchen gelöscht:', cakeId);
+            
+            // Reload data and re-render
+            await loadData();
+            renderDays();
+        } catch (err) {
+            console.error('Error deleting cake:', err);
+            alert('Fehler beim Löschen des Kuchens');
+        }
+    }
+    
+    // Initial load
+    await loadData();
+    renderDays();
+});
+</script>
+</body>
+</html>

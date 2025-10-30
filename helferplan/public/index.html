@@ -40,6 +40,8 @@
     <a href="index.html" class="active">Admin: Stammdaten</a>
     <a href="plan.html">Turnier-Planung</a>
     <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="aufbau-abbau.html">Auf-/Abbau</a>
+    <a href="kuchen.html">Kuchen</a>
 </nav>
 <main>
     <h1>Admin-Dashboard: Stammdaten</h1>
@@ -133,26 +135,46 @@
     <hr>
 
     <section>
-        <h2>Event-Daten (Fr - So)</h2>
-        <div style="display:flex; gap:10px; align-items:center;">
+        <h2>Event-Daten & Einstellungen</h2>
+        
+        <!-- Turniertage -->
+        <h3>Turniertage (Fr - So)</h3>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px;">
             <label>Freitag: <input type="date" id="setting-friday"></label>
             <label>Samstag: <input type="date" id="setting-saturday"></label>
             <label>Sonntag: <input type="date" id="setting-sunday"></label>
             <button id="save-settings-button">Speichern</button>
         </div>
 
-        <!-- NEU: Auf-/Abbau Tage in Admin angeben -->
-        <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
-            <label>Aufbau-Tage: <input type="number" id="setup-days-input" min="0" value="3" style="width:60px"></label>
-            <label>Abbau-Tage: <input type="number" id="teardown-days-input" min="0" value="1" style="width:60px"></label>
-            <button id="save-builddays-button">Speichern (Auf-/Abbau)</button>
-            <button id="show-aufbau-button">Auf-/Abbau anzeigen</button>
+        <!-- Auf-/Abbau Einstellungen -->
+        <h3>Auf- und Abbau Einstellungen</h3>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px;">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label>Aufbau Tag 1: <input type="date" id="setup-day-1"></label>
+                <label>Min. Helfer: <input type="number" id="setup-day-1-min" min="0" max="40" value="10" style="width:70px"></label>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label>Aufbau Tag 2: <input type="date" id="setup-day-2"></label>
+                <label>Min. Helfer: <input type="number" id="setup-day-2-min" min="0" max="40" value="10" style="width:70px"></label>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label>Aufbau Tag 3: <input type="date" id="setup-day-3"></label>
+                <label>Min. Helfer: <input type="number" id="setup-day-3-min" min="0" max="40" value="10" style="width:70px"></label>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label>Abbau Tag: <input type="date" id="teardown-day-1"></label>
+                <label>Min. Helfer: <input type="number" id="teardown-day-1-min" min="0" max="40" value="10" style="width:70px"></label>
+            </div>
+            <button id="save-aufbau-settings-button">Auf-/Abbau Einstellungen speichern</button>
         </div>
 
-        <!-- NEU: Auf-/Abbau Anzeige (wird per JS befüllt) -->
-        <div id="aufbau-section">
-            <h3>Auf- und Abbau Übersicht</h3>
-            <div id="aufbau-container"></div>
+        <!-- Kuchen Einstellungen -->
+        <h3>Kuchen-Anzahl pro Turniertag</h3>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px;">
+            <label>Freitag: <input type="number" id="cakes-friday" min="0" value="10" style="width:70px"></label>
+            <label>Samstag: <input type="number" id="cakes-saturday" min="0" value="12" style="width:70px"></label>
+            <label>Sonntag: <input type="number" id="cakes-sunday" min="0" value="4" style="width:70px"></label>
+            <button id="save-cakes-settings-button">Kuchen-Anzahl speichern</button>
         </div>
     </section>
 

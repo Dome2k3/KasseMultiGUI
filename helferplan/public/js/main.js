@@ -47,13 +47,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingSunday = document.getElementById('setting-sunday');
     const saveSettingsButton = document.getElementById('save-settings-button');
 
-    // Auf-/Abbau inputs
-    const setupDaysInput = document.getElementById('setup-days-input');
-    const teardownDaysInput = document.getElementById('teardown-days-input');
-    const saveBuildDaysButton = document.getElementById('save-builddays-button');
-    const showAufbauButton = document.getElementById('show-aufbau-button');
-    const aufbauSection = document.getElementById('aufbau-section');
-    const aufbauContainer = document.getElementById('aufbau-container');
+    // Auf-/Abbau settings inputs
+    const setupDay1 = document.getElementById('setup-day-1');
+    const setupDay1Min = document.getElementById('setup-day-1-min');
+    const setupDay2 = document.getElementById('setup-day-2');
+    const setupDay2Min = document.getElementById('setup-day-2-min');
+    const setupDay3 = document.getElementById('setup-day-3');
+    const setupDay3Min = document.getElementById('setup-day-3-min');
+    const teardownDay1 = document.getElementById('teardown-day-1');
+    const teardownDay1Min = document.getElementById('teardown-day-1-min');
+    const saveAufbauSettingsButton = document.getElementById('save-aufbau-settings-button');
+
+    // Kuchen settings inputs
+    const cakesFriday = document.getElementById('cakes-friday');
+    const cakesSaturday = document.getElementById('cakes-saturday');
+    const cakesSunday = document.getElementById('cakes-sunday');
+    const saveCakesSettingsButton = document.getElementById('save-cakes-settings-button');
 
     // Event title line element
     const eventTitleLine = document.getElementById('event-title-line');
@@ -322,13 +331,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${API_URL}/settings`);
             if (!res.ok) throw new Error('Settings load failed');
             const settings = await res.json();
+            
+            // Tournament days
             if (settings.event_friday) settingFriday.value = settings.event_friday;
             if (settings.event_saturday) settingSaturday.value = settings.event_saturday;
             if (settings.event_sunday) settingSunday.value = settings.event_sunday;
-            // optional neue Keys: setup_days, teardown_days
-            if (typeof settings.setup_days !== 'undefined' && setupDaysInput) setupDaysInput.value = settings.setup_days;
-            if (typeof settings.teardown_days !== 'undefined' && teardownDaysInput) teardownDaysInput.value = settings.teardown_days;
-            // Aktualisiere Titelzeile direkt nach Laden
+            
+            // Setup/Teardown days
+            if (settings.setup_day_1) setupDay1.value = settings.setup_day_1;
+            if (settings.setup_day_1_min) setupDay1Min.value = settings.setup_day_1_min;
+            if (settings.setup_day_2) setupDay2.value = settings.setup_day_2;
+            if (settings.setup_day_2_min) setupDay2Min.value = settings.setup_day_2_min;
+            if (settings.setup_day_3) setupDay3.value = settings.setup_day_3;
+            if (settings.setup_day_3_min) setupDay3Min.value = settings.setup_day_3_min;
+            if (settings.teardown_day_1) teardownDay1.value = settings.teardown_day_1;
+            if (settings.teardown_day_1_min) teardownDay1Min.value = settings.teardown_day_1_min;
+            
+            // Cake counts
+            if (settings.cakes_friday) cakesFriday.value = settings.cakes_friday;
+            if (settings.cakes_saturday) cakesSaturday.value = settings.cakes_saturday;
+            if (settings.cakes_sunday) cakesSunday.value = settings.cakes_sunday;
+            
+            // Update title line
             updateEventTitleLine();
         } catch (err) { console.error('Fehler beim Laden der Einstellungen:', err); }
     }
@@ -351,12 +375,18 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { console.error('Fehler beim Speichern Settings:', err); alert('Speichern fehlgeschlagen'); }
     });
 
-    // Speichern der Aufbau/Abbau Tage in settings
-    saveBuildDaysButton.addEventListener('click', async () => {
+    // Save Auf-/Abbau settings
+    saveAufbauSettingsButton.addEventListener('click', async () => {
         try {
             const payload = {
-                setup_days: Number(setupDaysInput.value || 0),
-                teardown_days: Number(teardownDaysInput.value || 0)
+                setup_day_1: setupDay1.value || '',
+                setup_day_1_min: setupDay1Min.value || '10',
+                setup_day_2: setupDay2.value || '',
+                setup_day_2_min: setupDay2Min.value || '10',
+                setup_day_3: setupDay3.value || '',
+                setup_day_3_min: setupDay3Min.value || '10',
+                teardown_day_1: teardownDay1.value || '',
+                teardown_day_1_min: teardownDay1Min.value || '10'
             };
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
@@ -364,8 +394,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ settings: payload })
             });
             if (!res.ok) throw new Error('Speichern fehlgeschlagen');
-            alert('Auf-/Abbau Tage gespeichert');
+            alert('Auf-/Abbau Einstellungen gespeichert');
         } catch (err) { console.error('Fehler beim Speichern Aufbau/Abbau:', err); alert('Speichern fehlgeschlagen'); }
+    });
+
+    // Save cake count settings
+    saveCakesSettingsButton.addEventListener('click', async () => {
+        try {
+            const payload = {
+                cakes_friday: cakesFriday.value || '0',
+                cakes_saturday: cakesSaturday.value || '0',
+                cakes_sunday: cakesSunday.value || '0'
+            };
+            const res = await fetch(`${API_URL}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: payload })
+            });
+            if (!res.ok) throw new Error('Speichern fehlgeschlagen');
+            alert('Kuchen-Anzahl gespeichert');
+        } catch (err) { console.error('Fehler beim Speichern Kuchen-Anzahl:', err); alert('Speichern fehlgeschlagen'); }
     });
 
     // Erzeugt die lesbare Event-Titelzeile aus Freitag und Sonntag (inkl. Wochentag)
@@ -389,67 +437,6 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (!f && s) eventTitleLine.textContent = `Bergsträßer Volleyball Turnier am ${formatDateWithWeekday(s)}`;
         }
     }
-
-    // Erzeuge Auf-/Abbau-Ansicht basierend auf Einstellungen (sichtbar im Admin)
-    function generateAufbauView() {
-        if (!aufbauContainer) return;
-        aufbauContainer.innerHTML = '';
-        const friday = settingFriday.value ? new Date(settingFriday.value + 'T00:00:00') : null;
-        const sunday = settingSunday.value ? new Date(settingSunday.value + 'T00:00:00') : null;
-        const setupDays = Number(setupDaysInput.value || 0);
-        const teardownDays = Number(teardownDaysInput.value || 0);
-
-        // Aufbau: Tage vor Freitag (1..setupDays)
-        if (friday && setupDays > 0) {
-            for (let i = setupDays; i >= 1; i--) {
-                const d = new Date(friday);
-                d.setDate(friday.getDate() - i);
-                const dayDiv = document.createElement('div');
-                dayDiv.className = 'aufbau-day';
-                dayDiv.innerHTML = `<h4>Aufbau: ${d.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</h4>
-                    <div class="slots" data-date="${d.toISOString().slice(0,10)}">
-                        <em>Hier können Helfer zugewiesen werden (später implementieren)</em>
-                    </div>`;
-                aufbauContainer.appendChild(dayDiv);
-            }
-        }
-
-        // Veranstaltungstage: Freitag-Sonntag anzeigen als Referenz
-        if (friday && sunday) {
-            const dayRangeDiv = document.createElement('div');
-            dayRangeDiv.className = 'aufbau-day';
-            dayRangeDiv.innerHTML = `<h4>Veranstaltung: ${friday.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })} — ${sunday.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</h4>`;
-            aufbauContainer.appendChild(dayRangeDiv);
-        }
-
-        // Abbau: Tage nach Sonntag (1..teardownDays)
-        if (sunday && teardownDays > 0) {
-            for (let i = 1; i <= teardownDays; i++) {
-                const d = new Date(sunday);
-                d.setDate(sunday.getDate() + i);
-                const dayDiv = document.createElement('div');
-                dayDiv.className = 'aufbau-day';
-                dayDiv.innerHTML = `<h4>Abbau: ${d.toLocaleDateString('de-DE', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' })}</h4>
-                    <div class="slots" data-date="${d.toISOString().slice(0,10)}">
-                        <em>Hier können Helfer zugewiesen werden (später implementieren)</em>
-                    </div>`;
-                aufbauContainer.appendChild(dayDiv);
-            }
-        }
-    }
-
-    // Button um Auf-/Abbau-Section sichtbar zu machen / aktualisieren
-    showAufbauButton.addEventListener('click', () => {
-        if (!aufbauSection) return;
-        if (aufbauSection.style.display === 'none' || aufbauSection.style.display === '') {
-            generateAufbauView();
-            aufbauSection.style.display = 'block';
-            showAufbauButton.textContent = 'Auf-/Abbau verbergen';
-        } else {
-            aufbauSection.style.display = 'none';
-            showAufbauButton.textContent = 'Auf-/Abbau anzeigen';
-        }
-    });
 
     async function initialLoad() {
         await fetchAndRenderTeams();

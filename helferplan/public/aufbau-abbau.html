@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auf- und Abbau Planung</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .setup-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .day-section {
+            border: 1px solid #ddd;
+            padding: 16px;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .day-section h3 {
+            margin-top: 0;
+            color: #005A9F;
+            border-bottom: 2px solid #005A9F;
+            padding-bottom: 8px;
+        }
+        .slots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .slot-item {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 10px;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .slot-item.filled {
+            border-color: #4CAF50;
+            background-color: #e8f5e9;
+        }
+        .slot-item.required {
+            border-color: #ff9800;
+            border-width: 2px;
+        }
+        .slot-label {
+            font-size: 11px;
+            color: #666;
+            font-weight: 600;
+        }
+        .helper-select {
+            width: 100%;
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .clear-btn {
+            background: #d32f2f;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .clear-btn:hover {
+            background: #b71c1c;
+        }
+        .helper-info {
+            font-size: 12px;
+            color: #333;
+            font-weight: 600;
+        }
+        .team-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: white;
+            font-size: 11px;
+            margin-left: 4px;
+        }
+        .info-text {
+            font-size: 13px;
+            color: #666;
+            font-style: italic;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="index.html">Admin: Stammdaten</a>
+    <a href="plan.html">Turnier-Planung</a>
+    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="aufbau-abbau.html" class="active">Auf-/Abbau</a>
+    <a href="kuchen.html">Kuchen</a>
+</nav>
+
+<main>
+    <h1>Auf- und Abbau Planung</h1>
+    <p class="info-text">Jedem Auf-/Abbautag können bis zu 40 Helfer zugewiesen werden. Die ersten Slots (orange markiert) sind für Erwachsene/Orga-Helfer reserviert.</p>
+    
+    <div id="setup-container" class="setup-container">
+        <!-- Days will be generated dynamically -->
+    </div>
+</main>
+
+<!-- Lade runtime config vor den App-Skripten -->
+<script src="/helferplan/public/config.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    // API URL setup (same pattern as plan.js)
+    const API_URL = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
+    
+    const container = document.getElementById('setup-container');
+    
+    let helpers = [];
+    let teams = [];
+    let shifts = [];
+    let settings = {};
+    
+    // Fetch all required data
+    async function loadData() {
+        try {
+            // Load helpers
+            const helpersRes = await fetch(`${API_URL}/helpers`);
+            helpers = await helpersRes.json();
+            
+            // Load teams
+            const teamsRes = await fetch(`${API_URL}/teams`);
+            teams = await teamsRes.json();
+            
+            // Load settings
+            const settingsRes = await fetch(`${API_URL}/settings`);
+            settings = await settingsRes.json();
+            
+            // Load existing shifts
+            const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
+            shifts = await shiftsRes.json();
+        } catch (err) {
+            console.error('Error loading data:', err);
+            alert('Fehler beim Laden der Daten');
+        }
+    }
+    
+    function getTeamColor(teamId) {
+        const team = teams.find(t => t.id === teamId);
+        return team ? team.color_hex : '#999';
+    }
+    
+    function renderDays() {
+        container.innerHTML = '';
+        
+        // Process setup days (1-3)
+        for (let i = 1; i <= 3; i++) {
+            const dateKey = `setup_day_${i}`;
+            const minKey = `setup_day_${i}_min`;
+            const date = settings[dateKey];
+            const minHelpers = parseInt(settings[minKey] || 10);
+            
+            if (date) {
+                renderDay('Aufbau', date, minHelpers, i);
+            }
+        }
+        
+        // Process teardown day
+        const teardownDate = settings.teardown_day_1;
+        const teardownMin = parseInt(settings.teardown_day_1_min || 10);
+        if (teardownDate) {
+            renderDay('Abbau', teardownDate, teardownMin, 1);
+        }
+    }
+    
+    function renderDay(type, date, minHelpers, dayNumber) {
+        const d = new Date(date + 'T00:00:00');
+        const dateStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+        
+        const section = document.createElement('div');
+        section.className = 'day-section';
+        section.innerHTML = `
+            <h3>${type} ${type === 'Aufbau' ? 'Tag ' + dayNumber : ''}: ${dateStr}</h3>
+            <p class="info-text">Mindestanzahl Erwachsene/Orga: ${minHelpers} | Gesamt: bis zu 40 Helfer | Schichtdauer: 4 Stunden</p>
+            <div class="slots-grid" data-date="${date}" data-type="${type}" data-min="${minHelpers}"></div>
+        `;
+        
+        container.appendChild(section);
+        
+        const slotsGrid = section.querySelector('.slots-grid');
+        
+        // Create 40 slots
+        for (let i = 0; i < 40; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'slot-item';
+            slot.dataset.slotIndex = i;
+            
+            // Mark first minHelpers slots as required (Erwachsen/Orga only)
+            if (i < minHelpers) {
+                slot.classList.add('required');
+            }
+            
+            // Find existing shift for this slot
+            const existingShift = shifts.find(s => {
+                const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
+                return shiftDate === date && s.day_type === type;
+            });
+            
+            // For now, we'll create one shift per day and store helper assignments differently
+            // This is a simplified approach - in production you'd want individual shift records
+            
+            const slotHtml = `
+                <div class="slot-label">Slot ${i + 1}${i < minHelpers ? ' (Erwachsen/Orga)' : ''}</div>
+                <select class="helper-select" data-date="${date}" data-type="${type}" data-index="${i}" data-required="${i < minHelpers}">
+                    <option value="">-- Helfer wählen --</option>
+                    ${helpers
+                        .filter(h => i < minHelpers ? (h.role === 'Erwachsen' || h.role === 'Orga') : true)
+                        .map(h => `<option value="${h.id}">${h.name} (${h.role})${h.team_name ? ' - ' + h.team_name : ''}</option>`)
+                        .join('')}
+                </select>
+            `;
+            
+            slot.innerHTML = slotHtml;
+            slotsGrid.appendChild(slot);
+            
+            // Add event listener for select change
+            const select = slot.querySelector('.helper-select');
+            select.addEventListener('change', async (e) => {
+                await saveShift(date, type, i, e.target.value);
+            });
+        }
+    }
+    
+    async function saveShift(date, dayType, slotIndex, helperId) {
+        try {
+            // Calculate start and end times (assuming shifts start at 8:00 and last 4 hours)
+            const startTime = new Date(date + 'T08:00:00Z').toISOString();
+            const endTime = new Date(date + 'T12:00:00Z').toISOString();
+            
+            const payload = {
+                day_type: dayType,
+                start_time: startTime,
+                end_time: endTime,
+                helper_id: helperId || null
+            };
+            
+            const response = await fetch(`${API_URL}/setup-cleanup-shifts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) throw new Error('Speichern fehlgeschlagen');
+            
+            console.log('Schicht gespeichert:', date, dayType, slotIndex, helperId);
+            
+            // Reload shifts
+            const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
+            shifts = await shiftsRes.json();
+            
+            // Visual feedback
+            const select = document.querySelector(`select[data-date="${date}"][data-type="${dayType}"][data-index="${slotIndex}"]`);
+            if (select) {
+                const slot = select.closest('.slot-item');
+                if (helperId) {
+                    slot.classList.add('filled');
+                } else {
+                    slot.classList.remove('filled');
+                }
+            }
+        } catch (err) {
+            console.error('Error saving shift:', err);
+            alert('Fehler beim Speichern der Schicht');
+        }
+    }
+    
+    // Initial load
+    await loadData();
+    renderDays();
+});
+</script>
+</body>
+</html>
