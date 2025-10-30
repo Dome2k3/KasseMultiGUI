@@ -214,13 +214,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             
             // Find existing shift for this slot
+            // We use start_time with minute offset to identify each slot
             const existingShift = shifts.find(s => {
+                if (s.day_type !== type) return false;
                 const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
-                return shiftDate === date && s.day_type === type;
+                if (shiftDate !== date) return false;
+                
+                // Check if this shift's start time matches our slot index
+                // Expected format: "2024-07-19T08:XX:00.000Z" where XX = slotIndex
+                const startTime = new Date(s.start_time);
+                const expectedMinutes = i % 60; // Handle overflow if needed
+                return startTime.getMinutes() === expectedMinutes;
             });
-            
-            // For now, we'll create one shift per day and store helper assignments differently
-            // This is a simplified approach - in production you'd want individual shift records
             
             const slotHtml = `
                 <div class="slot-label">Slot ${i + 1}${i < minHelpers ? ' (Erwachsen/Orga)' : ''}</div>
@@ -228,12 +233,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <option value="">-- Helfer wählen --</option>
                     ${helpers
                         .filter(h => i < minHelpers ? (h.role === 'Erwachsen' || h.role === 'Orga') : true)
-                        .map(h => `<option value="${h.id}">${h.name} (${h.role})${h.team_name ? ' - ' + h.team_name : ''}</option>`)
+                        .map(h => {
+                            const selected = existingShift && existingShift.helper_id == h.id ? 'selected' : '';
+                            return `<option value="${h.id}" ${selected}>${h.name} (${h.role})${h.team_name ? ' - ' + h.team_name : ''}</option>`;
+                        })
                         .join('')}
                 </select>
             `;
             
             slot.innerHTML = slotHtml;
+            
+            // Mark slot as filled if helper is assigned
+            if (existingShift && existingShift.helper_id) {
+                slot.classList.add('filled');
+            }
+            
             slotsGrid.appendChild(slot);
             
             // Add event listener for select change
@@ -246,9 +260,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     async function saveShift(date, dayType, slotIndex, helperId) {
         try {
-            // Calculate start and end times (assuming shifts start at 8:00 and last 4 hours)
-            const startTime = new Date(date + 'T08:00:00Z').toISOString();
-            const endTime = new Date(date + 'T12:00:00Z').toISOString();
+            // Calculate start and end times with unique minutes for each slot
+            // This allows us to have 40 different shift records per day
+            // Start at 8:00, each slot is offset by 1 minute (purely for uniqueness)
+            const baseDate = new Date(date + 'T08:00:00Z');
+            baseDate.setMinutes(baseDate.getMinutes() + slotIndex);
+            const startTime = baseDate.toISOString();
+            
+            const endDate = new Date(baseDate);
+            endDate.setHours(endDate.getHours() + 4); // 4 hour shift
+            const endTime = endDate.toISOString();
             
             const payload = {
                 day_type: dayType,
