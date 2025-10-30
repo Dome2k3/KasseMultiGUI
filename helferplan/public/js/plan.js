@@ -247,90 +247,59 @@ document.addEventListener('DOMContentLoaded', () => {
                             const data = JSON.parse(e.dataTransfer.getData('application/json'));
                             if (!data || !data.helper_id) return;
 
-                            const rowEl = slot.closest('.activity-row');
-                            const relevant = highlightedSlots.filter(h => h.el && h.el.closest('.activity-row') === rowEl);
-                            let startIndex;
-                            if (relevant.length > 0) {
-                                startIndex = Math.min(...relevant.map(h => h.hourIndex));
-                            } else {
-                                startIndex = parseInt(slot.dataset.hourIndex);
-                                // walk left if slot is hidden
-                                while (startIndex > 0) {
-                                    const cand = rowEl.querySelector(`.shift-slot[data-hour-index='${startIndex}']`);
-                                    if (!cand) break;
-                                    if (!cand.classList.contains('slot-hidden')) break;
-                                    startIndex--;
-                                }
+                            const helperId = data.helper_id;
+                            const helper = allHelpers.find(h => h.id === helperId);
+
+                            if (!helper) {
+                                alert('Fehler: Der ausgewählte Helfer konnte nicht gefunden werden.');
+                                return;
                             }
 
+                            const activityId = parseInt(slot.dataset.activityId);
+                            const activity = allActivities.find(a => a.id === activityId);
+
+                            if (!activity) {
+                                console.error('Keine Aktivität gefunden für ID:', activityId);
+                                return;
+                            }
+
+                            const startIndex = parseInt(slot.dataset.hourIndex);
                             const startTime = hourIndexToDate(startIndex);
+
+                            // Validierung: Prüfe, ob der Helfer für die Aktivität geeignet ist
+                            if (activity.role_requirement === 'Erwachsen' && helper.role === 'Minderjaehrig') {
+                                alert('Fehler: Diese Schicht erfordert einen Erwachsenen. Der ausgewählte Helfer ist nicht berechtigt.');
+                                return;
+                            }
+
+                            if (!isTimeAllowed(activity, startTime)) {
+                                alert('Diese Zeit ist für die Schicht nicht verfügbar.');
+                                return;
+                            }
+
                             const endTime = hourIndexToDate(startIndex + 2);
 
-                            // POST create shift
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    activity_id: activity.id,
+                                    activity_id: activityId,
                                     start_time: startTime.toISOString(),
                                     end_time: endTime.toISOString(),
-                                    helper_id: data.helper_id
-                                })
+                                    helper_id: helperId,
+                                }),
                             });
 
-                            // If server responds with 409 conflict and sends existing_shift -> ask user to overwrite
-                            if (resp.status === 409) {
-                                let body = null;
-                                try { body = await resp.json(); } catch(e){ body = null; }
-                                const existing = body && (body.existing_shift || body.conflicting_shift);
-                                if (existing) {
-                                    const who = existing.helper_name || existing.helper_id || ' unbekannt';
-                                    if (confirm(`Es existiert bereits eine Schicht (${who}) in diesem Zeitraum. Überschreiben?`)) {
-                                        // delete that existing shift by id if provided, else fallback to previous delete flow
-                                        if (existing.id) {
-                                            const delResp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE' });
-                                            if (delResp.ok) {
-                                                // try create again
-                                                const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                        activity_id: activity.id,
-                                                        start_time: startTime.toISOString(),
-                                                        end_time: endTime.toISOString(),
-                                                        helper_id: data.helper_id
-                                                    })
-                                                });
-                                                if (!retry.ok) throw new Error('Neues Anlegen nach Löschung fehlgeschlagen');
-                                                await fetchAndRenderAllShifts();
-                                            } else {
-                                                const t = await delResp.text().catch(()=>null);
-                                                throw new Error('Konnte bestehende Schicht nicht löschen: ' + (t||delResp.status));
-                                            }
-                                        } else {
-                                            // server didn't provide id: inform user that overwrite cannot be automatic
-                                            alert('Server lieferte keine ID der existierenden Schicht; Überschreiben nicht automatisch möglich.');
-                                        }
-                                    }
-                                } else {
-                                    const t = await resp.text().catch(()=>null);
-                                    console.warn('409 returned, but no existing_shift provided', t);
-                                    alert('Konflikt beim Anlegen der Schicht (409). Siehe Konsole.');
-                                }
-                                await fetchAndRenderAllShifts();
-                                return;
-                            }
-
                             if (!resp.ok) {
-                                const txt = await resp.text().catch(()=>null);
+                                const txt = await resp.text().catch(() => null);
                                 throw new Error(txt || 'Server Fehler beim Anlegen');
                             }
 
-                            // success: server should return created shift (with id). We refresh
+                            // Erfolg: Schichten neu laden
                             await fetchAndRenderAllShifts();
                         } catch (err) {
                             console.error('Drop Fehler:', err);
-                            alert('Fehler beim Eintragen der Schicht');
+                            alert('Fehler beim Eintragen der Schicht: ' + err.message);
                         } finally {
                             clearHoverHighlight();
                         }
