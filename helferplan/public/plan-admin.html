@@ -6,15 +6,87 @@
   <title>Admin: Zeitblöcke verwalten</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    .admin-main { max-width: 1200px; margin: 0 auto; }
-    .admin-layout { display: flex; gap: 12px; align-items: flex-start; }
-    .left-panel { width: 240px; flex: 0 0 240px; }
-    .shift-slot { cursor: pointer; }
+    html, body {
+      overflow-x: hidden;
+    }
 
-    /* Farben für Blöcke */
-    .shift-slot.not-allowed { background-color: #f4f4f4; color: #aaa; }
-    .shift-slot.allowed { background-color: #cce5ff; color: #004085; }
-    .shift-slot.existing { background-color: #ffeeba; color: #856404; }
+    .plan-main {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .plan-layout {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .left-panel {
+      width: 240px;
+      flex: 0 0 240px;
+    }
+
+    #plan-container {
+      overflow-x: auto;
+      flex: 1 1 auto;
+      position: relative;
+    }
+
+    #timeline-header {
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 10;
+      display: block;
+    }
+
+    .hour-slot {
+      font-size: 12px;
+      padding: 4px 6px;
+      text-align: center;
+      background: #fafafa;
+    }
+
+    .shift-slot {
+      font-size: 12px;
+      padding: 6px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform 0.08s, outline 0.08s;
+    }
+
+    .shift-slot.allowed {
+      background-color: #cce5ff;
+      border: 1px solid #004085;
+    }
+
+    .shift-slot.not-allowed {
+      background-color: #f4f4f4;
+      border: 1px dashed #aaa;
+    }
+
+    .shift-slot.hover {
+      outline: 3px dashed #007bff;
+    }
+
+    .activity-name {
+      padding: 8px;
+      background: #fff;
+      border-right: 1px solid #e6e6e6;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 240px auto;
+      align-items: center;
+      border-bottom: 1px solid #ddd;
+    }
   </style>
 </head>
 <body>
@@ -24,18 +96,15 @@
   <a href="plan-admin.html">Turnier-Admin</a>
 </nav>
 
-<main class="admin-main">
+<main class="plan-main">
   <h1>Admin: Zeitblöcke verwalten</h1>
-
-  <div id="admin-layout" class="admin-layout">
+  <div class="plan-layout">
     <div class="left-panel">
       <h3>Aktivitäten</h3>
-      <!-- Liste der Aktivitäten -->
-      <ul id="activity-list"></ul>
+      <div id="activity-list"></div>
     </div>
 
     <div id="plan-container">
-      <!-- Zeitplan -->
       <div id="timeline-header" aria-hidden="true"></div>
       <div id="grid-container" role="grid"></div>
     </div>
@@ -43,8 +112,7 @@
 </main>
 <script src="/helferplan/public/config.js"></script>
 <script>
-  // API-Basis-URL (automatisch ermittelt)
-  const API_URL = (() => {
+  const API_URL_HELFERPLAN = (() => {
     const meta = document.querySelector('meta[name="api-url-helferplan"]');
     if (meta && meta.content) return meta.content.replace(/\/$/, '');
     if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
@@ -54,98 +122,97 @@
     return `${window.location.origin}/api`;
   })();
 
-  // expose for debugging / other scripts
-  window.API_URL = API_URL;
-  console.info('API_URL =', API_URL);
+  document.addEventListener('DOMContentLoaded', async () => {
+    const timelineHeader = document.getElementById('timeline-header');
+    const gridContainer = document.getElementById('grid-container');
 
-  let selectedActivity = null;
+    let activities = [];
+    let allowedBlocks = {};
 
-  // Lädt die Liste der Aktivitäten
-  async function loadActivities() {
-    const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
-    const activities = await res.json();
-    const list = document.getElementById('activity-list');
-    list.innerHTML = '';
-    activities.forEach(activity => {
-      const li = document.createElement('li');
-      li.textContent = activity.name;
-      li.style.cursor = 'pointer';
-      li.addEventListener('click', () => {
-        selectedActivity = activity;
-        renderGrid(activity);
-      });
-      list.appendChild(li);
-    });
-  }
-
-  // Rendert das Zeitraster für eine Aktivität
-  async function renderGrid(activity) {
-    const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
-    const allowedBlocks = await res.json();
-
-    // Lade bestehende Schichten
-    const shiftsRes = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts?activity_id=${activity.id}`);
-    const existingShifts = await shiftsRes.json();
-
-    const grid = document.getElementById('grid-container');
-    grid.innerHTML = '';
-
-    for (let hour = 0; hour < 48; hour++) { // Beispiel: 48 Stunden
-      const slot = document.createElement('div');
-      slot.className = 'shift-slot';
-      slot.dataset.hour = hour;
-
-      const isAllowed = allowedBlocks.some(block => hour >= block.start && hour < block.end);
-      const isExisting = existingShifts.some(shift => hour >= shift.start_time && hour < shift.end_time);
-
-      if (isExisting) {
-        slot.classList.add('existing');
-        slot.textContent = `Schicht (${hour}:00)`;
-      } else if (isAllowed) {
-        slot.classList.add('allowed');
-        slot.textContent = `Erlaubt (${hour}:00)`;
-      } else {
-        slot.classList.add('not-allowed');
-        slot.textContent = `Nicht erlaubt (${hour}:00)`;
-      }
-
-      slot.addEventListener('click', () => toggleBlock(hour, activity));
-      grid.appendChild(slot);
+    async function fetchActivities() {
+      const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
+      activities = await res.json();
     }
-  }
 
-  // Umschalten eines Zeitblocks (erlaubt/nicht erlaubt)
-  async function toggleBlock(hour, activity) {
-    try {
-      const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
-      let allowedBlocks = await res.json();
-
-      // Block hinzufügen oder entfernen
-      const existingIndex = allowedBlocks.findIndex(block => hour >= block.start && hour < block.end);
-      if (existingIndex >= 0) {
-        allowedBlocks.splice(existingIndex, 1); // Entfernen
-      } else {
-        allowedBlocks.push({ start: hour, end: hour + 1 }); // Hinzufügen
+    async function fetchAllowedBlocks() {
+      for (const activity of activities) {
+        const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+        allowedBlocks[activity.id] = await res.json();
       }
-
-      // Aktualisiere die Datenbank
-      await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blocks: allowedBlocks })
-      });
-
-      // Raster neu rendern
-      renderGrid(activity);
-    } catch (error) {
-      console.error('Fehler beim Umschalten des Blocks:', error);
-      alert('Ein Fehler ist beim Speichern des Blocks aufgetreten.');
     }
-  }
 
-  // Initialisierung
-  document.addEventListener('DOMContentLoaded', () => {
-    loadActivities();
+    function renderTimeline() {
+      timelineHeader.innerHTML = '';
+      for (let hour = 0; hour < 48; hour++) {
+        const hourSlot = document.createElement('div');
+        hourSlot.className = 'hour-slot';
+        hourSlot.textContent = `${12 + (hour % 24)}:00`;
+        timelineHeader.appendChild(hourSlot);
+      }
+    }
+
+    function renderGrid() {
+      gridContainer.innerHTML = '';
+      activities.forEach(activity => {
+        const row = document.createElement('div');
+        row.className = 'activity-row';
+
+        const nameCell = document.createElement('div');
+        nameCell.className = 'activity-name';
+        nameCell.textContent = activity.name;
+        row.appendChild(nameCell);
+
+        const grid = document.createElement('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = `repeat(48, 40px)`;
+
+        for (let hour = 0; hour < 48; hour++) {
+          const slot = document.createElement('div');
+          slot.className = 'shift-slot';
+
+          const isAllowed = allowedBlocks[activity.id]?.some(block => hour >= block.start && hour < block.end);
+          slot.classList.add(isAllowed ? 'allowed' : 'not-allowed');
+
+          slot.draggable = true;
+          slot.addEventListener('dragstart', () => {
+            slot.classList.add('hover');
+          });
+          slot.addEventListener('dragend', () => {
+            slot.classList.remove('hover');
+          });
+          slot.addEventListener('drop', async (event) => {
+            event.preventDefault();
+            const updatedBlocks = allowedBlocks[activity.id] || [];
+            const existingIndex = updatedBlocks.findIndex(block => hour >= block.start && hour < block.end);
+            if (existingIndex >= 0) {
+              updatedBlocks.splice(existingIndex, 1);
+              slot.classList.remove('allowed');
+              slot.classList.add('not-allowed');
+            } else {
+              updatedBlocks.push({ start: hour, end: hour + 1 });
+              slot.classList.remove('not-allowed');
+              slot.classList.add('allowed');
+            }
+            await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blocks: updatedBlocks })
+            });
+            allowedBlocks[activity.id] = updatedBlocks;
+          });
+
+          grid.appendChild(slot);
+        }
+
+        row.appendChild(grid);
+        gridContainer.appendChild(row);
+      });
+    }
+
+    await fetchActivities();
+    await fetchAllowedBlocks();
+    renderTimeline();
+    renderGrid();
   });
 </script>
 </body>
