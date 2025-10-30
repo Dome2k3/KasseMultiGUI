@@ -271,8 +271,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const activityId = slot.dataset.activityId;
                             console.log('Activity ID:', activityId);
-                            const activity = allActivities.find(a => a.id == activityId);
-                            console.log('Gefundene Aktivität:', activity);
 
                             if (!activity) {
                                 console.error('Keine Aktivität gefunden für ID:', activityId);
@@ -285,6 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 alert('Diese Zeit ist für die Schicht nicht verfügbar.');
                                 return;
                             }
+
+                            let activity = allActivities.find(a => a.id == activityId);
+                            console.log('Gefundene Aktivität:', activity);
 
                             // POST create shift
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
