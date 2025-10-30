@@ -73,6 +73,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Aktuell keine spezifischen Zeitbeschränkungen implementiert
         // Diese Funktion kann erweitert werden, um z.B. Aktivitäts-spezifische
         // Zeitfenster zu prüfen (z.B. activity.allowed_start, activity.allowed_end)
+        
+        // Basale Validierung: Prüfe ob Aktivität überhaupt definiert ist
+        if (!activity) {
+            console.warn('isTimeAllowed: Keine Aktivität übergeben');
+            return false;
+        }
+        
+        // Weitere Validierungslogik kann hier hinzugefügt werden
         return true;
     }
 
@@ -287,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             if (!activity) {
                                 console.error('Keine Aktivität gefunden für ID:', activityId);
-                                console.error('Verfügbare Aktivitäten:', allActivities.map(a => ({ id: a.id, name: a.name })));
+                                console.error('Verfügbare Aktivitäten (erste 10):', allActivities.slice(0, 10).map(a => ({ id: a.id, name: a.name })));
                                 console.error('Slot dataset:', slot.dataset);
                                 alert(`Fehler: Aktivität mit ID ${activityId} nicht gefunden. Möglicherweise wurden die Aktivitätsdaten nicht korrekt geladen.`);
                                 return;
