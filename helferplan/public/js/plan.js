@@ -279,6 +279,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const endTime = hourIndexToDate(startIndex + 2);
 
+                            // Setze die Farbe und den Text sofort, bevor der Server-Call erfolgt
+                            const team = allTeams.find(t => t.id == helper.team_id);
+                            const teamColor = team ? team.color_hex : '#888';
+
+                            slot.innerHTML = `<strong>${helper.name}</strong>`;
+                            slot.classList.add('filled');
+                            slot.style.backgroundColor = teamColor;
+                            slot.dataset.helperId = helperId;
+
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -295,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 throw new Error(txt || 'Server Fehler beim Anlegen');
                             }
 
-                            // Erfolg: Schichten neu laden
+                            // Erfolg: Schichten neu laden, um die Anzeige zu synchronisieren
                             await fetchAndRenderAllShifts();
                         } catch (err) {
                             console.error('Drop Fehler:', err);
@@ -543,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let txt = '';
                 try { txt = await response.text(); } catch(e){}
                 console.error('Save shift failed', response.status, txt);
-                alert('Fehler beim Speichern der Schicht.');
+                alert('Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht (Erwachsener oder Orga).');
             }
         });
 
