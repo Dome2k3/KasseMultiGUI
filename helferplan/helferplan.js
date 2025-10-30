@@ -243,15 +243,22 @@ app.delete('/api/activity-groups/:id', async (req, res) => {
 app.get('/api/activities', async (req, res) => {
     try {
         const rows = await safeQuery(`
-            SELECT a.id, a.name, a.role_requirement, a.group_id, g.name AS group_name
+            SELECT a.id, a.name, a.role_requirement, a.group_id, a.allowed_time_blocks, g.name AS group_name
             FROM helferplan_activities a
                      LEFT JOIN helferplan_activity_groups g ON a.group_id = g.id
             ORDER BY g.sort_order, g.name, a.sort_order, a.name;
         `);
-        res.json(rows);
+
+        // Parse `allowed_time_blocks` from JSON string to JavaScript object
+        const activities = rows.map(row => ({
+            ...row,
+            allowed_time_blocks: row.allowed_time_blocks ? JSON.parse(row.allowed_time_blocks) : null
+        }));
+
+        res.json(activities);
     } catch (err) {
         console.error('DB-Fehler /api/activities', err);
-        res.status(500).json({error: 'DB-Fehler beim Abrufen der Taetigkeiten'});
+        res.status(500).json({ error: 'DB-Fehler beim Abrufen der Taetigkeiten' });
     }
 });
 

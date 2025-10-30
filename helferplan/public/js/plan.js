@@ -269,6 +269,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             const startTime = hourIndexToDate(startIndex);
                             const endTime = hourIndexToDate(startIndex + 2);
 
+                            const activityId = slot.dataset.activityId;
+                            console.log('Activity ID:', activityId);
+                            const activity = allActivities.find(a => a.id == activityId);
+                            console.log('Gefundene Aktivität:', activity);
+
+                            if (!activity) {
+                                console.error('Keine Aktivität gefunden für ID:', activityId);
+                                return;
+                            }
+
                             // Zeitblockprüfung hinzufügen
                             const activity = allActivities.find(a => a.id === parseInt(slot.dataset.activityId));
                             if (!isTimeAllowed(activity, startTime)) {
@@ -676,8 +686,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// Hilfsfunktion: Prüfen, ob die Zeit innerhalb der erlaubten Schichtblöcke liegt
 function isTimeAllowed(activity, startTime) {
+    if (!activity || !activity.allowed_time_blocks) {
+        console.error('Ungültige Aktivität oder fehlende allowed_time_blocks:', activity);
+        return false; // Standardmäßig nicht erlaubt
+    }
     const blocks = activity.allowed_time_blocks || [];
     return blocks.some(block =>
         new Date(startTime) >= new Date(block.start) && new Date(startTime) < new Date(block.end)
