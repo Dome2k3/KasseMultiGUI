@@ -62,7 +62,7 @@ const ADMIN_PASSWORD = '1881';
     try {
         await pool.query(`
             ALTER TABLE volleyball_turnier.helferplan_activities 
-            ADD COLUMN allowed_time_blocks TEXT DEFAULT NULL;
+            ADD COLUMN allowed_time_blocks JSON DEFAULT NULL;
         `);
         console.log('allowed_time_blocks column added to helferplan_activities');
     } catch (err) {
