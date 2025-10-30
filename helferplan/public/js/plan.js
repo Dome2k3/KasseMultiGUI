@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             // Zeitblockprüfung hinzufügen
-                            const activity = allActivities.find(a => a.id === parseInt(slot.dataset.activityId));
+                            let activity = allActivities.find(a => a.id === parseInt(slot.dataset.activityId));
                             if (!isTimeAllowed(activity, startTime)) {
                                 alert('Diese Zeit ist für die Schicht nicht verfügbar.');
                                 return;
