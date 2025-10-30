@@ -44,7 +44,7 @@
 
 <script>
   // API-Basis-URL (automatisch ermittelt)
-  const API_URL_HELFERPLAN = (() => {
+  const API_URL = (() => {
     const meta = document.querySelector('meta[name="api-url-helferplan"]');
     if (meta && meta.content) return meta.content.replace(/\/$/, '');
     if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
@@ -53,8 +53,10 @@
     }
     return `${window.location.origin}/api`;
   })();
-  window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
-  console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
+
+  // expose for debugging / other scripts
+  window.API_URL = API_URL;
+  console.info('API_URL =', API_URL);
 
   let selectedActivity = null;
 
