@@ -9,7 +9,8 @@
         html, body { overflow-x: hidden; }
         .plan-main { max-width: 1200px; margin: 0 auto; }
         .plan-layout { display: flex; gap: 12px; align-items: flex-start; }
-        .left-panel { width: 240px; flex: 0 0 240px; }
+        /* Left panel moved upward for better landscape mode visibility */
+        .left-panel { width: 240px; flex: 0 0 240px; align-self: flex-start; position: sticky; top: 0; max-height: 95vh; overflow-y: auto; }
 
         #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; }
         #timeline-header { position: sticky; top: 0; background: #fff; z-index: 10; display:block; }
@@ -47,7 +48,16 @@
             font-weight:600;
         }
 
-        .activity-group-header { padding:8px 0 4px 0; font-weight:700; grid-column:1 / -1; background: transparent; }
+        /* Activity group headers sticky when scrolling horizontally */
+        .activity-group-header { 
+            padding:8px 0 4px 0; 
+            font-weight:700; 
+            grid-column:1 / -1; 
+            background: #fff; 
+            position: sticky; 
+            left: 0; 
+            z-index: 6;
+        }
         #grid-container { overflow: visible; }
     </style>
 </head>
