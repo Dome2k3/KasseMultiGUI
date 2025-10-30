@@ -26,7 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const teamSelect = document.getElementById('modal-team-select');
     const helperSelect = document.getElementById('modal-helper-select');
 
-    let allActivities = []; // Globale Variable für Aktivitäten
+    // Globale State-Variablen
+    // WICHTIG: allActivities muss synchron mit den API-Daten gehalten werden
+    // Diese Variable wird für Drag-and-Drop-Validierung verwendet
+    let allActivities = []; // Wird in generateGrid() aus API geladen
 
     // Config
     const HOUR_PX = 40;      // width per hour column
@@ -62,6 +65,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const b = parseInt(c.slice(4,6),16);
             return (0.299*r + 0.587*g + 0.114*b);
         } catch (e) { return 0; }
+    }
+
+    // Prüft ob eine Zeit für eine Aktivität erlaubt ist
+    // TODO: Implementierung basierend auf Aktivitäts-Zeitfenster
+    function isTimeAllowed(activity, startTime) {
+        // Aktuell keine spezifischen Zeitbeschränkungen implementiert
+        // Diese Funktion kann erweitert werden, um z.B. Aktivitäts-spezifische
+        // Zeitfenster zu prüfen (z.B. activity.allowed_start, activity.allowed_end)
+        return true;
     }
 
     // --- Rendering helpers ---
@@ -196,6 +208,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const resp = await fetch(`${API_URL_HELFERPLAN}/activities`);
         if (!resp.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
         const activities = await resp.json();
+        
+        // KRITISCH: Synchronisiere die global verfügbare allActivities-Variable
+        // Diese wird für Drag-and-Drop-Validierung benötigt (Zeile ~261)
+        allActivities = activities;
+        console.log('allActivities synchronisiert:', allActivities.length, 'Aktivitäten geladen');
 
         const groups = activities.reduce((acc, a) => {
             const g = a.group_name || 'Ohne Gruppe';
@@ -226,8 +243,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let i=0;i<timelineConfig.totalHours;i++){
                     const slot = document.createElement('div');
                     slot.className = 'shift-slot';
+                    // WICHTIG: Setze data-activity-id für Drag-and-Drop-Validierung
                     slot.dataset.activityId = activity.id;
                     slot.dataset.hourIndex = i;
+                    
+                    // Validierung: Prüfe ob activity.id gesetzt ist
+                    if (!activity.id) {
+                        console.warn('Aktivität ohne ID erkannt:', activity);
+                    }
 
                     slot.addEventListener('dragover', (e) => {
                         e.preventDefault();
@@ -243,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     // DROP handler: prefer highlighted slots in the same row for consistency
+                    // Validiert Helfer-Berechtigung und Zeitverfügbarkeit vor dem Erstellen der Schicht
                     slot.addEventListener('drop', async (e) => {
                         e.preventDefault();
                         try {
@@ -257,11 +281,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return;
                             }
 
+                            // KRITISCH: Hole Aktivität aus allActivities (muss synchronisiert sein)
                             const activityId = parseInt(slot.dataset.activityId);
                             const activity = allActivities.find(a => a.id === activityId);
 
                             if (!activity) {
                                 console.error('Keine Aktivität gefunden für ID:', activityId);
+                                console.error('Verfügbare Aktivitäten:', allActivities.map(a => ({ id: a.id, name: a.name })));
+                                console.error('Slot dataset:', slot.dataset);
+                                alert(`Fehler: Aktivität mit ID ${activityId} nicht gefunden. Möglicherweise wurden die Aktivitätsdaten nicht korrekt geladen.`);
                                 return;
                             }
 
