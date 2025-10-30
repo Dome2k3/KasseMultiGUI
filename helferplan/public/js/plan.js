@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // API base for Helferplan
+// API base for Helferplan
     const API_URL_HELFERPLAN = (() => {
         const meta = document.querySelector('meta[name="api-url-helferplan"]');
         if (meta && meta.content) return meta.content.replace(/\/$/, '');
@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
     console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
 
-    // DOM elements
+// DOM elements
     const timelineHeader = document.getElementById('timeline-header');
     const gridContainer = document.getElementById('grid-container');
     const teamListPanel = document.getElementById('team-list-panel');
@@ -29,11 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Globale Variable für Aktivitäten
     let allActivities = []; // Leeres Array als Fallback
 
-    // Config
+// Config
     const HOUR_PX = 40;      // width per hour column
     const LEFT_COL_PX = 200; // left name column width
 
-    // State
+// State
     let allHelpers = [];
     let allTeams = [];
     let helperById = {};
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
     let allShifts = []; // cached shift array from server; used to find shift ids
 
-    // --- Helpers ---
+// --- Helpers ---
     function hourIndexToDate(index) {
         const start = new Date(EVENT_START_DATE);
         start.setHours(start.getHours() + index);
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { return 0; }
     }
 
-    // --- Rendering helpers ---
+// --- Rendering helpers ---
     function renderTeamListPanel() {
         teamListPanel.innerHTML = '';
         allTeams.forEach(team => {
@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Timeline / Grid generation ---
+// --- Timeline / Grid generation ---
     function generateTimeline() {
         const hoursCountByDay = [12, 24, 18];
         const days = ['Freitag','Samstag','Sonntag'];
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearHoverHighlight();
                     });
 
-                    // DROP handler: Behalte bestehende Logik und integriere Zeitblockprüfung
+// DROP handler: Behalte bestehende Logik und integriere Zeitblockprüfung
                     slot.addEventListener('drop', async (e) => {
                         e.preventDefault();
                         try {
@@ -257,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 startIndex = Math.min(...relevant.map(h => h.hourIndex));
                             } else {
                                 startIndex = parseInt(slot.dataset.hourIndex);
-                                // walk left if slot is hidden
+// walk left if slot is hidden
                                 while (startIndex > 0) {
                                     const cand = rowEl.querySelector(`.shift-slot[data-hour-index='${startIndex}']`);
                                     if (!cand) break;
@@ -269,24 +269,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             const startTime = hourIndexToDate(startIndex);
                             const endTime = hourIndexToDate(startIndex + 2);
 
-                            const activityId = slot.dataset.activityId;
-                            console.log('Activity ID:', activityId);
-                            const activity = allActivities.find(a => a.id == activityId);
-                            console.log('Gefundene Aktivität:', activity);
-
-                            if (!activity) {
-                                console.error('Keine Aktivität gefunden für ID:', activityId);
-                                return;
-                            }
-
-                            // Zeitblockprüfung hinzufügen
+// Zeitblockprüfung hinzufügen
                             const activity = allActivities.find(a => a.id === parseInt(slot.dataset.activityId));
                             if (!isTimeAllowed(activity, startTime)) {
                                 alert('Diese Zeit ist für die Schicht nicht verfügbar.');
                                 return;
                             }
 
-                            // POST create shift
+// POST create shift
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -298,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 })
                             });
 
-                            // If server responds with 409 conflict and sends existing_shift -> ask user to overwrite
+// If server responds with 409 conflict and sends existing_shift -> ask user to overwrite
                             if (resp.status === 409) {
                                 let body = null;
                                 try { body = await resp.json(); } catch(e) { body = null; }
@@ -306,11 +296,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (existing) {
                                     const who = existing.helper_name || existing.helper_id || ' unbekannt';
                                     if (confirm(`Es existiert bereits eine Schicht (${who}) in diesem Zeitraum. Überschreiben?`)) {
-                                        // delete that existing shift by id if provided, else fallback to previous delete flow
+// delete that existing shift by id if provided, else fallback to previous delete flow
                                         if (existing.id) {
                                             const delResp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE' });
                                             if (delResp.ok) {
-                                                // try create again
+// try create again
                                                 const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                                     method: 'POST',
                                                     headers: { 'Content-Type': 'application/json' },
@@ -328,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 throw new Error('Konnte bestehende Schicht nicht löschen: ' + (t || delResp.status));
                                             }
                                         } else {
-                                            // server didn't provide id: inform user that overwrite cannot be automatic
+// server didn't provide id: inform user that overwrite cannot be automatic
                                             alert('Server lieferte keine ID der existierenden Schicht; Überschreiben nicht automatisch möglich.');
                                         }
                                     }
@@ -346,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 throw new Error(txt || 'Server Fehler beim Anlegen');
                             }
 
-                            // success: server should return created shift (with id). We refresh
+// success: server should return created shift (with id). We refresh
                             await fetchAndRenderAllShifts();
                         } catch (err) {
                             console.error('Drop Fehler:', err);
@@ -365,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Hover: highlight exactly 2 cells (start + next).
+// Hover: highlight exactly 2 cells (start + next).
     function handleHoverHighlight(slot) {
         clearHoverHighlight();
 
@@ -373,7 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = slot.parentElement;
         if (!row) return;
 
-        // start slot detection (walk left if hovered slot is a hidden follow-slot)
+// start slot detection (walk left if hovered slot is a hidden follow-slot)
         let startIdx = idx;
         let startSlot = row.querySelector(`.shift-slot[data-hour-index='${startIdx}']`);
         if (!startSlot) return;
@@ -416,14 +406,14 @@ document.addEventListener('DOMContentLoaded', () => {
         highlightedSlots = [];
     }
 
-    // --- NEW: helper to fetch shifts (returns array) ---
+// --- NEW: helper to fetch shifts (returns array) ---
     async function getShifts() {
         const r = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`);
         if (!r.ok) throw new Error('Fehler beim Laden der Schichten');
         return await r.json();
     }
 
-    // Fetch shifts and render them into the grid, using grid-column spans
+// Fetch shifts and render them into the grid, using grid-column spans
     async function fetchAndRenderAllShifts() {
         document.querySelectorAll('.shift-slot').forEach(s => {
             s.innerHTML = '';
@@ -453,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 startSlot.classList.add('filled');
                 startSlot.style.backgroundColor = shift.team_color || '#666';
                 startSlot.dataset.helperId = shift.helper_id || '';
-                // store server-provided start and id (server now reliably returns id)
+// store server-provided start and id (server now reliably returns id)
                 startSlot.dataset.startTime = shift.start_time;
                 if (shift.id) startSlot.dataset.shiftId = shift.id;
 
@@ -474,7 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // View filter dims non-selected team slots
+// View filter dims non-selected team slots
     function applyViewFilter() {
         const viewTeamId = viewTeamFilter.value;
         if (!viewTeamId) {
@@ -490,10 +480,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Modal logic (click-to-edit) ---
+// --- Modal logic (click-to-edit) ---
     let currentSlot = null;
     function openShiftModal(slotElement, activity) {
-        // If clicked slot is a hidden follow-slot, find its visible start slot (walk left)
+// If clicked slot is a hidden follow-slot, find its visible start slot (walk left)
         let slot = slotElement;
         if (slot.dataset.hiddenForSpan === 'true' || slot.classList.contains('slot-hidden')) {
             const row = slot.closest('.activity-row');
@@ -556,19 +546,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (response.status === 409) {
-                // Conflict: server should provide existing_shift in body
+// Conflict: server should provide existing_shift in body
                 let body = null;
                 try { body = await response.json(); } catch(e){ body = null; }
                 const existing = body && (body.existing_shift || body.conflicting_shift || body.existing);
                 if (existing) {
                     const who = existing.helper_name || existing.helper_id || 'unbekannt';
                     if (confirm(`Konflikt: Es existiert bereits eine Schicht (${who}). Überschreiben?`)) {
-                        // attempt delete by id if server provided it
+// attempt delete by id if server provided it
                         if (existing.id) {
                             const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE' });
                             if (!del.ok) alert('Löschen der bestehenden Schicht fehlgeschlagen; siehe Konsole.');
                             else {
-                                // retry create
+// retry create
                                 const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
@@ -598,7 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // DELETE handler: prefer deleting by shift id if available
+// DELETE handler: prefer deleting by shift id if available
         modal.querySelector('#delete-shift-button').addEventListener('click', async () => {
             if (!currentSlot || !currentSlot.dataset.helperId) { modal.style.display = 'none'; return; }
             if (!confirm('Soll die Schicht wirklich geleert werden?')) return;
@@ -610,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const text = await del.text().catch(()=>null);
                     console.log('DELETE by id response', del.status, text);
                     if (!del.ok) {
-                        // fallback to previous behavior if server doesn't support DELETE by id
+// fallback to previous behavior if server doesn't support DELETE by id
                         console.warn('DELETE by id failed; falling back to body-delete');
                     } else {
                         await fetchAndRenderAllShifts();
@@ -622,12 +612,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // fallback: body-based delete (existing robust logic)
+// fallback: body-based delete (existing robust logic)
             const activityId = currentSlot.dataset.activityId;
             const helperId = currentSlot.dataset.helperId;
             const startTimeIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
 
-            // simple delete attempt
+// simple delete attempt
             try {
                 const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                     method: 'DELETE',
@@ -636,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const text = await resp.text().catch(()=>null);
                 console.log('DELETE fallback response', resp.status, text);
-                // refresh list
+// refresh list
                 await fetchAndRenderAllShifts();
                 modal.style.display = 'none';
             } catch (err) {
@@ -648,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
     }
 
-    // --- Initialization ---
+// --- Initialization ---
     async function init() {
         try {
             const sres = await fetch(`${API_URL_HELFERPLAN}/settings`);
@@ -657,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (settings.event_friday) EVENT_START_DATE = `${settings.event_friday}T12:00:00Z`;
             }
         } catch (e) {
-            // ignore, keep fallback
+// ignore, keep fallback
         }
 
         [allHelpers, allTeams] = await Promise.all([
@@ -688,10 +678,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Hilfsfunktion: Prüfen, ob die Zeit innerhalb der erlaubten Schichtblöcke liegt
 function isTimeAllowed(activity, startTime) {
-    if (!activity || !activity.allowed_time_blocks) {
-        console.error('Ungültige Aktivität oder fehlende allowed_time_blocks:', activity);
-        return false; // Standardmäßig nicht erlaubt
-    }
     const blocks = activity.allowed_time_blocks || [];
     return blocks.some(block =>
         new Date(startTime) >= new Date(block.start) && new Date(startTime) < new Date(block.end)
