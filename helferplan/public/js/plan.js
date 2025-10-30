@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearHoverHighlight();
                     });
 
-                    // DROP handler: prefer highlighted slots in the same row for consistency
+                    // DROP handler: Behalte bestehende Logik und integriere Zeitblockprüfung
                     slot.addEventListener('drop', async (e) => {
                         e.preventDefault();
                         try {
@@ -266,6 +266,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             const startTime = hourIndexToDate(startIndex);
                             const endTime = hourIndexToDate(startIndex + 2);
 
+                            // Zeitblockprüfung hinzufügen
+                            const activity = allActivities.find(a => a.id === parseInt(slot.dataset.activityId));
+                            if (!isTimeAllowed(activity, startTime)) {
+                                alert('Diese Zeit ist für die Schicht nicht verfügbar.');
+                                return;
+                            }
+
                             // POST create shift
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
@@ -281,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             // If server responds with 409 conflict and sends existing_shift -> ask user to overwrite
                             if (resp.status === 409) {
                                 let body = null;
-                                try { body = await resp.json(); } catch(e){ body = null; }
+                                try { body = await resp.json(); } catch(e) { body = null; }
                                 const existing = body && (body.existing_shift || body.conflicting_shift);
                                 if (existing) {
                                     const who = existing.helper_name || existing.helper_id || ' unbekannt';
@@ -304,8 +311,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                                 if (!retry.ok) throw new Error('Neues Anlegen nach Löschung fehlgeschlagen');
                                                 await fetchAndRenderAllShifts();
                                             } else {
-                                                const t = await delResp.text().catch(()=>null);
-                                                throw new Error('Konnte bestehende Schicht nicht löschen: ' + (t||delResp.status));
+                                                const t = await delResp.text().catch(() => null);
+                                                throw new Error('Konnte bestehende Schicht nicht löschen: ' + (t || delResp.status));
                                             }
                                         } else {
                                             // server didn't provide id: inform user that overwrite cannot be automatic
@@ -313,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         }
                                     }
                                 } else {
-                                    const t = await resp.text().catch(()=>null);
+                                    const t = await resp.text().catch(() => null);
                                     console.warn('409 returned, but no existing_shift provided', t);
                                     alert('Konflikt beim Anlegen der Schicht (409). Siehe Konsole.');
                                 }
@@ -322,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             if (!resp.ok) {
-                                const txt = await resp.text().catch(()=>null);
+                                const txt = await resp.text().catch(() => null);
                                 throw new Error(txt || 'Server Fehler beim Anlegen');
                             }
 
@@ -664,3 +671,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     init().catch(err => console.error('Init error:', err));
 });
+
+
+// Hilfsfunktion: Prüfen, ob die Zeit innerhalb der erlaubten Schichtblöcke liegt
+function isTimeAllowed(activity, startTime) {
+    const blocks = activity.allowed_time_blocks || [];
+    return blocks.some(block =>
+        new Date(startTime) >= new Date(block.start) && new Date(startTime) < new Date(block.end)
+    );
+}

@@ -217,7 +217,9 @@ button:hover {
 }
 
 .shift-slot.filled {
-    color: white;
+    /* Schriftfarbe und Hintergrundfarbe von der Teamfarbe übernehmen */
+    color: inherit;
+    background-color: inherit;
     font-weight: bold;
     text-align: center;
     line-height: 1.2;

@@ -18,7 +18,7 @@ const pool = mysql.createPool({
     port: Number(process.env.MYSQL_PORT) || 3306,
     user: process.env.MYSQL_USER || 'root',
     password: process.env.MYSQL_PASSWORD || 'Dome1234.!',
-    database: process.env.MYSQL_DATABASE ,
+    database: process.env.MYSQL_DATABASE ||'volleyball_turnier',
     waitForConnections: true,
     connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT) || 5,
     timezone: 'Z'
@@ -303,102 +303,49 @@ app.get('/api/tournament-shifts', async (req, res) => {
     }
 });
 
-/**
- * POST /api/tournament-shifts
- * - If conflict (overlap) found: return 409 + existing_shift (do not overwrite)
- * - Else insert shift and return created shift (including id)
- */
+/// Schicht hinzufügen: Validierung der Rolle und Berücksichtigung von Schichtblöcken
 app.post('/api/tournament-shifts', async (req, res) => {
     try {
-        const {activity_id, start_time, end_time, helper_id} = req.body;
-        if (!activity_id || !start_time || !end_time || !helper_id) return res.status(400).json({error: 'Alle Felder sind erforderlich.'});
-
+        const { activity_id, start_time, end_time, helper_id } = req.body;
         const startMy = isoToMySQLDatetime(start_time);
         const endMy = isoToMySQLDatetime(end_time);
-        if (!startMy || !endMy) return res.status(400).json({error: 'Ungueltiges Datumsformat.'});
 
-        // Conflict check: existing.start < new.end AND existing.end > new.start (overlap)
-        const [confRows] = await pool.query(
-            `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
-             FROM helferplan_tournament_shifts
-             WHERE activity_id = ?
-               AND (start_time < ? AND end_time > ?)
-             LIMIT 1`,
-            [activity_id, endMy, startMy]
-        );
+        // 1. Rolle validieren
+        const [activity] = await pool.query("SELECT role_requirement, allowed_time_blocks FROM helferplan_activities WHERE id = ?", [activity_id]);
+        if (activity.length === 0) return res.status(404).json({ error: 'Aktivität nicht gefunden.' });
 
-        if (confRows && confRows.length > 0) {
-            // return 409 with existing shift so client can ask user whether to overwrite
-            const existing = mapShiftRow(confRows[0]);
-            return res.status(409).json({ conflict: true, existing_shift: existing });
+        const roleRequirement = activity[0].role_requirement;
+        const allowedTimeBlocks = activity[0].allowed_time_blocks ? JSON.parse(activity[0].allowed_time_blocks) : null;
+
+        // Prüfen, ob die Rolle passt
+        const [helper] = await pool.query("SELECT role FROM helferplan_helpers WHERE id = ?", [helper_id]);
+        if (helper.length === 0) return res.status(404).json({ error: 'Helfer nicht gefunden.' });
+        if (roleRequirement !== 'Alle' && helper[0].role !== roleRequirement) {
+            return res.status(400).json({ error: 'Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht.' });
         }
 
-        // Insert new shift. Try to populate helper_name and team_color if available from helpers/teams
-        // We'll attempt to get helper_name and team_color first
-        let helperName = null;
-        let teamColor = null;
-        try {
-            const [hrows] = await pool.query("SELECT name, team_id FROM helferplan_helpers WHERE id = ? LIMIT 1", [helper_id]);
-            if (hrows && hrows.length) {
-                helperName = hrows[0].name;
-                const teamId = hrows[0].team_id;
-                if (teamId) {
-                    const [trows] = await pool.query("SELECT color_hex FROM helferplan_teams WHERE id = ? LIMIT 1", [teamId]);
-                    if (trows && trows.length) teamColor = trows[0].color_hex;
-                }
+        // 2. Zeitblock validieren
+        if (allowedTimeBlocks) {
+            const start = new Date(start_time);
+            const isAllowed = allowedTimeBlocks.some(block => {
+                const blockStart = new Date(block.start);
+                const blockEnd = new Date(block.end);
+                return start >= blockStart && start < blockEnd;
+            });
+            if (!isAllowed) {
+                return res.status(400).json({ error: 'Die ausgewählte Zeit liegt außerhalb der zulässigen Schichtblöcke.' });
             }
-        } catch (err) {
-            // non-fatal: continue without helperName/teamColor
-            console.warn('Could not resolve helper/team meta:', err && err.message ? err.message : err);
         }
 
-        let insertRes;
-        try {
-            [insertRes] = await pool.query(
-                `INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id, helper_name, team_color)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [activity_id, startMy, endMy, helper_id, helperName, teamColor]
-            );
-        } catch (err) {
-            // Handle duplicate key race (unique constraint on activity_id,start_time,helper_id)
-            if (err && (err.errno === 1062 || err.code === 'ER_DUP_ENTRY')) {
-                try {
-                    // Try to return the existing conflicting row to client
-                    const [rows] = await pool.query(
-                        `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
-                         FROM helferplan_tournament_shifts
-                         WHERE activity_id = ? AND start_time = ? AND helper_id = ?
-                         LIMIT 1`,
-                        [activity_id, startMy, helper_id]
-                    );
-                    if (rows && rows.length) {
-                        const existing = mapShiftRow(rows[0]);
-                        return res.status(409).json({ conflict: true, existing_shift: existing });
-                    }
-                } catch (e2) {
-                    console.warn('Failed to load existing shift after duplicate key:', e2);
-                }
-                return res.status(409).json({ conflict: true, message: 'Konflikt: Schicht existiert bereits.' });
-            }
-            throw err;
-        }
-
-        const [rows] = await pool.query(
-            `SELECT id, activity_id, start_time, end_time, helper_id, helper_name, team_color
-             FROM helferplan_tournament_shifts WHERE id = ? LIMIT 1`,
-            [insertRes.insertId]
+        // Schicht anlegen (wenn keine Konflikte bestehen)
+        const [result] = await pool.query(
+            "INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id) VALUES (?, ?, ?, ?)",
+            [activity_id, startMy, endMy, helper_id]
         );
-
-        if (!rows || rows.length === 0) {
-            return res.status(500).json({ error: 'Schicht angelegt, aber konnte nicht geladen werden' });
-        }
-
-        const created = mapShiftRow(rows[0]);
-        return res.status(201).json(created);
-
+        res.json({ success: true, id: result.insertId });
     } catch (err) {
-        console.error('DB-Fehler POST /api/tournament-shifts', err);
-        res.status(500).json({error: 'DB-Fehler beim Speichern der Schicht'});
+        console.error('Fehler beim Hinzufügen der Schicht:', err);
+        res.status(500).json({ error: 'Serverfehler beim Hinzufügen der Schicht.' });
     }
 });
 
