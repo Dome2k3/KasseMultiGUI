@@ -284,6 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return;
                             }
 
+
                             let activity = allActivities.find(a => a.id == activityId);
                             console.log('Gefundene Aktivität:', activity);
 
