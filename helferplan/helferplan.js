@@ -74,6 +74,45 @@ const ADMIN_PASSWORD = '1881';
     }
 })();
 
+// Ensure setup_cleanup_shifts table exists
+(async function ensureSetupCleanupShiftsTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_setup_cleanup_shifts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                day_type ENUM('Aufbau', 'Abbau') NOT NULL,
+                start_time DATETIME NOT NULL,
+                end_time DATETIME NOT NULL,
+                helper_id INT,
+                FOREIGN KEY (helper_id) REFERENCES helferplan_helpers(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB;
+        `);
+        console.log('helferplan_setup_cleanup_shifts table OK');
+    } catch (err) {
+        console.error('Could not create helferplan_setup_cleanup_shifts table:', err && err.message ? err.message : err);
+    }
+})();
+
+// Ensure cakes table exists
+(async function ensureCakesTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_cakes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                donation_day ENUM('Freitag', 'Samstag', 'Sonntag') NOT NULL,
+                helper_id INT,
+                cake_type VARCHAR(100),
+                contains_nuts TINYINT(1) NOT NULL DEFAULT 0,
+                INDEX (helper_id),
+                FOREIGN KEY (helper_id) REFERENCES helferplan_helpers(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB;
+        `);
+        console.log('helferplan_cakes table OK');
+    } catch (err) {
+        console.error('Could not create helferplan_cakes table:', err && err.message ? err.message : err);
+    }
+})();
+
 // --- 4. Middleware einrichten ---
 app.use(cors());
 app.use(express.json());
