@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const teamSelect = document.getElementById('modal-team-select');
     const helperSelect = document.getElementById('modal-helper-select');
 
+    // Globale Variable für Aktivitäten
+    let allActivities = []; // Leeres Array als Fallback
+
     // Config
     const HOUR_PX = 40;      // width per hour column
     const LEFT_COL_PX = 200; // left name column width
