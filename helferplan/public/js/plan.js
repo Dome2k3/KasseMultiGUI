@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check if a time slot is locked (not in allowed blocks)
     function isSlotLocked(activityId, hourIndex) {
         const blocks = allowedTimeBlocks[activityId] || [];
-
+        
         // If no blocks defined, assume all times are unlocked (backward compatible)
         if (blocks.length === 0) {
             return false;
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // NEW: Check if time slot is locked via allowed_time_blocks
         const activityId = activity.id;
         const blocks = allowedTimeBlocks[activityId] || [];
-
+        
         // If no blocks defined, assume all times are allowed (backward compatible)
         if (blocks.length === 0) {
             return true;
@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Check if this hour is in any allowed block
         const isAllowed = blocks.some(block => hourIndex >= block.start && hourIndex < block.end);
-
+        
         return isAllowed;
     }
 

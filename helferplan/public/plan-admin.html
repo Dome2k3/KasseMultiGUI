@@ -76,13 +76,13 @@
   document.addEventListener('DOMContentLoaded', async () => {
     // API base for Helferplan - same as plan.js
     const API_URL_HELFERPLAN = (() => {
-      const meta = document.querySelector('meta[name="api-url-helferplan"]');
-      if (meta && meta.content) return meta.content.replace(/\/$/, '');
-      if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return `${window.location.protocol}//${window.location.hostname}:3003/api`;
-      }
-      return `${window.location.origin}/api`;
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
     })();
     window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
     console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
@@ -104,7 +104,7 @@
       const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
       if (!res.ok) throw new Error('Fehler beim Laden der Aktivitäten');
       activities = await res.json();
-
+      
       // Group activities
       const groups = activities.reduce((acc, a) => {
         const g = a.group_name || 'Ohne Gruppe';
@@ -121,7 +121,7 @@
         groupLabel.textContent = groupName;
         groupDiv.appendChild(groupLabel);
         activityList.appendChild(groupDiv);
-
+        
         groups[groupName].forEach(activity => {
           const actDiv = document.createElement('div');
           actDiv.style.paddingLeft = '12px';
@@ -208,7 +208,7 @@
 
     async function toggleSlotLock(activityId, hour, lockState) {
       const blocks = allowedBlocks[activityId] || [];
-
+      
       if (lockState === 'unlock') {
         // Add to allowed blocks (unlock the slot)
         // Merge adjacent blocks
@@ -266,7 +266,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ blocks: blocks, password: '1881' })
       });
-
+      
       allowedBlocks[activityId] = blocks;
     }
 
