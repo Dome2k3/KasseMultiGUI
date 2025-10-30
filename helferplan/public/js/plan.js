@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function generateGrid(timelineConfig) {
         const resp = await fetch(`${API_URL_HELFERPLAN}/activities`);
         if (!resp.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
-        const activities = await resp.json();
+        let activities = await resp.json();
 
         const groups = activities.reduce((acc, a) => {
             const g = a.group_name || 'Ohne Gruppe';
