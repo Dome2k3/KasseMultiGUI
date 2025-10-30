@@ -355,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     slot.addEventListener('click', () => openShiftModal(slot, activity));
                     row.appendChild(slot);
                 }
-                await fetchAndRenderAllShifts();
                 gridContainer.appendChild(row);
             });
         }
