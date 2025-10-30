@@ -1,32 +1,46 @@
-// Improved drop event handler for adding a helper to a shift slot
+// Improved drop event to immediately update the color and text style of the slot after adding a helper.
 
+// Function to handle drop event
 function handleDrop(event) {
     event.preventDefault();
-    const helperId = event.dataTransfer.getData('text/plain');
-    const helper = getHelperById(helperId);
+    const data = event.dataTransfer.getData('text/plain');
+    const helper = JSON.parse(data);
+    const slot = event.target;
 
-    // Check if the helper's role and activity requirements are met
-    if (!validateHelper(helper)) {
-        alert('This helper does not meet the role or activity requirements.');
+    // Validate helper roles and activity requirements
+    if (!isValidHelper(helper)) {
+        alert('Invalid helper. Please check their role and activity requirements.');
         return;
     }
 
-    const slot = event.target;
-    // Apply helper's team color and text style immediately
-    slot.style.backgroundColor = helper.teamColor;
-    slot.style.color = helper.textColor;
-    slot.innerText = helper.name;
+    // Add helper to the slot
+    slot.innerHTML += `<div>${helper.name}</div>`;
 
-    // Provide immediate feedback
-    alert('Helper added: ' + helper.name);
+    // Immediate color update
+    slot.style.backgroundColor = '#c8e6c9'; // Example color
+    slot.style.fontWeight = 'bold';
+
+    // Synchronization with the server
+    fetchAndRenderAllShifts();
 }
 
-function validateHelper(helper) {
-    // Implement validation logic for role and activity requirements
-    return true; // Placeholder for actual validation logic
+// Validation function
+function isValidHelper(helper) {
+    // Example validation logic
+    return helper.role && helper.activityRequirements;
 }
 
-function getHelperById(id) {
-    // Function to retrieve helper object by ID
-    return { id: id, name: 'Helper Name', teamColor: '#FF0000', textColor: '#000000' }; // Placeholder
+// Updated function to fetch and render all shifts
+function fetchAndRenderAllShifts() {
+    fetch('/api/shifts')
+        .then(response => response.json())
+        .then(data => {
+            renderShifts(data);
+        })
+        .catch(error => console.error('Error fetching shifts:', error));
+}
+
+// Render shifts function (Placeholder)
+function renderShifts(data) {
+    // Logic to render shifts on the UI
 }
