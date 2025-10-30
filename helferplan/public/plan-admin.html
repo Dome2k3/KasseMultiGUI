@@ -1,13 +1,9 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <title><!DOCTYPE html>
-      <html lang="de">
-      <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Admin: Zeitblöcke verwalten</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin: Zeitblöcke verwalten</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
     .admin-main { max-width: 1200px; margin: 0 auto; }
@@ -31,20 +27,15 @@
 <main class="admin-main">
   <h1>Admin: Zeitblöcke verwalten</h1>
 
-  <div>
-    <label for="admin-password">Admin-Passwort:</label>
-    <input type="password" id="admin-password" placeholder="Passwort eingeben">
-    <button id="admin-login-button">Login</button>
-    <p id="admin-error" style="color: red; display: none;">Ungültiges Passwort</p>
-  </div>
-
-  <div id="admin-layout" class="admin-layout" style="display: none;">
+  <div id="admin-layout" class="admin-layout">
     <div class="left-panel">
       <h3>Aktivitäten</h3>
+      <!-- Liste der Aktivitäten -->
       <ul id="activity-list"></ul>
     </div>
 
     <div id="plan-container">
+      <!-- Zeitplan -->
       <div id="timeline-header" aria-hidden="true"></div>
       <div id="grid-container" role="grid"></div>
     </div>
@@ -52,38 +43,24 @@
 </main>
 
 <script>
-  const API_URL = '/api'; // Basis-URL für die API
-  const ADMIN_PASSWORD = '1881'; // Standard-Admin-Passwort
-
-  document.addEventListener('DOMContentLoaded', () => {
-    // API base for Helferplan
-    const API_URL_HELFERPLAN = (() => {
-      const meta = document.querySelector('meta[name="api-url-helferplan"]');
-      if (meta && meta.content) return meta.content.replace(/\/$/, '');
-      if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return `${window.location.protocol}//${window.location.hostname}:3003/api`;
-      }
-      return `${window.location.origin}/api`;
-    })();
-    window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
-    console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
+  // API-Basis-URL (automatisch ermittelt)
+  const API_URL_HELFERPLAN = (() => {
+    const meta = document.querySelector('meta[name="api-url-helferplan"]');
+    if (meta && meta.content) return meta.content.replace(/\/$/, '');
+    if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+    }
+    return `${window.location.origin}/api`;
+  })();
+  window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
+  console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
 
   let selectedActivity = null;
 
-  //document.getElementById('admin-login-button').addEventListener('click', () => {
-  //  const password = document.getElementById('admin-password').value;
-  //  if (password === ADMIN_PASSWORD) {
-   //   document.getElementById('admin-layout').style.display = 'flex';
-  //    document.getElementById('admin-error').style.display = 'none';
-   //   loadActivities();
-   // } else {
-   //   document.getElementById('admin-error').style.display = 'block';
-  //  }
-  //});
-
+  // Lädt die Liste der Aktivitäten
   async function loadActivities() {
-    const res = await fetch(`${API_URL}/activities`);
+    const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
     const activities = await res.json();
     const list = document.getElementById('activity-list');
     list.innerHTML = '';
@@ -99,12 +76,13 @@
     });
   }
 
+  // Rendert das Zeitraster für eine Aktivität
   async function renderGrid(activity) {
-    const res = await fetch(`${API_URL}/activities/${activity.id}/allowed-time-blocks`);
+    const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
     const allowedBlocks = await res.json();
 
     // Lade bestehende Schichten
-    const shiftsRes = await fetch(`${API_URL}/tournament-shifts?activity_id=${activity.id}`);
+    const shiftsRes = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts?activity_id=${activity.id}`);
     const existingShifts = await shiftsRes.json();
 
     const grid = document.getElementById('grid-container');
@@ -129,20 +107,44 @@
         slot.textContent = `Nicht erlaubt (${hour}:00)`;
       }
 
-      slot.addEventListener('click', () => toggleBlock(hour));
+      slot.addEventListener('click', () => toggleBlock(hour, activity));
       grid.appendChild(slot);
     }
   }
 
-  function toggleBlock(hour) {
-    // Blöcke umschalten (Allowed/Not Allowed)
-    console.log(`Block umschalten: ${hour}`);
-  }
-</script>
-</body>
-</html></title>
-</head>
-<body>
+  // Umschalten eines Zeitblocks (erlaubt/nicht erlaubt)
+  async function toggleBlock(hour, activity) {
+    try {
+      const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+      let allowedBlocks = await res.json();
 
+      // Block hinzufügen oder entfernen
+      const existingIndex = allowedBlocks.findIndex(block => hour >= block.start && hour < block.end);
+      if (existingIndex >= 0) {
+        allowedBlocks.splice(existingIndex, 1); // Entfernen
+      } else {
+        allowedBlocks.push({ start: hour, end: hour + 1 }); // Hinzufügen
+      }
+
+      // Aktualisiere die Datenbank
+      await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks: allowedBlocks })
+      });
+
+      // Raster neu rendern
+      renderGrid(activity);
+    } catch (error) {
+      console.error('Fehler beim Umschalten des Blocks:', error);
+      alert('Ein Fehler ist beim Speichern des Blocks aufgetreten.');
+    }
+  }
+
+  // Initialisierung
+  document.addEventListener('DOMContentLoaded', () => {
+    loadActivities();
+  });
+</script>
 </body>
 </html>
