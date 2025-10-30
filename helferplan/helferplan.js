@@ -35,7 +35,7 @@ const ADMIN_PASSWORD = '1881';
             (
                 setting_key VARCHAR(50) PRIMARY KEY,
                 setting_value VARCHAR(255) NOT NULL
-            ) ENGINE=InnoDB;
+                ) ENGINE=InnoDB;
         `);
         console.log('helferplan_settings table OK');
     } catch (err) {
@@ -53,6 +53,23 @@ const ADMIN_PASSWORD = '1881';
             console.log('Unique index already exists');
         } else {
             console.log('Could not ensure unique index for helferplan_helpers.name (this may be okay):', err && err.message ? err.message : err);
+        }
+    }
+})();
+
+// Ensure allowed_time_blocks column exists in helferplan_activities table
+(async function ensureAllowedTimeBlocksColumn() {
+    try {
+        await pool.query(`
+            ALTER TABLE volleyball_turnier.helferplan_activities 
+            ADD COLUMN allowed_time_blocks JSON DEFAULT NULL;
+        `);
+        console.log('allowed_time_blocks column added to helferplan_activities');
+    } catch (err) {
+        if (err && err.errno === 1060) {
+            console.log('allowed_time_blocks column already exists');
+        } else {
+            console.log('Could not add allowed_time_blocks column (this may be okay):', err && err.message ? err.message : err);
         }
     }
 })();

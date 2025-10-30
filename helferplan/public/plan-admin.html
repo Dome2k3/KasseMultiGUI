@@ -74,97 +74,295 @@
 <script src="/helferplan/public/config.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
+    // API base for Helferplan - same as plan.js
+    const API_URL_HELFERPLAN = (() => {
+      const meta = document.querySelector('meta[name="api-url-helferplan"]');
+      if (meta && meta.content) return meta.content.replace(/\/$/, '');
+      if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+      }
+      return `${window.location.origin}/api`;
+    })();
+    window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
+    console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
+
     const timelineHeader = document.getElementById('timeline-header');
     const gridContainer = document.getElementById('grid-container');
+    const activityList = document.getElementById('activity-list');
+
+    // Config - match plan.js
+    const HOUR_PX = 40;
+    const LEFT_COL_PX = 200;
 
     let activities = [];
     let allowedBlocks = {};
+    let isDragging = false;
+    let dragMode = null; // 'lock' or 'unlock'
 
     async function fetchActivities() {
-      const res = await fetch(`${window.API_URL_HELFERPLAN}/activities`);
+      const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
+      if (!res.ok) throw new Error('Fehler beim Laden der Aktivitäten');
       activities = await res.json();
+
+      // Group activities
+      const groups = activities.reduce((acc, a) => {
+        const g = a.group_name || 'Ohne Gruppe';
+        (acc[g] || (acc[g]=[])).push(a);
+        return acc;
+      }, {});
+
+      // Render activity list
+      activityList.innerHTML = '';
+      for (const groupName in groups) {
+        const groupDiv = document.createElement('div');
+        groupDiv.style.marginBottom = '8px';
+        const groupLabel = document.createElement('strong');
+        groupLabel.textContent = groupName;
+        groupDiv.appendChild(groupLabel);
+        activityList.appendChild(groupDiv);
+
+        groups[groupName].forEach(activity => {
+          const actDiv = document.createElement('div');
+          actDiv.style.paddingLeft = '12px';
+          actDiv.textContent = activity.name;
+          activityList.appendChild(actDiv);
+        });
+      }
     }
 
     async function fetchAllowedBlocks() {
       for (const activity of activities) {
-        const res = await fetch(`${window.API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+        const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
         allowedBlocks[activity.id] = await res.json();
       }
     }
 
-    function renderTimeline() {
-      timelineHeader.innerHTML = '';
-      const totalHours = 48; // Beispiel für 2 Tage
-      timelineHeader.style.gridTemplateColumns = `repeat(${totalHours}, 40px)`;
+    function generateTimeline() {
+      const hoursCountByDay = [12, 24, 18]; // Fr 12-24, Sa 0-24, So 0-18
+      const days = ['Freitag','Samstag','Sonntag'];
+      const totalHours = hoursCountByDay.reduce((a,b)=>a+b,0);
+      const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${totalHours}, ${HOUR_PX}px)`;
 
-      for (let hour = 0; hour < totalHours; hour++) {
-        const hourSlot = document.createElement('div');
-        hourSlot.className = 'hour-slot';
-        const time = `${12 + (hour % 24)}:00`; // Uhrzeit berechnen
-        hourSlot.textContent = time;
-        timelineHeader.appendChild(hourSlot);
+      timelineHeader.innerHTML = '';
+      timelineHeader.style.display = 'grid';
+      timelineHeader.style.gridTemplateColumns = gridTemplateColumns;
+      timelineHeader.style.gridGap = '0';
+      timelineHeader.style.paddingLeft = '0';
+      timelineHeader.style.paddingInlineStart = '0';
+
+      // Left placeholder
+      const placeholder = document.createElement('div');
+      placeholder.className = 'left-placeholder';
+      placeholder.style.background = 'transparent';
+      placeholder.style.margin = '0';
+      placeholder.style.padding = '0';
+      placeholder.style.width = `${LEFT_COL_PX}px`;
+      placeholder.style.minWidth = `${LEFT_COL_PX}px`;
+      placeholder.style.maxWidth = `${LEFT_COL_PX}px`;
+      timelineHeader.appendChild(placeholder);
+
+      // Days wrapper
+      const daysWrapper = document.createElement('div');
+      daysWrapper.style.display = 'grid';
+      daysWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
+      daysWrapper.style.gridColumn = '2 / -1';
+      daysWrapper.style.gap = '0';
+
+      let offset = 0;
+      hoursCountByDay.forEach((count, idx) => {
+        const dh = document.createElement('div');
+        dh.className = 'day-header';
+        dh.style.gridColumn = `${offset+1} / ${offset+1+count}`;
+        dh.style.textAlign = 'center';
+        dh.style.padding = '6px 0';
+        dh.textContent = days[idx] || '';
+        daysWrapper.appendChild(dh);
+        offset += count;
+      });
+      timelineHeader.appendChild(daysWrapper);
+
+      // Hours wrapper
+      const hoursWrapper = document.createElement('div');
+      hoursWrapper.style.display = 'grid';
+      hoursWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
+      hoursWrapper.style.gridColumn = '2 / -1';
+      hoursWrapper.style.gap = '0';
+      for (let i=0;i<totalHours;i++){
+        const hour = document.createElement('div');
+        hour.className = 'hour-slot';
+        hour.textContent = `${(12 + i) % 24}:00`;
+        hoursWrapper.appendChild(hour);
       }
+      timelineHeader.appendChild(hoursWrapper);
+
+      return { totalHours, gridTemplateColumns };
     }
 
-    function renderGrid() {
-      gridContainer.innerHTML = '';
-      activities.forEach(activity => {
-        const row = document.createElement('div');
-        row.className = 'activity-row';
-        row.style.display = 'grid';
-        row.style.gridTemplateColumns = `200px repeat(48, 40px)`; // 200px für Aktivitätsnamen, 48 für Stunden
+    function isHourLocked(activityId, hour) {
+      const blocks = allowedBlocks[activityId] || [];
+      // A slot is "unlocked" if there's a block covering it
+      // We'll use inverse logic: locked = NOT in any allowed block
+      return !blocks.some(block => hour >= block.start && hour < block.end);
+    }
 
-        const nameCell = document.createElement('div');
-        nameCell.className = 'activity-name';
-        nameCell.textContent = activity.name;
-        row.appendChild(nameCell);
+    async function toggleSlotLock(activityId, hour, lockState) {
+      const blocks = allowedBlocks[activityId] || [];
 
-        for (let hour = 0; hour < 48; hour++) {
-          const slot = document.createElement('div');
-          slot.className = 'shift-slot';
-
-          const isAllowed = allowedBlocks[activity.id]?.some(block => hour >= block.start && hour < block.end);
-          slot.classList.add(isAllowed ? 'allowed' : 'not-allowed');
-
-          slot.draggable = true;
-          slot.addEventListener('dragstart', () => {
-            slot.classList.add('hover');
-          });
-          slot.addEventListener('dragend', () => {
-            slot.classList.remove('hover');
-          });
-          slot.addEventListener('drop', async (event) => {
-            event.preventDefault();
-            const updatedBlocks = allowedBlocks[activity.id] || [];
-            const existingIndex = updatedBlocks.findIndex(block => hour >= block.start && hour < block.end);
-            if (existingIndex >= 0) {
-              updatedBlocks.splice(existingIndex, 1);
-              slot.classList.remove('allowed');
-              slot.classList.add('not-allowed');
-            } else {
-              updatedBlocks.push({ start: hour, end: hour + 1 });
-              slot.classList.remove('not-allowed');
-              slot.classList.add('allowed');
+      if (lockState === 'unlock') {
+        // Add to allowed blocks (unlock the slot)
+        // Merge adjacent blocks
+        let merged = false;
+        for (let i = 0; i < blocks.length; i++) {
+          if (blocks[i].end === hour) {
+            blocks[i].end = hour + 1;
+            merged = true;
+            // Check if we can merge with next block
+            for (let j = i + 1; j < blocks.length; j++) {
+              if (blocks[j].start === blocks[i].end) {
+                blocks[i].end = blocks[j].end;
+                blocks.splice(j, 1);
+                break;
+              }
             }
-            await fetch(`${window.API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ blocks: updatedBlocks })
-            });
-            allowedBlocks[activity.id] = updatedBlocks;
-          });
-
-          row.appendChild(slot);
+            break;
+          } else if (blocks[i].start === hour + 1) {
+            blocks[i].start = hour;
+            merged = true;
+            break;
+          }
         }
+        if (!merged) {
+          blocks.push({ start: hour, end: hour + 1 });
+        }
+      } else {
+        // Remove from allowed blocks (lock the slot)
+        for (let i = blocks.length - 1; i >= 0; i--) {
+          const block = blocks[i];
+          if (hour >= block.start && hour < block.end) {
+            if (hour === block.start && hour + 1 === block.end) {
+              // Remove entire block
+              blocks.splice(i, 1);
+            } else if (hour === block.start) {
+              // Trim from start
+              block.start = hour + 1;
+            } else if (hour + 1 === block.end) {
+              // Trim from end
+              block.end = hour;
+            } else {
+              // Split block
+              const newBlock = { start: hour + 1, end: block.end };
+              block.end = hour;
+              blocks.push(newBlock);
+            }
+            break;
+          }
+        }
+      }
 
-        gridContainer.appendChild(row);
+      // Send to server
+      await fetch(`${API_URL_HELFERPLAN}/activities/${activityId}/allowed-time-blocks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks: blocks, password: '1881' })
       });
+
+      allowedBlocks[activityId] = blocks;
+    }
+
+    function renderGrid(timelineConfig) {
+      const groups = activities.reduce((acc, a) => {
+        const g = a.group_name || 'Ohne Gruppe';
+        (acc[g] || (acc[g]=[])).push(a);
+        return acc;
+      }, {});
+
+      gridContainer.innerHTML = '';
+
+      for (const groupName in groups) {
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'activity-group-header';
+        groupHeader.textContent = groupName;
+        gridContainer.appendChild(groupHeader);
+
+        groups[groupName].forEach(activity => {
+          const row = document.createElement('div');
+          row.className = 'activity-row';
+          row.style.display = 'grid';
+          row.style.gridTemplateColumns = timelineConfig.gridTemplateColumns;
+          row.style.gridGap = '0';
+
+          const nameCell = document.createElement('div');
+          nameCell.className = 'activity-name';
+          nameCell.textContent = activity.name;
+          row.appendChild(nameCell);
+
+          for (let i = 0; i < timelineConfig.totalHours; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'shift-slot';
+            slot.dataset.activityId = activity.id;
+            slot.dataset.hourIndex = i;
+
+            const locked = isHourLocked(activity.id, i);
+            if (locked) {
+              slot.style.backgroundColor = '#ccc';
+              slot.style.opacity = '0.5';
+              slot.title = 'Gesperrt (klicken zum Entsperren)';
+            } else {
+              slot.style.backgroundColor = '#90EE90';
+              slot.style.opacity = '1';
+              slot.title = 'Freigeschaltet (klicken zum Sperren)';
+            }
+
+            // Mouse events for drag-to-paint
+            slot.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              isDragging = true;
+              const currentlyLocked = isHourLocked(activity.id, i);
+              dragMode = currentlyLocked ? 'unlock' : 'lock';
+              toggleSlotLock(activity.id, i, dragMode).then(() => {
+                updateSlotVisual(slot, activity.id, i);
+              });
+            });
+
+            slot.addEventListener('mouseenter', (e) => {
+              if (isDragging && dragMode) {
+                toggleSlotLock(activity.id, i, dragMode).then(() => {
+                  updateSlotVisual(slot, activity.id, i);
+                });
+              }
+            });
+
+            row.appendChild(slot);
+          }
+          gridContainer.appendChild(row);
+        });
+      }
+
+      // Global mouse up to stop dragging
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+        dragMode = null;
+      });
+    }
+
+    function updateSlotVisual(slot, activityId, hour) {
+      const locked = isHourLocked(activityId, hour);
+      if (locked) {
+        slot.style.backgroundColor = '#ccc';
+        slot.style.opacity = '0.5';
+        slot.title = 'Gesperrt (klicken zum Entsperren)';
+      } else {
+        slot.style.backgroundColor = '#90EE90';
+        slot.style.opacity = '1';
+        slot.title = 'Freigeschaltet (klicken zum Sperren)';
+      }
     }
 
     await fetchActivities();
     await fetchAllowedBlocks();
-    renderTimeline();
-    renderGrid();
+    const timelineConfig = generateTimeline();
+    renderGrid(timelineConfig);
   });
 </script>
 </body>
