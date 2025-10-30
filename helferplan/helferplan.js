@@ -16,9 +16,9 @@ const port = Number(process.env.PORT) || 3003;
 const pool = mysql.createPool({
     host: process.env.MYSQL_HOST || 'localhost',
     port: Number(process.env.MYSQL_PORT) || 3306,
-    user: process.env.MYSQL_USER || ,
-    password: process.env.MYSQL_PASSWORD || ,
-    database: process.env.MYSQL_DATABASE || ,
+    user: process.env.MYSQL_USER || 'root',
+    password: process.env.MYSQL_PASSWORD || 'Dome1234.!',
+    database: process.env.MYSQL_DATABASE ,
     waitForConnections: true,
     connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT) || 5,
     timezone: 'Z'
@@ -28,7 +28,7 @@ const pool = mysql.createPool({
 (async function ensureSettingsTable() {
     try {
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS helferplan_settings
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_settings
             (
                 setting_key VARCHAR(50) PRIMARY KEY,
                 setting_value VARCHAR(255) NOT NULL
@@ -43,7 +43,7 @@ const pool = mysql.createPool({
 // Optional: try to create unique index on helper name (best-effort)
 (async function ensureHelperNameUniqueIndex() {
     try {
-        await pool.query("ALTER TABLE helferplan_helpers ADD UNIQUE INDEX uniq_helper_name (name(191));");
+        await pool.query("ALTER TABLE volleyball_turnier.helferplan_helpers ADD UNIQUE INDEX uniq_helper_name (name(191));");
         console.log('Unique index on helferplan_helpers.name created/ensured');
     } catch (err) {
         if (err && err.errno === 1061) {
