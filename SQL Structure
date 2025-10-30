@@ -1,0 +1,182 @@
+bon: table
+    + columns
+        id: int(11) NN auto_increment = 110
+        created_at: timestamp default current_timestamp()
+        totalAmount: decimal(10,2) NN
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+bon_items: table
+    + columns
+        id: int(11) NN auto_increment = 379
+        bon_id: int(11) NN
+        name: varchar(100) NN
+        price: decimal(5,2) NN
+        quantity: int(11) NN
+        total: decimal(5,2) NN
+    + indices
+        bon_id: index (bon_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+config_gebinde: table
+    + columns
+        id: int(11) NN auto_increment = 29
+        produkt_name: varchar(255) NN
+        gebinde_groesse: int(11) NN
+        created_at: datetime default current_timestamp()
+        updated_at: datetime default current_timestamp() on update current_timestamp()
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+helferplan_activities: table
+    + columns
+        id: int(11) NN auto_increment = 12
+        name: varchar(100) NN
+        group_id: int(11)
+        role_requirement: enum('Minderjaehrig', 'Erwachsen', 'Orga', 'Alle') NN default 'Alle'
+        sort_order: int(11) default 0
+        allowed_time_blocks: longtext collate utf8mb4_bin
+    + indices
+        group_id: index (group_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+    + foreign-keys
+        helferplan_activities_ibfk_1: foreign key (group_id) -> helferplan_activity_groups (id) d:cascade
+    + checks
+        #1: check (json_valid(`allowed_time_blocks`)) cols = [allowed_time_blocks]
+helferplan_activity_groups: table
+    + columns
+        id: int(11) NN auto_increment = 1
+        name: varchar(100) NN
+        sort_order: int(11) default 0
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+        name: AK (name)
+helferplan_cakes: table
+    + columns
+        id: int(11) NN auto_increment = 1
+        donation_day: enum('Freitag', 'Samstag', 'Sonntag') NN
+        helper_id: int(11)
+        cake_type: varchar(100)
+        contains_nuts: tinyint(1) NN default 0
+    + indices
+        helper_id: index (helper_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+    + foreign-keys
+        helferplan_cakes_ibfk_1: foreign key (helper_id) -> helferplan_helpers (id) d:set_null
+helferplan_changelog: table
+    + columns
+        id: int(11) NN auto_increment = 1
+        timestamp: datetime default current_timestamp()
+        editor_name: varchar(100) NN
+        change_description: text NN
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+helferplan_helpers: table
+    + columns
+        id: int(11) NN auto_increment = 24
+        name: varchar(191)
+        team_id: int(11)
+        role: enum('Minderjaehrig', 'Erwachsen', 'Orga') NN default 'Erwachsen'
+    + indices
+        team_id: index (team_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+        idx_name: AK (name)
+        uniq_helper_name: AK (name)
+    + foreign-keys
+        helferplan_helpers_ibfk_1: foreign key (team_id) -> teams (id) d:set_null
+helferplan_settings: table
+    + columns
+        setting_key: varchar(50) NN
+        setting_value: varchar(255) NN
+    + keys
+        #1: PK (setting_key) (underlying index PRIMARY)
+helferplan_setup_cleanup_shifts: table
+    + columns
+        id: int(11) NN auto_increment = 1
+        day_type: enum('Aufbau', 'Abbau') NN
+        start_time: datetime NN
+        end_time: datetime NN
+        helper_id: int(11)
+    + indices
+        helper_id: index (helper_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+    + foreign-keys
+        helferplan_setup_cleanup_shifts_ibfk_1: foreign key (helper_id) -> helferplan_helpers (id) d:set_null
+helferplan_teams: table
+    + columns
+        id: int(11) NN auto_increment = 1
+        name: varchar(100) NN
+        color_hex: varchar(7) NN default '#FFFFFF'
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+        name: AK (name)
+helferplan_tournament_shifts: table
+    + columns
+        id: int(11) NN auto_increment = 1
+        activity_id: int(11) NN
+        start_time: datetime NN
+        end_time: datetime NN
+        helper_id: int(11)
+        is_override: tinyint(1) default 0
+    + indices
+        helper_id: index (helper_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+        activity_id: AK (activity_id, start_time)
+    + foreign-keys
+        helferplan_tournament_shifts_ibfk_1: foreign key (activity_id) -> helferplan_activities (id) d:cascade
+        helferplan_tournament_shifts_ibfk_2: foreign key (helper_id) -> helferplan_helpers (id) d:set_null
+kasse_bon: table
+    + columns
+        id: int(11) NN auto_increment = 155
+        total: decimal(10,2) NN
+        category: varchar(50) NN
+        created_at: timestamp default current_timestamp()
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+kasse_bon_items: table
+    + columns
+        id: int(11) NN auto_increment = 777
+        bon_id: int(11) NN
+        name: varchar(255) NN
+        quantity: int(11) NN
+        total: decimal(10,2) NN
+    + indices
+        bon_id: index (bon_id) type btree
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+    + foreign-keys
+        kasse_bon_items_ibfk_1: foreign key (bon_id) -> kasse_bon (id) d:cascade
+kasse_produkte: table
+    + columns
+        id: int(11) NN auto_increment = 41
+        name: varchar(255) NN
+        preis: decimal(10,2) NN
+        kategorie: varchar(100)
+        created_at: timestamp default current_timestamp()
+        gui: varchar(50) NN default 'essen'
+        menge: int(11) default 1
+        einheit: varchar(16) default 'Stück'
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+lager_bestand: table
+    + columns
+        id: int(11) NN auto_increment = 29
+        produkt_name: varchar(255) NN
+        menge: int(11) NN
+        einheit: varchar(16) NN
+        last_update: datetime default current_timestamp() on update current_timestamp()
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
+teams: table
+    + columns
+        id: int(11) NN auto_increment = 160
+        name: varchar(255) NN
+        anmelder: varchar(255)
+        email: varchar(255)
+        status: enum('neutral', 'angemeldet', 'abgemeldet') default 'neutral'
+        teilnehmerzahl: int(11) default 0
+    + keys
+        #1: PK (id) (underlying index PRIMARY)
