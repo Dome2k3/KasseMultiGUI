@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let EVENT_START_DATE = '2024-07-19T12:00:00Z'; // fallback
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
     let allShifts = []; // cached shift array from server; used to find shift ids
+    let allowedTimeBlocks = {}; // {activityId: [{start, end}, ...]}
 
     // --- Helpers ---
     function hourIndexToDate(index) {
@@ -67,8 +68,41 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { return 0; }
     }
 
+    // Fetch allowed time blocks for all activities
+    async function fetchAllowedTimeBlocks(activities) {
+        allowedTimeBlocks = {};
+        const promises = activities.map(async (activity) => {
+            try {
+                const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+                if (res.ok) {
+                    const blocks = await res.json();
+                    allowedTimeBlocks[activity.id] = blocks;
+                } else {
+                    allowedTimeBlocks[activity.id] = [];
+                }
+            } catch (err) {
+                console.warn(`Failed to fetch allowed blocks for activity ${activity.id}:`, err);
+                allowedTimeBlocks[activity.id] = [];
+            }
+        });
+        await Promise.all(promises);
+    }
+
+    // Check if a time slot is locked (not in allowed blocks)
+    function isSlotLocked(activityId, hourIndex) {
+        const blocks = allowedTimeBlocks[activityId] || [];
+        
+        // If no blocks defined, assume all times are unlocked (backward compatible)
+        if (blocks.length === 0) {
+            return false;
+        }
+
+        // Check if this hour is NOT in any allowed block (locked = not allowed)
+        const isAllowed = blocks.some(block => hourIndex >= block.start && hourIndex < block.end);
+        return !isAllowed;
+    }
+
     // Prüft ob eine Zeit für eine Aktivität erlaubt ist
-    // TODO: Implementierung basierend auf Aktivitäts-Zeitfenster
     function isTimeAllowed(activity, startTime) {
         // Aktuell keine spezifischen Zeitbeschränkungen implementiert
         // Diese Funktion kann erweitert werden, um z.B. Aktivitäts-spezifische
@@ -80,8 +114,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return false;
         }
 
-        // Weitere Validierungslogik kann hier hinzugefügt werden
-        return true;
+        // NEW: Check if time slot is locked via allowed_time_blocks
+        const activityId = activity.id;
+        const blocks = allowedTimeBlocks[activityId] || [];
+        
+        // If no blocks defined, assume all times are allowed (backward compatible)
+        if (blocks.length === 0) {
+            return true;
+        }
+
+        // Calculate hour index from startTime
+        const start = new Date(EVENT_START_DATE);
+        const st = new Date(startTime);
+        const hourIndex = Math.round((st - start) / (1000 * 60 * 60));
+
+        // Check if this hour is in any allowed block
+        const isAllowed = blocks.some(block => hourIndex >= block.start && hourIndex < block.end);
+        
+        return isAllowed;
     }
 
     // --- Rendering helpers ---
@@ -222,6 +272,9 @@ document.addEventListener('DOMContentLoaded', () => {
         allActivities = activities;
         console.log('allActivities synchronisiert:', allActivities.length, 'Aktivitäten geladen');
 
+        // Fetch allowed time blocks for all activities
+        await fetchAllowedTimeBlocks(activities);
+
         const groups = activities.reduce((acc, a) => {
             const g = a.group_name || 'Ohne Gruppe';
             (acc[g] || (acc[g]=[])).push(a);
@@ -260,12 +313,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.warn('Aktivität ohne ID erkannt:', activity);
                     }
 
+                    // Check if this slot is locked
+                    const isLocked = isSlotLocked(activity.id, i);
+                    if (isLocked) {
+                        slot.classList.add('locked-slot');
+                        slot.style.backgroundColor = '#e0e0e0';
+                        slot.style.opacity = '0.5';
+                        slot.style.cursor = 'not-allowed';
+                        slot.title = 'Dieser Zeitslot ist gesperrt';
+                    }
+
                     slot.addEventListener('dragover', (e) => {
+                        // Prevent drop on locked slots
+                        if (isLocked) {
+                            e.dataTransfer.dropEffect = 'none';
+                            return;
+                        }
                         e.preventDefault();
                         e.dataTransfer.dropEffect = 'copy';
                         handleHoverHighlight(slot);
                     });
                     slot.addEventListener('dragenter', (e) => {
+                        if (isLocked) return;
                         e.preventDefault();
                         handleHoverHighlight(slot);
                     });
@@ -352,7 +421,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
 
-                    slot.addEventListener('click', () => openShiftModal(slot, activity));
+                    slot.addEventListener('click', () => {
+                        // Don't open modal for locked slots unless they already have a shift
+                        if (isLocked && !slot.dataset.helperId) {
+                            alert('Dieser Zeitslot ist gesperrt. Bitte entsperren Sie ihn in der Turnier-Admin Ansicht.');
+                            return;
+                        }
+                        openShiftModal(slot, activity);
+                    });
                     row.appendChild(slot);
                 }
                 gridContainer.appendChild(row);
