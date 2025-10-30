@@ -55,6 +55,20 @@
   const API_URL = '/api'; // Basis-URL für die API
   const ADMIN_PASSWORD = '1881'; // Standard-Admin-Passwort
 
+  document.addEventListener('DOMContentLoaded', () => {
+    // API base for Helferplan
+    const API_URL_HELFERPLAN = (() => {
+      const meta = document.querySelector('meta[name="api-url-helferplan"]');
+      if (meta && meta.content) return meta.content.replace(/\/$/, '');
+      if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+      }
+      return `${window.location.origin}/api`;
+    })();
+    window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
+    console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
+
   let selectedActivity = null;
 
   document.getElementById('admin-login-button').addEventListener('click', () => {
