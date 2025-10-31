@@ -659,28 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
             doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 16, { align: 'center' });
         }
         
-        // Helper function to parse time
-        function parseTime(timeStr) {
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            return hours + minutes / 60;
-        }
-        
-        // Helper function to format time
-        function formatTime(decimalHours) {
-            const hours = Math.floor(decimalHours);
-            const minutes = Math.round((decimalHours - hours) * 60);
-            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-        }
-        
-        // Helper function to get team color as RGB
-        function hexToRgb(hex) {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? {
-                r: parseInt(result[1], 16),
-                g: parseInt(result[2], 16),
-                b: parseInt(result[3], 16)
-            } : { r: 150, g: 150, b: 150 };
-        }
+        // Note: parseTime, formatTime, and hexToRgb are now in utils.js
         
         // Process days
         const daysData = [];
@@ -859,15 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
             doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 18, { align: 'center' });
         }
         
-        // Helper function to get team color as RGB
-        function hexToRgb(hex) {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? {
-                r: parseInt(result[1], 16),
-                g: parseInt(result[2], 16),
-                b: parseInt(result[3], 16)
-            } : { r: 150, g: 150, b: 150 };
-        }
+        // Note: hexToRgb is now in utils.js
         
         // Group cakes by day
         const days = ['Freitag', 'Samstag', 'Sonntag'];

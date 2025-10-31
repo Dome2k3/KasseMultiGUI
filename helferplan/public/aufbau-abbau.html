@@ -228,18 +228,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return team ? team.color_hex : '#999';
     }
     
-    // Parse time string "HH:MM" to hours as decimal
-    function parseTime(timeStr) {
-        const [hours, minutes] = timeStr.split(':').map(Number);
-        return hours + minutes / 60;
-    }
-    
-    // Format time from decimal hours to "HH:MM"
-    function formatTime(decimalHours) {
-        const hours = Math.floor(decimalHours);
-        const minutes = Math.round((decimalHours - hours) * 60);
-        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-    }
+    // Note: parseTime, formatTime, and hexToRgb are now in utils.js
     
     function renderDays() {
         container.innerHTML = '';
