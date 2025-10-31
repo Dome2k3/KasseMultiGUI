@@ -6,91 +6,101 @@
     <title>Auf- und Abbau Planung</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
+        .filter-panel {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filter-panel label {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        .filter-panel select {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
         .setup-container {
             display: flex;
-            flex-direction: column;
             gap: 20px;
             margin-top: 20px;
+            overflow-x: auto;
         }
-        .day-section {
+        .day-column {
+            flex: 0 0 280px;
+            min-width: 280px;
             border: 1px solid #ddd;
-            padding: 16px;
+            padding: 12px;
             border-radius: 8px;
             background: #f9f9f9;
         }
-        .day-section h3 {
+        .day-column h3 {
             margin-top: 0;
             color: #005A9F;
             border-bottom: 2px solid #005A9F;
             padding-bottom: 8px;
+            font-size: 16px;
+            text-align: center;
         }
-        .slots-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 12px;
-            margin-top: 12px;
-        }
-        .slot-item {
-            background: #fff;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            padding: 10px;
-            min-height: 60px;
+        .shifts-list {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
+            margin-top: 12px;
         }
-        .slot-item.filled {
-            border-color: #4CAF50;
-            background-color: #e8f5e9;
+        .shift-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
         }
-        .slot-item.required {
+        .shift-row.required {
             border-color: #ff9800;
-            border-width: 2px;
+            background-color: #fff3e0;
         }
-        .slot-label {
-            font-size: 11px;
-            color: #666;
+        .shift-number {
             font-weight: 600;
+            color: #666;
+            min-width: 25px;
         }
         .helper-select {
-            width: 100%;
-            padding: 6px;
+            flex: 1;
+            padding: 4px 6px;
             border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 13px;
+            border-radius: 3px;
+            font-size: 11px;
         }
-        .clear-btn {
-            background: #d32f2f;
-            color: white;
-            border: none;
+        .helper-name {
+            flex: 1;
             padding: 4px 8px;
             border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            margin-top: 4px;
-        }
-        .clear-btn:hover {
-            background: #b71c1c;
-        }
-        .helper-info {
-            font-size: 12px;
-            color: #333;
+            color: #fff;
             font-weight: 600;
-        }
-        .team-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            color: white;
-            font-size: 11px;
-            margin-left: 4px;
+            text-align: center;
+            min-height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .info-text {
             font-size: 13px;
             color: #666;
             font-style: italic;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
+        }
+        .dimmed {
+            opacity: 0.3;
+            filter: grayscale(80%);
         }
     </style>
 </head>
@@ -105,7 +115,22 @@
 
 <main>
     <h1>Auf- und Abbau Planung</h1>
-    <p class="info-text">Jedem Auf-/Abbautag können bis zu 40 Helfer zugewiesen werden. Die ersten Slots (orange markiert) sind für Erwachsene/Orga-Helfer reserviert.</p>
+    <p class="info-text">Jedem Auf-/Abbautag können bis zu 40 Helfer zugewiesen werden (4-Stunden-Schichten). Die ersten Slots (orange markiert) sind für Erwachsene/Orga-Helfer reserviert.</p>
+    
+    <div class="filter-panel">
+        <div>
+            <label for="view-team-filter">Team-Ansicht filtern:</label>
+            <select id="view-team-filter">
+                <option value="">Alle Teams</option>
+            </select>
+        </div>
+        <div>
+            <label for="helper-team-filter">Helfer-Auswahl filtern:</label>
+            <select id="helper-team-filter">
+                <option value="">Alle Teams</option>
+            </select>
+        </div>
+    </div>
     
     <div id="setup-container" class="setup-container">
         <!-- Days will be generated dynamically -->
@@ -114,6 +139,7 @@
 
 <!-- Lade runtime config vor den App-Skripten -->
 <script src="/helferplan/public/config.js"></script>
+<script src="/helferplan/public/js/utils.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
     // API URL setup (same pattern as plan.js)
@@ -128,34 +154,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     })();
     
     const container = document.getElementById('setup-container');
+    const viewTeamFilter = document.getElementById('view-team-filter');
+    const helperTeamFilter = document.getElementById('helper-team-filter');
     
     let helpers = [];
     let teams = [];
     let shifts = [];
     let settings = {};
+    let helperById = {};
     
     // Fetch all required data
     async function loadData() {
         try {
-            // Load helpers
-            const helpersRes = await fetch(`${API_URL}/helpers`);
+            const [helpersRes, teamsRes, settingsRes, shiftsRes] = await Promise.all([
+                fetch(`${API_URL}/helpers`),
+                fetch(`${API_URL}/teams`),
+                fetch(`${API_URL}/settings`),
+                fetch(`${API_URL}/setup-cleanup-shifts`)
+            ]);
+            
             helpers = await helpersRes.json();
-            
-            // Load teams
-            const teamsRes = await fetch(`${API_URL}/teams`);
             teams = await teamsRes.json();
-            
-            // Load settings
-            const settingsRes = await fetch(`${API_URL}/settings`);
             settings = await settingsRes.json();
-            
-            // Load existing shifts
-            const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
             shifts = await shiftsRes.json();
+            
+            // Build helper lookup
+            helperById = {};
+            helpers.forEach(h => helperById[h.id] = h);
+            
+            // Populate filter dropdowns
+            populateTeamFilters();
         } catch (err) {
             console.error('Error loading data:', err);
             alert('Fehler beim Laden der Daten');
         }
+    }
+    
+    function populateTeamFilters() {
+        viewTeamFilter.innerHTML = '<option value="">Alle Teams</option>';
+        helperTeamFilter.innerHTML = '<option value="">Alle Teams</option>';
+        teams.forEach(team => {
+            viewTeamFilter.add(new Option(team.name, team.id));
+            helperTeamFilter.add(new Option(team.name, team.id));
+        });
     }
     
     function getTeamColor(teamId) {
@@ -166,6 +207,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function renderDays() {
         container.innerHTML = '';
         
+        const daysData = [];
+        
         // Process setup days (1-3)
         for (let i = 1; i <= 3; i++) {
             const dateKey = `setup_day_${i}`;
@@ -174,7 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const minHelpers = parseInt(settings[minKey] || 10);
             
             if (date) {
-                renderDay('Aufbau', date, minHelpers, i);
+                daysData.push({ type: 'Aufbau', date, minHelpers, dayNumber: i });
             }
         }
         
@@ -182,89 +225,151 @@ document.addEventListener('DOMContentLoaded', async () => {
         const teardownDate = settings.teardown_day_1;
         const teardownMin = parseInt(settings.teardown_day_1_min || 10);
         if (teardownDate) {
-            renderDay('Abbau', teardownDate, teardownMin, 1);
+            daysData.push({ type: 'Abbau', date: teardownDate, minHelpers: teardownMin, dayNumber: 1 });
         }
+        
+        // Render all days as columns
+        daysData.forEach(dayData => renderDayColumn(dayData));
+        
+        // Apply view filter after rendering
+        applyViewFilter();
     }
     
-    function renderDay(type, date, minHelpers, dayNumber) {
+    function renderDayColumn(dayData) {
+        const { type, date, minHelpers, dayNumber } = dayData;
         const d = new Date(date + 'T00:00:00');
-        const dateStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+        const weekday = d.toLocaleDateString('de-DE', { weekday: 'long' });
+        const dateStr = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
         
-        const section = document.createElement('div');
-        section.className = 'day-section';
-        section.innerHTML = `
-            <h3>${type} ${type === 'Aufbau' ? 'Tag ' + dayNumber : ''}: ${dateStr}</h3>
-            <p class="info-text">Mindestanzahl Erwachsene/Orga: ${minHelpers} | Gesamt: bis zu 40 Helfer | Schichtdauer: 4 Stunden</p>
-            <div class="slots-grid" data-date="${date}" data-type="${type}" data-min="${minHelpers}"></div>
-        `;
+        // Count filled slots for this day
+        const dayShifts = shifts.filter(s => {
+            if (s.day_type !== type) return false;
+            const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
+            return shiftDate === date && s.helper_id;
+        });
+        const filledCount = dayShifts.length;
         
-        container.appendChild(section);
+        const column = document.createElement('div');
+        column.className = 'day-column';
+        column.innerHTML = `<h3>${weekday} ${dateStr}<br/>${type}${type === 'Aufbau' ? ' Tag ' + dayNumber : ''}<br/>(${filledCount} / 40)</h3>`;
         
-        const slotsGrid = section.querySelector('.slots-grid');
+        const shiftsList = document.createElement('div');
+        shiftsList.className = 'shifts-list';
         
-        // Create 40 slots
+        // Create 40 shift rows
         for (let i = 0; i < 40; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'slot-item';
-            slot.dataset.slotIndex = i;
-            
-            // Mark first minHelpers slots as required (Erwachsen/Orga only)
-            if (i < minHelpers) {
-                slot.classList.add('required');
-            }
-            
-            // Find existing shift for this slot
-            // We use start_time with minute offset to identify each slot
-            const existingShift = shifts.find(s => {
-                if (s.day_type !== type) return false;
-                const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
-                if (shiftDate !== date) return false;
-                
-                // Check if this shift's start time matches our slot index
-                // We use minute offset (0-39) to uniquely identify each slot
-                const startTime = new Date(s.start_time);
-                return startTime.getMinutes() === i;
-            });
-            
-            const slotHtml = `
-                <div class="slot-label">Slot ${i + 1}${i < minHelpers ? ' (Erwachsen/Orga)' : ''}</div>
-                <select class="helper-select" data-date="${date}" data-type="${type}" data-index="${i}" data-required="${i < minHelpers}">
-                    <option value="">-- Helfer wählen --</option>
-                    ${helpers
-                        .filter(h => i < minHelpers ? (h.role === 'Erwachsen' || h.role === 'Orga') : true)
-                        .map(h => {
-                            const selected = existingShift && existingShift.helper_id == h.id ? 'selected' : '';
-                            return `<option value="${h.id}" ${selected}>${h.name} (${h.role})${h.team_name ? ' - ' + h.team_name : ''}</option>`;
-                        })
-                        .join('')}
-                </select>
-            `;
-            
-            slot.innerHTML = slotHtml;
-            
-            // Mark slot as filled if helper is assigned
-            if (existingShift && existingShift.helper_id) {
-                slot.classList.add('filled');
-            }
-            
-            slotsGrid.appendChild(slot);
-            
-            // Add event listener for select change
-            const select = slot.querySelector('.helper-select');
-            select.addEventListener('change', async (e) => {
-                await saveShift(date, type, i, e.target.value);
-            });
+            const row = createShiftRow(type, date, i, minHelpers);
+            shiftsList.appendChild(row);
         }
+        
+        column.appendChild(shiftsList);
+        container.appendChild(column);
+    }
+    
+    function createShiftRow(type, date, slotIndex, minHelpers) {
+        const row = document.createElement('div');
+        row.className = 'shift-row';
+        row.dataset.date = date;
+        row.dataset.type = type;
+        row.dataset.slotIndex = slotIndex;
+        
+        // Mark first minHelpers slots as required (Erwachsen/Orga only)
+        if (slotIndex < minHelpers) {
+            row.classList.add('required');
+        }
+        
+        // Find existing shift for this slot
+        const existingShift = shifts.find(s => {
+            if (s.day_type !== type) return false;
+            const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
+            if (shiftDate !== date) return false;
+            const startTime = new Date(s.start_time);
+            return startTime.getMinutes() === slotIndex;
+        });
+        
+        const shiftNumber = document.createElement('div');
+        shiftNumber.className = 'shift-number';
+        shiftNumber.textContent = `${slotIndex + 1}.`;
+        row.appendChild(shiftNumber);
+        
+        if (existingShift && existingShift.helper_id) {
+            // Show helper name with team color
+            const helper = helperById[existingShift.helper_id];
+            if (helper) {
+                const helperName = document.createElement('div');
+                helperName.className = 'helper-name';
+                const teamColor = getTeamColor(helper.team_id);
+                helperName.style.backgroundColor = teamColor;
+                helperName.style.color = getTextColorForBackground(teamColor);
+                helperName.textContent = helper.name;
+                helperName.dataset.helperId = helper.id;
+                helperName.dataset.teamId = helper.team_id;
+                helperName.title = `Klicken zum Ändern/Entfernen`;
+                helperName.style.cursor = 'pointer';
+                helperName.addEventListener('click', () => {
+                    // Clear the shift and show dropdown
+                    row.removeChild(helperName);
+                    const select = createHelperSelect(type, date, slotIndex, minHelpers, null);
+                    row.appendChild(select);
+                    saveShift(date, type, slotIndex, null);
+                });
+                row.appendChild(helperName);
+            }
+        } else {
+            // Show dropdown
+            const select = createHelperSelect(type, date, slotIndex, minHelpers, null);
+            row.appendChild(select);
+        }
+        
+        return row;
+    }
+    
+    function createHelperSelect(type, date, slotIndex, minHelpers, selectedHelperId) {
+        const select = document.createElement('select');
+        select.className = 'helper-select';
+        select.dataset.date = date;
+        select.dataset.type = type;
+        select.dataset.slotIndex = slotIndex;
+        
+        // Get filter value
+        const filterTeamId = helperTeamFilter.value;
+        
+        // Filter helpers based on requirements and team filter
+        let filteredHelpers = helpers;
+        
+        // Filter by role if required slot
+        if (slotIndex < minHelpers) {
+            filteredHelpers = filteredHelpers.filter(h => h.role === 'Erwachsen' || h.role === 'Orga');
+        }
+        
+        // Filter by team if filter is set
+        if (filterTeamId) {
+            filteredHelpers = filteredHelpers.filter(h => String(h.team_id) === String(filterTeamId));
+        }
+        
+        // Build options
+        select.innerHTML = '<option value="">-- Helfer wählen --</option>';
+        filteredHelpers.forEach(h => {
+            const option = document.createElement('option');
+            option.value = h.id;
+            option.textContent = `${h.name}${h.team_name ? ' - ' + h.team_name : ''}`;
+            if (selectedHelperId && h.id == selectedHelperId) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        
+        // Add change listener
+        select.addEventListener('change', async (e) => {
+            await saveShift(date, type, slotIndex, e.target.value);
+        });
+        
+        return select;
     }
     
     async function saveShift(date, dayType, slotIndex, helperId) {
         try {
-            // NOTE: We use minute offsets (0-39) to create unique shift records for each slot.
-            // This is a pragmatic solution that works for up to 60 slots without schema changes.
-            // For a production system, consider adding a 'slot_index' column to the database.
-            // 
             // Calculate start and end times with unique minutes for each slot
-            // Start at 8:00, each slot is offset by slotIndex minutes
             const baseDate = new Date(date + 'T08:00:00Z');
             baseDate.setMinutes(baseDate.getMinutes() + slotIndex);
             const startTime = baseDate.toISOString();
@@ -288,27 +393,41 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             if (!response.ok) throw new Error('Speichern fehlgeschlagen');
             
-            console.log('Schicht gespeichert:', date, dayType, slotIndex, helperId);
-            
-            // Reload shifts
+            // Reload shifts and re-render
             const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
             shifts = await shiftsRes.json();
-            
-            // Visual feedback
-            const select = document.querySelector(`select[data-date="${date}"][data-type="${dayType}"][data-index="${slotIndex}"]`);
-            if (select) {
-                const slot = select.closest('.slot-item');
-                if (helperId) {
-                    slot.classList.add('filled');
-                } else {
-                    slot.classList.remove('filled');
-                }
-            }
+            renderDays();
         } catch (err) {
             console.error('Error saving shift:', err);
             alert('Fehler beim Speichern der Schicht');
         }
     }
+    
+    function applyViewFilter() {
+        const viewTeamId = viewTeamFilter.value;
+        
+        // Get all helper name elements
+        const helperNames = document.querySelectorAll('.helper-name');
+        
+        if (!viewTeamId) {
+            // Show all
+            helperNames.forEach(el => el.classList.remove('dimmed'));
+        } else {
+            // Dim those not matching the filter
+            helperNames.forEach(el => {
+                const teamId = el.dataset.teamId;
+                if (String(teamId) === String(viewTeamId)) {
+                    el.classList.remove('dimmed');
+                } else {
+                    el.classList.add('dimmed');
+                }
+            });
+        }
+    }
+    
+    // Event listeners for filters
+    viewTeamFilter.addEventListener('change', applyViewFilter);
+    helperTeamFilter.addEventListener('change', renderDays);
     
     // Initial load
     await loadData();
