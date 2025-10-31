@@ -9,7 +9,8 @@
     html, body { overflow-x: hidden; }
     .plan-main { max-width: 1200px; margin: 0 auto; }
     .plan-layout { display: flex; gap: 12px; align-items: flex-start; }
-    .left-panel { width: 240px; flex: 0 0 240px; }
+    /* Hide left panel - swimlanes are sufficient */
+    .left-panel { display: none; }
 
     #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; }
     #timeline-header { position: sticky; top: 0; background: #fff; z-index: 10; display:block; }
@@ -45,15 +46,26 @@
       font-weight:600;
     }
 
-    .activity-group-header { padding:8px 0 4px 0; font-weight:700; grid-column:1 / -1; background: transparent; }
+    /* Activity group headers sticky when scrolling horizontally */
+    .activity-group-header { 
+      padding:8px 0 4px 0; 
+      font-weight:700; 
+      grid-column:1 / -1; 
+      background: #fff; 
+      position: sticky; 
+      left: 0; 
+      z-index: 6;
+    }
     #grid-container { overflow: visible; }
   </style>
 </head>
 <body>
 <nav>
-  <a href="index.html" class="active">Admin: Stammdaten</a>
+  <a href="index.html">Admin: Stammdaten</a>
   <a href="plan.html">Turnier-Planung</a>
-  <a href="plan-admin.html">Turnier-Admin</a>
+  <a href="plan-admin.html" class="active">Turnier-Admin</a>
+  <a href="aufbau-abbau.html">Auf-/Abbau</a>
+  <a href="kuchen.html">Kuchen</a>
 </nav>
 
 <main class="plan-main">

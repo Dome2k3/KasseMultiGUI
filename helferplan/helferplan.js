@@ -74,6 +74,45 @@ const ADMIN_PASSWORD = '1881';
     }
 })();
 
+// Ensure setup_cleanup_shifts table exists
+(async function ensureSetupCleanupShiftsTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_setup_cleanup_shifts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                day_type ENUM('Aufbau', 'Abbau') NOT NULL,
+                start_time DATETIME NOT NULL,
+                end_time DATETIME NOT NULL,
+                helper_id INT,
+                FOREIGN KEY (helper_id) REFERENCES helferplan_helpers(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB;
+        `);
+        console.log('helferplan_setup_cleanup_shifts table OK');
+    } catch (err) {
+        console.error('Could not create helferplan_setup_cleanup_shifts table:', err && err.message ? err.message : err);
+    }
+})();
+
+// Ensure cakes table exists
+(async function ensureCakesTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_cakes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                donation_day ENUM('Freitag', 'Samstag', 'Sonntag') NOT NULL,
+                helper_id INT,
+                cake_type VARCHAR(100),
+                contains_nuts TINYINT(1) NOT NULL DEFAULT 0,
+                INDEX (helper_id),
+                FOREIGN KEY (helper_id) REFERENCES helferplan_helpers(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB;
+        `);
+        console.log('helferplan_cakes table OK');
+    } catch (err) {
+        console.error('Could not create helferplan_cakes table:', err && err.message ? err.message : err);
+    }
+})();
+
 // --- 4. Middleware einrichten ---
 app.use(cors());
 app.use(express.json());
@@ -579,6 +618,164 @@ app.post('/api/activities/:id/allowed-time-blocks', async (req, res) => {
     }
 });
 
+
+// --- Setup/Teardown Shifts Endpoints ---
+
+// GET: Abrufen aller Setup/Teardown Schichten
+app.get('/api/setup-cleanup-shifts', async (req, res) => {
+    try {
+        const rows = await safeQuery(`
+            SELECT 
+                sc.id, 
+                sc.day_type, 
+                sc.start_time, 
+                sc.end_time, 
+                sc.helper_id,
+                h.name as helper_name,
+                t.color_hex as team_color
+            FROM helferplan_setup_cleanup_shifts sc
+            LEFT JOIN helferplan_helpers h ON sc.helper_id = h.id
+            LEFT JOIN helferplan_teams t ON h.team_id = t.id
+            ORDER BY sc.start_time, sc.id;
+        `);
+        const mapped = rows.map(r => ({
+            id: r.id,
+            day_type: r.day_type,
+            start_time: mySQLDatetimeToISOString(r.start_time),
+            end_time: mySQLDatetimeToISOString(r.end_time),
+            helper_id: r.helper_id,
+            helper_name: r.helper_name,
+            team_color: r.team_color
+        }));
+        res.json(mapped);
+    } catch (err) {
+        console.error('DB-Fehler /api/setup-cleanup-shifts', err);
+        res.status(500).json({error: 'DB-Fehler beim Abrufen der Setup/Cleanup Schichten'});
+    }
+});
+
+// POST: Schicht zuweisen oder erstellen
+app.post('/api/setup-cleanup-shifts', async (req, res) => {
+    try {
+        const {day_type, start_time, end_time, helper_id} = req.body;
+        if (!day_type || !start_time || !end_time) {
+            return res.status(400).json({error: 'day_type, start_time und end_time sind erforderlich.'});
+        }
+        
+        const startMySQL = isoToMySQLDatetime(start_time);
+        const endMySQL = isoToMySQLDatetime(end_time);
+        
+        // Check if slot exists
+        const [existing] = await pool.query(
+            "SELECT id FROM helferplan_setup_cleanup_shifts WHERE day_type = ? AND start_time = ? LIMIT 1",
+            [day_type, startMySQL]
+        );
+        
+        if (existing && existing[0]) {
+            // Update existing
+            await pool.query(
+                "UPDATE helferplan_setup_cleanup_shifts SET helper_id = ? WHERE id = ?",
+                [helper_id || null, existing[0].id]
+            );
+            res.json({message: 'Schicht aktualisiert', id: existing[0].id});
+        } else {
+            // Create new
+            const [result] = await pool.query(
+                "INSERT INTO helferplan_setup_cleanup_shifts (day_type, start_time, end_time, helper_id) VALUES (?, ?, ?, ?)",
+                [day_type, startMySQL, endMySQL, helper_id || null]
+            );
+            res.status(201).json({message: 'Schicht erstellt', id: Number(result.insertId)});
+        }
+    } catch (err) {
+        console.error('DB-Fehler POST /api/setup-cleanup-shifts', err);
+        res.status(500).json({error: 'DB-Fehler beim Speichern der Schicht'});
+    }
+});
+
+// DELETE: Schicht leeren (helper_id auf NULL setzen)
+app.delete('/api/setup-cleanup-shifts/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        await pool.query("UPDATE helferplan_setup_cleanup_shifts SET helper_id = NULL WHERE id = ?", [id]);
+        res.json({message: 'Schicht geleert'});
+    } catch (err) {
+        console.error('DB-Fehler DELETE /api/setup-cleanup-shifts', err);
+        res.status(500).json({error: 'DB-Fehler beim Leeren der Schicht'});
+    }
+});
+
+// --- Cake Donations Endpoints ---
+
+// GET: Abrufen aller Kuchenspenden
+app.get('/api/cakes', async (req, res) => {
+    try {
+        const rows = await safeQuery(`
+            SELECT 
+                c.id,
+                c.donation_day,
+                c.helper_id,
+                c.cake_type,
+                c.contains_nuts,
+                h.name as helper_name,
+                t.color_hex as team_color
+            FROM helferplan_cakes c
+            LEFT JOIN helferplan_helpers h ON c.helper_id = h.id
+            LEFT JOIN helferplan_teams t ON h.team_id = t.id
+            ORDER BY 
+                FIELD(c.donation_day, 'Freitag', 'Samstag', 'Sonntag'),
+                c.id;
+        `);
+        res.json(rows);
+    } catch (err) {
+        console.error('DB-Fehler /api/cakes', err);
+        res.status(500).json({error: 'DB-Fehler beim Abrufen der Kuchen'});
+    }
+});
+
+// POST: Kuchenspende erstellen oder aktualisieren
+app.post('/api/cakes', async (req, res) => {
+    try {
+        const {id, donation_day, helper_id, cake_type, contains_nuts} = req.body;
+        
+        if (!donation_day) {
+            return res.status(400).json({error: 'donation_day ist erforderlich.'});
+        }
+        
+        if (id) {
+            // Update existing
+            await pool.query(
+                `UPDATE helferplan_cakes 
+                 SET helper_id = ?, cake_type = ?, contains_nuts = ? 
+                 WHERE id = ?`,
+                [helper_id || null, cake_type || null, contains_nuts ? 1 : 0, id]
+            );
+            res.json({message: 'Kuchen aktualisiert', id});
+        } else {
+            // Create new
+            const [result] = await pool.query(
+                `INSERT INTO helferplan_cakes (donation_day, helper_id, cake_type, contains_nuts) 
+                 VALUES (?, ?, ?, ?)`,
+                [donation_day, helper_id || null, cake_type || null, contains_nuts ? 1 : 0]
+            );
+            res.status(201).json({message: 'Kuchen erstellt', id: Number(result.insertId)});
+        }
+    } catch (err) {
+        console.error('DB-Fehler POST /api/cakes', err);
+        res.status(500).json({error: 'DB-Fehler beim Speichern des Kuchens'});
+    }
+});
+
+// DELETE: Kuchenspende löschen
+app.delete('/api/cakes/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        await pool.query("DELETE FROM helferplan_cakes WHERE id = ?", [id]);
+        res.json({message: 'Kuchen gelöscht'});
+    } catch (err) {
+        console.error('DB-Fehler DELETE /api/cakes', err);
+        res.status(500).json({error: 'DB-Fehler beim Löschen des Kuchens'});
+    }
+});
 
 // --- 6. Server starten ---
 app.listen(port, () => {
