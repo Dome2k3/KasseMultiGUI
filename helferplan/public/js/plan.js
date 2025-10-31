@@ -319,8 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isLocked = isSlotLocked(activity.id, i);
                     if (isLocked) {
                         slot.classList.add('locked-slot');
-                        slot.style.backgroundColor = '#ffcccc'; // Light red for blocked slots
-                        slot.style.opacity = '0.7';
+                        slot.style.backgroundColor = '#ffffff';
                         slot.style.cursor = 'not-allowed';
                         slot.title = 'Dieser Zeitslot ist gesperrt';
                     } else {
@@ -389,8 +388,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             const startTime = hourIndexToDate(startIndex);
 
                             // Validierung: Prüfe, ob der Helfer für die Aktivität geeignet ist
-                            if (activity.role_requirement === 'Erwachsen' && helper.role === 'Minderjaehrig') {
-                                alert('Fehler: Diese Schicht erfordert einen Erwachsenen. Der ausgewählte Helfer ist nicht berechtigt.');
+                            // Orga helpers can fill any role, minors can only fill 'Alle' roles
+                            if (activity.role_requirement === 'Erwachsen') {
+                                if (helper.role !== 'Erwachsen' && helper.role !== 'Orga') {
+                                    alert('Fehler: Diese Schicht erfordert einen Erwachsenen oder Orga. Der ausgewählte Helfer ist nicht berechtigt.');
+                                    return;
+                                }
+                            } else if (activity.role_requirement !== 'Alle' && helper.role !== activity.role_requirement) {
+                                alert('Fehler: Diese Schicht erfordert die Rolle "' + activity.role_requirement + '". Der ausgewählte Helfer ist nicht berechtigt.');
                                 return;
                             }
 
@@ -400,15 +405,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             const endTime = hourIndexToDate(startIndex + 2);
-
-                            // Setze die Farbe und den Text sofort, bevor der Server-Call erfolgt
-                            const team = allTeams.find(t => t.id == helper.team_id);
-                            const teamColor = team ? team.color_hex : '#888';
-
-                            slot.innerHTML = `<strong>${helper.name}</strong>`;
-                            slot.classList.add('filled');
-                            slot.style.backgroundColor = teamColor;
-                            slot.dataset.helperId = helperId;
 
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
@@ -426,8 +422,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                 throw new Error(txt || 'Server Fehler beim Anlegen');
                             }
 
-                            // Erfolg: Schichten neu laden, um die Anzeige zu synchronisieren
-                            await fetchAndRenderAllShifts();
+                            // Erfolg: Setze die Farbe und den Text lokal, ohne neu zu laden
+                            // Dies vermeidet das Flackern und erhält die Teamfarbe
+                            const team = allTeams.find(t => t.id == helper.team_id);
+                            const teamColor = team ? team.color_hex : '#888';
+
+                            slot.innerHTML = helper.name.split(' ')[0] || helper.name;
+                            slot.classList.add('filled');
+                            slot.style.backgroundColor = teamColor;
+                            slot.dataset.helperId = helperId;
+                            slot.dataset.startTime = startTime.toISOString();
+                            
+                            const responseData = await resp.json();
+                            if (responseData.id) {
+                                slot.dataset.shiftId = responseData.id;
+                            }
+
+                            // Anwenden des View-Filters auf den neu hinzugefügten Slot
+                            applyViewFilter();
                         } catch (err) {
                             console.error('Drop Fehler:', err);
                             alert('Fehler beim Eintragen der Schicht: ' + err.message);
