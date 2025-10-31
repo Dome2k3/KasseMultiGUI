@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Config
     const HOUR_PX = 40;      // width per hour column
     const LEFT_COL_PX = 200; // left name column width
+    const DEFAULT_ROLE = 'Alle'; // default role requirement value
 
     // State
     let allHelpers = [];
@@ -307,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // WICHTIG: Setze data-activity-id für Drag-and-Drop-Validierung
                     slot.dataset.activityId = activity.id;
                     slot.dataset.hourIndex = i;
-                    slot.dataset.roleRequirement = activity.role_requirement || 'Alle';
+                    slot.dataset.roleRequirement = activity.role_requirement || DEFAULT_ROLE;
 
                     // Validierung: Prüfe ob activity.id gesetzt ist
                     if (!activity.id) {
@@ -324,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         slot.title = 'Dieser Zeitslot ist gesperrt';
                     } else {
                         // Color-code free slots by role requirement
-                        const roleReq = activity.role_requirement || 'Alle';
+                        const roleReq = activity.role_requirement || DEFAULT_ROLE;
                         if (roleReq === 'Erwachsen') {
                             slot.style.backgroundColor = '#ffb3d9'; // Light pink for Erwachsenen
                             slot.title = 'Freie Schicht (nur Erwachsene)';
@@ -530,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 s.style.backgroundColor = '#ffcccc'; // Light red for blocked
                 s.style.opacity = '0.7';
             } else {
-                const roleReq = s.dataset.roleRequirement || 'Alle';
+                const roleReq = s.dataset.roleRequirement || DEFAULT_ROLE;
                 if (roleReq === 'Erwachsen') {
                     s.style.backgroundColor = '#ffb3d9'; // Light pink
                 } else if (roleReq === 'Orga') {

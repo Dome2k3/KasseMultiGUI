@@ -239,11 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return team ? team.color_hex : '#999';
     }
 
-    function renderHelperTable(helpers) {
-        // Deprecated - replaced by renderHelperCards
-        console.warn('renderHelperTable is deprecated, use renderHelperCards instead');
-    }
-
     helperFilterTeam.addEventListener('change', () => {
         displayedHelperCount = 10; // Reset count when filtering
         renderHelperCards();
