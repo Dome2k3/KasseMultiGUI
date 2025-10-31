@@ -41,14 +41,18 @@
             border-radius: 8px;
             background: #f0f8ff;
         }
+        .day-wrapper.abbau {
+            background: #e8f5e9;
+            border-color: #4caf50;
+        }
         .day-wrapper-shifts {
             display: flex;
             gap: 12px;
             margin-top: 8px;
         }
         .shift-column {
-            flex: 0 0 90px;
-            min-width: 90px;
+            flex: 0 0 100px;
+            min-width: 100px;
             border: 1px solid #ddd;
             padding: 8px;
             border-radius: 6px;
@@ -321,6 +325,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const dayWrapper = document.createElement('div');
         dayWrapper.className = 'day-wrapper';
+        if (type === 'Abbau') {
+            dayWrapper.classList.add('abbau');
+        }
         
         const dayHeader = document.createElement('div');
         dayHeader.className = 'day-header';
@@ -407,10 +414,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Match by hour and slot index (minutes)
             const startTime = new Date(s.start_time);
-            const hour = startTime.getUTCHours() + startTime.getUTCMinutes() / 60;
+            const hour = startTime.getUTCHours();
             const minutes = startTime.getUTCMinutes();
             
-            return Math.abs(hour - shiftStartHour) < 0.1 && minutes === slotIndex;
+            // Calculate expected hour and minutes for this slot
+            const expectedStartHours = Math.floor(shiftStartHour);
+            const expectedStartMinutes = Math.round((shiftStartHour - expectedStartHours) * 60);
+            const totalExpectedMinutes = expectedStartMinutes + slotIndex;
+            const expectedHour = expectedStartHours + Math.floor(totalExpectedMinutes / 60);
+            const expectedMinute = totalExpectedMinutes % 60;
+            
+            return hour === expectedHour && minutes === expectedMinute;
         });
         
         const shiftNumber = document.createElement('div');
@@ -475,7 +489,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         // Build options
-        select.innerHTML = '<option value="">-- Helfer wählen --</option>';
+        select.innerHTML = '<option value="">- Helfer -</option>';
         filteredHelpers.forEach(h => {
             const option = document.createElement('option');
             option.value = h.id;
