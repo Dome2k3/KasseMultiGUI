@@ -33,6 +33,80 @@
         }
         #aufbau-section { display: none; margin-top: 12px; }
         .error-msg { color: #b00020; font-weight: 600; display: none; margin-left: 8px; }
+        
+        /* Improved admin page layout */
+        .section-group {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .section-group h2 {
+            margin-top: 0;
+            color: #005A9F;
+            border-bottom: 2px solid #005A9F;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+        .settings-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .settings-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+        .settings-row input[type="date"],
+        .settings-row input[type="time"],
+        .settings-row input[type="number"] {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button, input[type="submit"] {
+            padding: 8px 16px;
+            background: #005A9F;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        button:hover, input[type="submit"]:hover {
+            background: #004080;
+        }
+        button.secondary {
+            background: #666;
+        }
+        button.secondary:hover {
+            background: #444;
+        }
+        button.danger {
+            background: #d32f2f;
+        }
+        button.danger:hover {
+            background: #b71c1c;
+        }
+        .subsection {
+            background: white;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid #e0e0e0;
+        }
+        .subsection h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -49,76 +123,87 @@
     <!-- NEU: Event-Titel Anzeige (automatisch befüllt aus den Datumseinstellungen weiter unten) -->
     <div id="event-title-line">Bergsträßer Volleyball Turnier</div>
 
-    <div class="grid-container">
-        <!-- Spalte 1: Teams -->
-        <section class="grid-item">
-            <h2>Teams</h2>
-            <ul id="team-list"></ul>
+    <!-- Stammdaten Section - Teams & Helfer -->
+    <div class="section-group">
+        <h2>Teams & Helfer</h2>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Teams -->
+            <div class="subsection">
+                <h3>Teams</h3>
+                <ul id="team-list"></ul>
 
-            <h3>Neues Team</h3>
-            <form id="add-team-form">
-                <input type="text" id="team-name-input" placeholder="Teamname" required>
-                <input type="color" id="team-color-input" value="#e66465">
-                <button type="submit">Anlegen</button>
-            </form>
+                <h4 style="margin-top: 16px; font-size: 14px;">Neues Team</h4>
+                <form id="add-team-form">
+                    <input type="text" id="team-name-input" placeholder="Teamname" required>
+                    <input type="color" id="team-color-input" value="#e66465">
+                    <button type="submit">Anlegen</button>
+                </form>
 
-            <h3 class="separator">Team löschen</h3>
-            <div>
-                <select id="delete-team-select">
-                    <option value="">Team auswählen</option>
-                </select>
-                <button id="delete-team-button">Löschen</button>
+                <h4 style="margin-top: 16px; font-size: 14px;">Team löschen</h4>
+                <div>
+                    <select id="delete-team-select">
+                        <option value="">Team auswählen</option>
+                    </select>
+                    <button id="delete-team-button" class="danger">Löschen</button>
+                </div>
             </div>
-        </section>
 
-        <!-- Spalte 2: Helfer -->
-        <section class="grid-item">
-            <h2>Helfer</h2>
+            <!-- Helfer -->
+            <div class="subsection">
+                <h3>Helfer</h3>
 
-            <label for="helper-filter-team">Filter nach Mannschaft:</label>
-            <select id="helper-filter-team">
-                <option value="">Alle</option>
-            </select>
-
-            <div class="table-wrapper">
-                <table id="helper-table">
-                    <thead><tr><th>Name</th><th>Team</th><th>Rolle</th><th></th></tr></thead>
-                    <tbody id="helper-list-body"></tbody>
-                </table>
-            </div>
-            <h3>Neuer Helfer</h3>
-            <form id="add-helper-form">
-                <input type="text" id="helper-name-input" placeholder="Name" required>
-                <select id="helper-team-select" required></select>
-                <select id="helper-role-select" required>
-                    <option value="Erwachsen">Erwachsen</option>
-                    <option value="Minderjaehrig">Minderjaehrig</option>
-                    <option value="Orga">Orga</option>
+                <label for="helper-filter-team">Filter nach Mannschaft:</label>
+                <select id="helper-filter-team">
+                    <option value="">Alle</option>
                 </select>
-                <button type="submit">Anlegen</button>
-                <span id="helper-error" class="error-msg">Name schon belegt.</span>
-            </form>
-        </section>
 
-        <!-- Spalte 3: Taetigkeiten -->
-        <section class="grid-item">
-            <h2>Tätigkeiten</h2>
+                <div class="table-wrapper">
+                    <table id="helper-table">
+                        <thead><tr><th>Name</th><th>Team</th><th>Rolle</th><th></th></tr></thead>
+                        <tbody id="helper-list-body"></tbody>
+                    </table>
+                </div>
+                <h4 style="margin-top: 16px; font-size: 14px;">Neuer Helfer</h4>
+                <form id="add-helper-form">
+                    <input type="text" id="helper-name-input" placeholder="Name" required>
+                    <select id="helper-team-select" required></select>
+                    <select id="helper-role-select" required>
+                        <option value="Erwachsen">Erwachsen</option>
+                        <option value="Minderjaehrig">Minderjaehrig</option>
+                        <option value="Orga">Orga</option>
+                    </select>
+                    <button type="submit">Anlegen</button>
+                    <span id="helper-error" class="error-msg">Name schon belegt.</span>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tätigkeiten Section -->
+    <div class="section-group">
+        <h2>Tätigkeiten & Gruppen</h2>
+        
+        <div class="subsection">
+            <h3>Gruppen</h3>
             <ul id="group-list"></ul>
-            <h3>Neue Gruppe</h3>
+            <h4 style="margin-top: 16px; font-size: 14px;">Neue Gruppe</h4>
             <form id="add-group-form">
                 <input type="text" id="group-name-input" placeholder="z.B. Getraenkeverkauf" required>
                 <input type="number" id="group-sort-input" placeholder="Sort-ID (kleiner=oben)" value="0" min="0">
                 <button type="submit">Anlegen</button>
             </form>
+        </div>
 
-            <h3 class="separator">Taetigkeiten pro Gruppe</h3>
+        <div class="subsection">
+            <h3>Tätigkeiten pro Gruppe</h3>
             <div class="table-wrapper">
                 <table id="activity-table">
                     <thead><tr><th>Taetigkeit</th><th>Gruppe</th><th>Anforderung</th><th></th></tr></thead>
                     <tbody id="activity-list-body"></tbody>
                 </table>
             </div>
-            <h3>Neue Taetigkeit</h3>
+            <h4 style="margin-top: 16px; font-size: 14px;">Neue Taetigkeit</h4>
             <form id="add-activity-form">
                 <input type="text" id="activity-name-input" placeholder="z.B. Ausschank" required>
                 <select id="activity-group-select" required></select>
@@ -129,58 +214,71 @@
                 </select>
                 <button type="submit">Anlegen</button>
             </form>
-        </section>
+        </div>
     </div>
 
-    <hr>
-
-    <section>
+    <!-- Event-Daten & Einstellungen Section -->
+    <div class="section-group">
         <h2>Event-Daten & Einstellungen</h2>
         
         <!-- Turniertage -->
-        <h3>Turniertage (Fr - So)</h3>
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px;">
-            <label>Freitag: <input type="date" id="setting-friday"></label>
-            <label>Samstag: <input type="date" id="setting-saturday"></label>
-            <label>Sonntag: <input type="date" id="setting-sunday"></label>
-            <button id="save-settings-button">Speichern</button>
+        <div class="subsection">
+            <h3>Turniertage (Fr - So)</h3>
+            <div class="settings-row">
+                <label>Freitag: <input type="date" id="setting-friday"></label>
+                <label>Samstag: <input type="date" id="setting-saturday"></label>
+                <label>Sonntag: <input type="date" id="setting-sunday"></label>
+            </div>
+            <button id="save-settings-button">Turniertage speichern</button>
         </div>
 
         <!-- Auf-/Abbau Einstellungen -->
-        <h3>Auf- und Abbau Einstellungen</h3>
-        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px;">
-            <div style="display:flex; gap:10px; align-items:center;">
+        <div class="subsection">
+            <h3>Auf- und Abbau Einstellungen</h3>
+            <div class="settings-row">
                 <label>Aufbau Tag 1: <input type="date" id="setup-day-1"></label>
-                <label>Min. Erwachsene Helfer: <input type="number" id="setup-day-1-min" min="0" max="40" value="10" style="width:70px"></label>
+                <label>Start (Uhr): <input type="number" id="setup-day-1-start" value="8" min="0" max="23" style="width:60px"></label>
+                <label>Ende (Uhr): <input type="number" id="setup-day-1-end" value="20" min="0" max="23" style="width:60px"></label>
+                <label>Min. Erwachsene: <input type="number" id="setup-day-1-min" min="0" max="40" value="10" style="width:70px"></label>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div class="settings-row">
                 <label>Aufbau Tag 2: <input type="date" id="setup-day-2"></label>
-                <label>Min. Erwachsene Helfer: <input type="number" id="setup-day-2-min" min="0" max="40" value="10" style="width:70px"></label>
+                <label>Start (Uhr): <input type="number" id="setup-day-2-start" value="8" min="0" max="23" style="width:60px"></label>
+                <label>Ende (Uhr): <input type="number" id="setup-day-2-end" value="20" min="0" max="23" style="width:60px"></label>
+                <label>Min. Erwachsene: <input type="number" id="setup-day-2-min" min="0" max="40" value="10" style="width:70px"></label>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div class="settings-row">
                 <label>Aufbau Tag 3: <input type="date" id="setup-day-3"></label>
-                <label>Min. Erwachsene Helfer: <input type="number" id="setup-day-3-min" min="0" max="40" value="10" style="width:70px"></label>
+                <label>Start (Uhr): <input type="number" id="setup-day-3-start" value="8" min="0" max="23" style="width:60px"></label>
+                <label>Ende (Uhr): <input type="number" id="setup-day-3-end" value="20" min="0" max="23" style="width:60px"></label>
+                <label>Min. Erwachsene: <input type="number" id="setup-day-3-min" min="0" max="40" value="10" style="width:70px"></label>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div class="settings-row">
                 <label>Abbau Tag: <input type="date" id="teardown-day-1"></label>
-                <label>Min. Erwachsene Helfer: <input type="number" id="teardown-day-1-min" min="0" max="40" value="10" style="width:70px"></label>
+                <label>Start (Uhr): <input type="number" id="teardown-day-1-start" value="8" min="0" max="23" style="width:60px"></label>
+                <label>Ende (Uhr): <input type="number" id="teardown-day-1-end" value="20" min="0" max="23" style="width:60px"></label>
+                <label>Min. Erwachsene: <input type="number" id="teardown-day-1-min" min="0" max="40" value="10" style="width:70px"></label>
             </div>
             <button id="save-aufbau-settings-button">Auf-/Abbau Einstellungen speichern</button>
         </div>
 
         <!-- Kuchen Einstellungen -->
-        <h3>Kuchen-Anzahl pro Turniertag</h3>
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px;">
-            <label>Freitag: <input type="number" id="cakes-friday" min="0" value="10" style="width:70px"></label>
-            <label>Samstag: <input type="number" id="cakes-saturday" min="0" value="12" style="width:70px"></label>
-            <label>Sonntag: <input type="number" id="cakes-sunday" min="0" value="4" style="width:70px"></label>
+        <div class="subsection">
+            <h3>Kuchen-Anzahl pro Turniertag</h3>
+            <div class="settings-row">
+                <label>Freitag: <input type="number" id="cakes-friday" min="0" value="10" style="width:70px"></label>
+                <label>Samstag: <input type="number" id="cakes-saturday" min="0" value="12" style="width:70px"></label>
+                <label>Sonntag: <input type="number" id="cakes-sunday" min="0" value="4" style="width:70px"></label>
+            </div>
             <button id="save-cakes-settings-button">Kuchen-Anzahl speichern</button>
         </div>
+    </div>
 
-        <!-- PDF Export -->
-        <h3>PDF Export</h3>
-        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px; max-width:600px;">
-            <div style="display:flex; gap:10px; align-items:center;">
+    <!-- PDF Export Section -->
+    <div class="section-group">
+        <h2>PDF Export</h2>
+        <div style="display:flex; flex-direction:column; gap:12px; max-width:600px;">
+            <div class="settings-row">
                 <label style="min-width:100px;">Export-Typ:</label>
                 <select id="export-type" style="padding:6px; flex:1;">
                     <option value="tournament">Turnier-Planung</option>
@@ -188,22 +286,22 @@
                     <option value="cakes">Kuchen</option>
                 </select>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div class="settings-row">
                 <label style="min-width:100px;">Team-Filter:</label>
                 <select id="export-team-filter" style="padding:6px; flex:1;">
                     <option value="">Alle Teams</option>
                 </select>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div class="settings-row">
                 <label style="min-width:100px;">Seitenformat:</label>
                 <select id="export-orientation" style="padding:6px; flex:1;">
                     <option value="landscape">Querformat (Landscape)</option>
                     <option value="portrait">Hochformat (Portrait)</option>
                 </select>
             </div>
-            <button id="export-pdf-button" style="padding:10px 20px; background:#005A9F; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:600;">PDF erstellen</button>
+            <button id="export-pdf-button">PDF erstellen</button>
         </div>
-    </section>
+    </div>
 
 </main>
 <!-- Lade runtime config (muss vor den App-Skripten geladen werden) -->

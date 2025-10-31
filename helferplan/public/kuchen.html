@@ -66,10 +66,18 @@
             color: #666;
             margin-bottom: 4px;
         }
+        .cake-number-prefix {
+            font-weight: 600;
+            color: #666;
+            min-width: 20px;
+            display: flex;
+            align-items: center;
+        }
         .cake-helper-row {
             display: flex;
             gap: 4px;
             margin-bottom: 4px;
+            align-items: center;
         }
         .helper-select {
             flex: 1;
@@ -271,15 +279,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cakeType = existingCake ? existingCake.cake_type : '';
         const containsNuts = existingCake ? existingCake.contains_nuts : 0;
         
-        // Cake number
-        const cakeNumber = document.createElement('div');
-        cakeNumber.className = 'cake-number';
-        cakeNumber.textContent = `${rowNumber}. Kuchen`;
-        row.appendChild(cakeNumber);
-        
-        // Helper row
+        // Helper row with number before the field
         const helperRow = document.createElement('div');
         helperRow.className = 'cake-helper-row';
+        
+        // Add cake number as separate element
+        const cakeNumber = document.createElement('span');
+        cakeNumber.className = 'cake-number-prefix';
+        cakeNumber.textContent = `${rowNumber}.`;
+        helperRow.appendChild(cakeNumber);
         
         if (helperId) {
             const helper = helperById[helperId];
@@ -294,15 +302,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 helperName.dataset.teamId = helper.team_id;
                 helperName.title = 'Klicken zum Ändern';
                 helperName.addEventListener('click', () => {
-                    // Replace with dropdown
+                    // Replace with dropdown, keep the number
+                    const number = helperRow.querySelector('.cake-number-prefix');
                     helperRow.innerHTML = '';
-                    const select = createHelperSelect(day, cakeId, helperId);
+                    helperRow.appendChild(number);
+                    const select = createHelperSelect(day, cakeId, helperId, rowNumber);
                     helperRow.appendChild(select);
                 });
                 helperRow.appendChild(helperName);
             }
         } else {
-            const select = createHelperSelect(day, cakeId, null);
+            const select = createHelperSelect(day, cakeId, null, rowNumber);
             helperRow.appendChild(select);
         }
         
@@ -340,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return row;
     }
     
-    function createHelperSelect(day, cakeId, selectedHelperId) {
+    function createHelperSelect(day, cakeId, selectedHelperId, rowNumber) {
         const select = document.createElement('select');
         select.className = 'helper-select';
         
@@ -353,8 +363,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             filteredHelpers = filteredHelpers.filter(h => String(h.team_id) === String(filterTeamId));
         }
         
-        // Build options
-        select.innerHTML = '<option value="">-- Helfer wählen --</option>';
+        // Build options - don't include row number (it's separate now)
+        select.innerHTML = `<option value="">-- Helfer wählen --</option>`;
         filteredHelpers.forEach(h => {
             const option = document.createElement('option');
             option.value = h.id;

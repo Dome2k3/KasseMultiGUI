@@ -49,12 +49,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auf-/Abbau settings inputs
     const setupDay1 = document.getElementById('setup-day-1');
+    const setupDay1Start = document.getElementById('setup-day-1-start');
+    const setupDay1End = document.getElementById('setup-day-1-end');
     const setupDay1Min = document.getElementById('setup-day-1-min');
     const setupDay2 = document.getElementById('setup-day-2');
+    const setupDay2Start = document.getElementById('setup-day-2-start');
+    const setupDay2End = document.getElementById('setup-day-2-end');
     const setupDay2Min = document.getElementById('setup-day-2-min');
     const setupDay3 = document.getElementById('setup-day-3');
+    const setupDay3Start = document.getElementById('setup-day-3-start');
+    const setupDay3End = document.getElementById('setup-day-3-end');
     const setupDay3Min = document.getElementById('setup-day-3-min');
     const teardownDay1 = document.getElementById('teardown-day-1');
+    const teardownDay1Start = document.getElementById('teardown-day-1-start');
+    const teardownDay1End = document.getElementById('teardown-day-1-end');
     const teardownDay1Min = document.getElementById('teardown-day-1-min');
     const saveAufbauSettingsButton = document.getElementById('save-aufbau-settings-button');
 
@@ -332,6 +340,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error('Settings load failed');
             const settings = await res.json();
             
+            // Helper to extract hour from HH:MM format
+            const extractHour = (timeStr) => {
+                if (!timeStr) return '';
+                const hour = parseInt(timeStr.split(':')[0]);
+                return isNaN(hour) ? '' : hour;
+            };
+            
             // Tournament days
             if (settings.event_friday) settingFriday.value = settings.event_friday;
             if (settings.event_saturday) settingSaturday.value = settings.event_saturday;
@@ -339,12 +354,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Setup/Teardown days
             if (settings.setup_day_1) setupDay1.value = settings.setup_day_1;
+            if (settings.setup_day_1_start) setupDay1Start.value = extractHour(settings.setup_day_1_start);
+            if (settings.setup_day_1_end) setupDay1End.value = extractHour(settings.setup_day_1_end);
             if (settings.setup_day_1_min) setupDay1Min.value = settings.setup_day_1_min;
             if (settings.setup_day_2) setupDay2.value = settings.setup_day_2;
+            if (settings.setup_day_2_start) setupDay2Start.value = extractHour(settings.setup_day_2_start);
+            if (settings.setup_day_2_end) setupDay2End.value = extractHour(settings.setup_day_2_end);
             if (settings.setup_day_2_min) setupDay2Min.value = settings.setup_day_2_min;
             if (settings.setup_day_3) setupDay3.value = settings.setup_day_3;
+            if (settings.setup_day_3_start) setupDay3Start.value = extractHour(settings.setup_day_3_start);
+            if (settings.setup_day_3_end) setupDay3End.value = extractHour(settings.setup_day_3_end);
             if (settings.setup_day_3_min) setupDay3Min.value = settings.setup_day_3_min;
             if (settings.teardown_day_1) teardownDay1.value = settings.teardown_day_1;
+            if (settings.teardown_day_1_start) teardownDay1Start.value = extractHour(settings.teardown_day_1_start);
+            if (settings.teardown_day_1_end) teardownDay1End.value = extractHour(settings.teardown_day_1_end);
             if (settings.teardown_day_1_min) teardownDay1Min.value = settings.teardown_day_1_min;
             
             // Cake counts
@@ -378,14 +401,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Auf-/Abbau settings
     saveAufbauSettingsButton.addEventListener('click', async () => {
         try {
+            // Convert hour numbers to HH:00 format
+            const formatHour = (val) => {
+                const hour = parseInt(val) || 8;
+                return `${String(hour).padStart(2, '0')}:00`;
+            };
+            
             const payload = {
                 setup_day_1: setupDay1.value || '',
+                setup_day_1_start: formatHour(setupDay1Start.value),
+                setup_day_1_end: formatHour(setupDay1End.value),
                 setup_day_1_min: setupDay1Min.value || '10',
                 setup_day_2: setupDay2.value || '',
+                setup_day_2_start: formatHour(setupDay2Start.value),
+                setup_day_2_end: formatHour(setupDay2End.value),
                 setup_day_2_min: setupDay2Min.value || '10',
                 setup_day_3: setupDay3.value || '',
+                setup_day_3_start: formatHour(setupDay3Start.value),
+                setup_day_3_end: formatHour(setupDay3End.value),
                 setup_day_3_min: setupDay3Min.value || '10',
                 teardown_day_1: teardownDay1.value || '',
+                teardown_day_1_start: formatHour(teardownDay1Start.value),
+                teardown_day_1_end: formatHour(teardownDay1End.value),
                 teardown_day_1_min: teardownDay1Min.value || '10'
             };
             const res = await fetch(`${API_URL}/settings`, {
@@ -596,9 +633,13 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
         }
         
-        // Load setup/cleanup shifts
-        const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
+        // Load all required data
+        const [shiftsRes, settingsRes] = await Promise.all([
+            fetch(`${API_URL}/setup-cleanup-shifts`),
+            fetch(`${API_URL}/settings`)
+        ]);
         let shifts = await shiftsRes.json();
+        const settings = await settingsRes.json();
         
         // Filter by team if needed
         if (teamFilter) {
@@ -608,13 +649,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        // Filter out empty shifts
-        shifts = shifts.filter(s => s.helper_id);
-        
         // Initialize jsPDF
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({
-            orientation: orientation,
+            orientation: 'landscape',
             unit: 'mm',
             format: 'a4'
         });
@@ -623,70 +661,144 @@ document.addEventListener('DOMContentLoaded', () => {
         const pageHeight = doc.internal.pageSize.getHeight();
         
         // Title
-        doc.setFontSize(16);
+        doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
-        doc.text('Auf- und Abbau Planung', pageWidth / 2, 15, { align: 'center' });
+        doc.text('Auf- und Abbau Planung', pageWidth / 2, 10, { align: 'center' });
         
         if (teamFilter) {
             const team = allTeams.find(t => t.id == teamFilter);
-            doc.setFontSize(12);
+            doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
-            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
+            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 16, { align: 'center' });
         }
         
-        // Group shifts by date and type
-        const groupedByDay = {};
-        shifts.forEach(shift => {
-            const date = shift.start_time.substring(0, 10);
-            const key = `${date}-${shift.day_type}`;
-            if (!groupedByDay[key]) {
-                groupedByDay[key] = {
-                    date: date,
-                    type: shift.day_type,
-                    shifts: []
-                };
+        // Note: parseTime, formatTime, and hexToRgb are now in utils.js
+        
+        // Process days
+        const daysData = [];
+        for (let i = 1; i <= 3; i++) {
+            const dateKey = `setup_day_${i}`;
+            const startKey = `setup_day_${i}_start`;
+            const endKey = `setup_day_${i}_end`;
+            const date = settings[dateKey];
+            const startTime = settings[startKey] || '08:00';
+            const endTime = settings[endKey] || '20:00';
+            
+            if (date) {
+                daysData.push({ type: 'Aufbau', date, startTime, endTime, dayNumber: i });
             }
-            groupedByDay[key].shifts.push(shift);
-        });
+        }
         
-        // Render content
-        let yPos = 30;
-        doc.setFontSize(8);
-        doc.setFont(undefined, 'normal');
+        const teardownDate = settings.teardown_day_1;
+        if (teardownDate) {
+            const startTime = settings.teardown_day_1_start || '08:00';
+            const endTime = settings.teardown_day_1_end || '20:00';
+            daysData.push({ type: 'Abbau', date: teardownDate, startTime, endTime, dayNumber: 1 });
+        }
         
-        Object.values(groupedByDay).sort((a, b) => a.date.localeCompare(b.date)).forEach(day => {
-            if (yPos > pageHeight - 20) {
-                doc.addPage();
-                yPos = 15;
+        // Render each day
+        let xOffset = 10;
+        let yStart = teamFilter ? 22 : 18;
+        const columnWidth = 35;
+        const rowHeight = 3;
+        const headerHeight = 10;
+        
+        daysData.forEach(dayData => {
+            const { type, date, startTime, endTime } = dayData;
+            
+            // Calculate shift blocks
+            const startHours = parseTime(startTime);
+            const endHours = parseTime(endTime);
+            const shiftBlocks = [];
+            let currentStart = startHours;
+            
+            while (currentStart < endHours) {
+                const shiftEnd = Math.min(currentStart + 4, endHours);
+                shiftBlocks.push({ start: currentStart, end: shiftEnd });
+                currentStart = shiftEnd;
             }
             
             // Day header
-            const d = new Date(day.date + 'T00:00:00');
-            const dateStr = d.toLocaleDateString('de-DE', { 
-                weekday: 'long', 
-                day: '2-digit', 
-                month: '2-digit', 
-                year: 'numeric' 
-            });
+            const d = new Date(date + 'T00:00:00');
+            const weekday = d.toLocaleDateString('de-DE', { weekday: 'short' });
+            const dateStr = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
             
+            doc.setFontSize(8);
             doc.setFont(undefined, 'bold');
-            doc.text(`${day.type} - ${dateStr} (${day.shifts.length} Helfer)`, 10, yPos);
-            yPos += 5;
-            doc.setFont(undefined, 'normal');
+            doc.text(`${weekday} ${dateStr}`, xOffset + (columnWidth * shiftBlocks.length) / 2, yStart, { align: 'center' });
+            doc.text(type, xOffset + (columnWidth * shiftBlocks.length) / 2, yStart + 4, { align: 'center' });
             
-            // List helpers
-            day.shifts.forEach((shift, idx) => {
-                if (yPos > pageHeight - 10) {
-                    doc.addPage();
-                    yPos = 15;
-                }
+            let blockX = xOffset;
+            
+            // Render each shift block
+            shiftBlocks.forEach(block => {
+                const startStr = formatTime(block.start);
+                const endStr = formatTime(block.end);
                 
-                const helperName = shift.helper_name || 'N/A';
-                doc.text(`  ${idx + 1}. ${helperName}`, 10, yPos);
-                yPos += 4;
+                // Block header
+                doc.setFontSize(6);
+                doc.setFont(undefined, 'bold');
+                doc.text(`${startStr}-${endStr}`, blockX + columnWidth/2, yStart + 8, { align: 'center' });
+                
+                // Get shifts for this block
+                const blockShifts = shifts.filter(s => {
+                    if (s.day_type !== type) return false;
+                    const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
+                    if (shiftDate !== date) return false;
+                    if (!s.helper_id) return false;
+                    
+                    const shiftTime = new Date(s.start_time);
+                    const shiftHour = shiftTime.getUTCHours() + shiftTime.getUTCMinutes() / 60;
+                    return Math.abs(shiftHour - block.start) < 0.1;
+                });
+                
+                doc.setFont(undefined, 'normal');
+                doc.setFontSize(5);
+                
+                let rowY = yStart + headerHeight;
+                
+                // Draw helper boxes (max 20 for PDF space)
+                blockShifts.slice(0, 20).forEach((shift, idx) => {
+                    const helper = allHelpers.find(h => h.id == shift.helper_id);
+                    if (!helper) return;
+                    
+                    const team = allTeams.find(t => t.id == helper.team_id);
+                    const color = team ? hexToRgb(team.color_hex) : { r: 150, g: 150, b: 150 };
+                    
+                    // Draw colored box
+                    doc.setFillColor(color.r, color.g, color.b);
+                    doc.rect(blockX, rowY, columnWidth - 1, rowHeight - 0.3, 'F');
+                    
+                    // Draw text
+                    doc.setTextColor(255, 255, 255);
+                    doc.text(helper.name, blockX + columnWidth/2, rowY + rowHeight - 1, { 
+                        align: 'center',
+                        maxWidth: columnWidth - 2
+                    });
+                    doc.setTextColor(0, 0, 0);
+                    
+                    rowY += rowHeight;
+                    
+                    // Check if we need new column for this day
+                    if (rowY > pageHeight - 15 && idx < blockShifts.length - 1) {
+                        // Too many entries, truncate
+                        doc.setFont(undefined, 'italic');
+                        doc.text('...', blockX + columnWidth/2, rowY, { align: 'center' });
+                        return;
+                    }
+                });
+                
+                blockX += columnWidth;
             });
             
-            yPos += 3;
+            xOffset = blockX + 5;
+            
+            // Check if we need a new page
+            if (xOffset > pageWidth - 40) {
+                doc.addPage();
+                xOffset = 10;
+                yStart = 10;
+            }
         });
         
         // Save PDF
@@ -700,9 +812,13 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
         }
         
-        // Load cakes
-        const cakesRes = await fetch(`${API_URL}/cakes`);
+        // Load all required data
+        const [cakesRes, settingsRes] = await Promise.all([
+            fetch(`${API_URL}/cakes`),
+            fetch(`${API_URL}/settings`)
+        ]);
         let cakes = await cakesRes.json();
+        const settings = await settingsRes.json();
         
         // Filter by team if needed
         if (teamFilter) {
@@ -711,9 +827,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return helper && String(helper.team_id) === String(teamFilter);
             });
         }
-        
-        // Filter out empty cakes
-        cakes = cakes.filter(c => c.helper_id);
         
         // Initialize jsPDF
         const { jsPDF } = window.jspdf;
@@ -727,67 +840,88 @@ document.addEventListener('DOMContentLoaded', () => {
         const pageHeight = doc.internal.pageSize.getHeight();
         
         // Title
-        doc.setFontSize(16);
+        doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
-        doc.text('Kuchen-Spenden Planung', pageWidth / 2, 15, { align: 'center' });
+        doc.text('Kuchen-Spenden Planung', pageWidth / 2, 12, { align: 'center' });
         
         if (teamFilter) {
             const team = allTeams.find(t => t.id == teamFilter);
-            doc.setFontSize(12);
+            doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
-            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
+            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 18, { align: 'center' });
         }
         
+        // Note: hexToRgb is now in utils.js
+        
         // Group cakes by day
-        const groupedByDay = {
-            'Freitag': [],
-            'Samstag': [],
-            'Sonntag': []
-        };
+        const days = ['Freitag', 'Samstag', 'Sonntag'];
+        const settingsKeys = ['cakes_friday', 'cakes_saturday', 'cakes_sunday'];
         
-        cakes.forEach(cake => {
-            if (groupedByDay[cake.donation_day]) {
-                groupedByDay[cake.donation_day].push(cake);
-            }
-        });
+        let xOffset = 10;
+        let yStart = teamFilter ? 24 : 20;
+        const columnWidth = (pageWidth - 25) / 3;
+        const rowHeight = 6;
+        const headerHeight = 12;
         
-        // Render content
-        let yPos = 30;
-        doc.setFontSize(8);
-        doc.setFont(undefined, 'normal');
-        
-        Object.keys(groupedByDay).forEach(day => {
-            const dayCakes = groupedByDay[day];
-            if (dayCakes.length === 0) return;
+        days.forEach((day, idx) => {
+            const count = parseInt(settings[settingsKeys[idx]] || 0);
+            if (count === 0) return;
             
-            if (yPos > pageHeight - 20) {
-                doc.addPage();
-                yPos = 15;
-            }
+            // Get cakes for this day
+            const dayCakes = cakes.filter(c => c.donation_day === day && c.helper_id);
             
             // Day header
+            doc.setFontSize(10);
             doc.setFont(undefined, 'bold');
-            doc.text(`${day} (${dayCakes.length} Kuchen)`, 10, yPos);
-            yPos += 5;
-            doc.setFont(undefined, 'normal');
+            doc.text(day, xOffset + columnWidth/2, yStart, { align: 'center' });
+            doc.setFontSize(8);
+            doc.text(`${dayCakes.length} / ${count}`, xOffset + columnWidth/2, yStart + 5, { align: 'center' });
             
-            // List cakes
-            dayCakes.forEach((cake, idx) => {
-                if (yPos > pageHeight - 10) {
-                    doc.addPage();
-                    yPos = 15;
-                }
+            let rowY = yStart + headerHeight;
+            
+            // Draw cake entries
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(6);
+            
+            dayCakes.forEach((cake, cakeIdx) => {
+                if (rowY > pageHeight - 10) return; // Page limit
                 
-                const helperName = cake.helper_name || 'N/A';
+                const helper = allHelpers.find(h => h.id == cake.helper_id);
+                if (!helper) return;
+                
+                const team = allTeams.find(t => t.id == helper.team_id);
+                const color = team ? hexToRgb(team.color_hex) : { r: 150, g: 150, b: 150 };
+                
+                // Draw colored box for helper name
+                doc.setFillColor(color.r, color.g, color.b);
+                doc.rect(xOffset, rowY, columnWidth - 2, rowHeight - 2, 'F');
+                
+                // Draw helper name
+                doc.setTextColor(255, 255, 255);
+                doc.text(helper.name, xOffset + (columnWidth - 2)/2, rowY + 2.5, { 
+                    align: 'center',
+                    maxWidth: columnWidth - 4
+                });
+                
+                // Draw cake type and nuts info below
+                doc.setTextColor(0, 0, 0);
                 const cakeType = cake.cake_type || 'unbenannt';
-                const nuts = cake.contains_nuts ? ' (enthält Nüsse)' : '';
+                const nutsMarker = cake.contains_nuts ? ' 🥜' : '';
+                doc.text(`${cakeType}${nutsMarker}`, xOffset + (columnWidth - 2)/2, rowY + 5, { 
+                    align: 'center',
+                    maxWidth: columnWidth - 4
+                });
                 
-                doc.text(`  ${idx + 1}. ${helperName}: ${cakeType}${nuts}`, 10, yPos);
-                yPos += 4;
+                rowY += rowHeight + 1;
             });
             
-            yPos += 3;
+            xOffset += columnWidth + 2;
         });
+        
+        // Legend for nuts
+        doc.setFontSize(7);
+        doc.setFont(undefined, 'italic');
+        doc.text('🥜 = enthält Nüsse', 10, pageHeight - 5);
         
         // Save PDF
         const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
