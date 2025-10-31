@@ -35,15 +35,20 @@
         }
         .day-wrapper {
             display: flex;
-            gap: 12px;
+            flex-direction: column;
             border: 2px solid #005A9F;
             padding: 12px;
             border-radius: 8px;
             background: #f0f8ff;
         }
+        .day-wrapper-shifts {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+        }
         .shift-column {
-            flex: 0 0 180px;
-            min-width: 180px;
+            flex: 0 0 90px;
+            min-width: 90px;
             border: 1px solid #ddd;
             padding: 8px;
             border-radius: 6px;
@@ -98,16 +103,19 @@
         }
         .helper-name {
             flex: 1;
-            padding: 3px 6px;
+            padding: 2px 3px;
             border-radius: 3px;
             color: #fff;
             font-weight: 600;
             text-align: center;
-            min-height: 20px;
+            min-height: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .info-text {
             font-size: 13px;
@@ -123,8 +131,9 @@
             font-size: 16px;
             font-weight: 700;
             color: #005A9F;
-            margin-bottom: 8px;
             text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #005A9F;
         }
     </style>
 </head>
@@ -318,12 +327,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         dayHeader.textContent = `${weekday} ${dateStr} - ${type}${type === 'Aufbau' ? ' Tag ' + dayNumber : ''}`;
         dayWrapper.appendChild(dayHeader);
         
+        // Create container for shift columns
+        const shiftsContainer = document.createElement('div');
+        shiftsContainer.className = 'day-wrapper-shifts';
+        
         // Create shift columns
         shiftBlocks.forEach((block, blockIndex) => {
             const column = renderShiftColumn(dayData, block, blockIndex);
-            dayWrapper.appendChild(column);
+            shiftsContainer.appendChild(column);
         });
         
+        dayWrapper.appendChild(shiftsContainer);
         container.appendChild(dayWrapper);
     }
     

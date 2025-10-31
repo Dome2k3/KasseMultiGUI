@@ -340,6 +340,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error('Settings load failed');
             const settings = await res.json();
             
+            // Helper to extract hour from HH:MM format
+            const extractHour = (timeStr) => {
+                if (!timeStr) return '';
+                const hour = parseInt(timeStr.split(':')[0]);
+                return isNaN(hour) ? '' : hour;
+            };
+            
             // Tournament days
             if (settings.event_friday) settingFriday.value = settings.event_friday;
             if (settings.event_saturday) settingSaturday.value = settings.event_saturday;
@@ -347,20 +354,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Setup/Teardown days
             if (settings.setup_day_1) setupDay1.value = settings.setup_day_1;
-            if (settings.setup_day_1_start) setupDay1Start.value = settings.setup_day_1_start;
-            if (settings.setup_day_1_end) setupDay1End.value = settings.setup_day_1_end;
+            if (settings.setup_day_1_start) setupDay1Start.value = extractHour(settings.setup_day_1_start);
+            if (settings.setup_day_1_end) setupDay1End.value = extractHour(settings.setup_day_1_end);
             if (settings.setup_day_1_min) setupDay1Min.value = settings.setup_day_1_min;
             if (settings.setup_day_2) setupDay2.value = settings.setup_day_2;
-            if (settings.setup_day_2_start) setupDay2Start.value = settings.setup_day_2_start;
-            if (settings.setup_day_2_end) setupDay2End.value = settings.setup_day_2_end;
+            if (settings.setup_day_2_start) setupDay2Start.value = extractHour(settings.setup_day_2_start);
+            if (settings.setup_day_2_end) setupDay2End.value = extractHour(settings.setup_day_2_end);
             if (settings.setup_day_2_min) setupDay2Min.value = settings.setup_day_2_min;
             if (settings.setup_day_3) setupDay3.value = settings.setup_day_3;
-            if (settings.setup_day_3_start) setupDay3Start.value = settings.setup_day_3_start;
-            if (settings.setup_day_3_end) setupDay3End.value = settings.setup_day_3_end;
+            if (settings.setup_day_3_start) setupDay3Start.value = extractHour(settings.setup_day_3_start);
+            if (settings.setup_day_3_end) setupDay3End.value = extractHour(settings.setup_day_3_end);
             if (settings.setup_day_3_min) setupDay3Min.value = settings.setup_day_3_min;
             if (settings.teardown_day_1) teardownDay1.value = settings.teardown_day_1;
-            if (settings.teardown_day_1_start) teardownDay1Start.value = settings.teardown_day_1_start;
-            if (settings.teardown_day_1_end) teardownDay1End.value = settings.teardown_day_1_end;
+            if (settings.teardown_day_1_start) teardownDay1Start.value = extractHour(settings.teardown_day_1_start);
+            if (settings.teardown_day_1_end) teardownDay1End.value = extractHour(settings.teardown_day_1_end);
             if (settings.teardown_day_1_min) teardownDay1Min.value = settings.teardown_day_1_min;
             
             // Cake counts
@@ -394,22 +401,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save Auf-/Abbau settings
     saveAufbauSettingsButton.addEventListener('click', async () => {
         try {
+            // Convert hour numbers to HH:00 format
+            const formatHour = (val) => {
+                const hour = parseInt(val) || 8;
+                return `${String(hour).padStart(2, '0')}:00`;
+            };
+            
             const payload = {
                 setup_day_1: setupDay1.value || '',
-                setup_day_1_start: setupDay1Start.value || '08:00',
-                setup_day_1_end: setupDay1End.value || '20:00',
+                setup_day_1_start: formatHour(setupDay1Start.value),
+                setup_day_1_end: formatHour(setupDay1End.value),
                 setup_day_1_min: setupDay1Min.value || '10',
                 setup_day_2: setupDay2.value || '',
-                setup_day_2_start: setupDay2Start.value || '08:00',
-                setup_day_2_end: setupDay2End.value || '20:00',
+                setup_day_2_start: formatHour(setupDay2Start.value),
+                setup_day_2_end: formatHour(setupDay2End.value),
                 setup_day_2_min: setupDay2Min.value || '10',
                 setup_day_3: setupDay3.value || '',
-                setup_day_3_start: setupDay3Start.value || '08:00',
-                setup_day_3_end: setupDay3End.value || '20:00',
+                setup_day_3_start: formatHour(setupDay3Start.value),
+                setup_day_3_end: formatHour(setupDay3End.value),
                 setup_day_3_min: setupDay3Min.value || '10',
                 teardown_day_1: teardownDay1.value || '',
-                teardown_day_1_start: teardownDay1Start.value || '08:00',
-                teardown_day_1_end: teardownDay1End.value || '20:00',
+                teardown_day_1_start: formatHour(teardownDay1Start.value),
+                teardown_day_1_end: formatHour(teardownDay1End.value),
                 teardown_day_1_min: teardownDay1Min.value || '10'
             };
             const res = await fetch(`${API_URL}/settings`, {
