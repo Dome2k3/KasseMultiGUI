@@ -27,11 +27,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteTeamButton = document.getElementById('delete-team-button');
 
     // Elemente für Helfer
-    const helperListBody = document.getElementById('helper-list-body');
+    const helperListContainer = document.getElementById('helper-list-container');
+    const loadMoreHelpersBtn = document.getElementById('load-more-helpers');
     const addHelperForm = document.getElementById('add-helper-form');
     const helperTeamSelect = document.getElementById('helper-team-select');
     const helperFilterTeam = document.getElementById('helper-filter-team');
     const helperError = document.getElementById('helper-error');
+    
+    // Pagination state
+    let allHelpersData = [];
+    let displayedHelperCount = 10;
+    let allTeamsData = [];
+
 
     // Elemente fuer Taetigkeiten
     const groupList = document.getElementById('group-list');
@@ -101,12 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`${API_URL}/teams`);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const teams = await response.json();
+            allTeamsData = await response.json();
             teamList.innerHTML = '';
             helperTeamSelect.innerHTML = '<option value="" disabled selected>Team auswählen</option>';
             deleteTeamSelect.innerHTML = '<option value="">Team auswählen</option>';
             helperFilterTeam.innerHTML = '<option value="">Alle</option>';
-            teams.forEach(team => {
+            allTeamsData.forEach(team => {
                 const li = document.createElement('li');
                 // team-name erhält data-color, damit JS/CSS den Hintergrund setzen kann
                 li.innerHTML = `<div class="color-swatch" style="background-color: ${team.color_hex}; width:14px; height:14px; display:inline-block; margin-right:8px; vertical-align:middle; border-rad[...]
@@ -147,39 +154,105 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`${API_URL}/helpers`);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const helpers = await response.json();
-            renderHelperTable(helpers);
+            allHelpersData = await response.json();
+            displayedHelperCount = 10; // Reset to initial count
+            renderHelperCards();
         } catch (error) { console.error('Fehler Helfer:', error); }
     }
 
-    function renderHelperTable(helpers) {
-        helperListBody.innerHTML = '';
+    function renderHelperCards() {
         const filterTeam = helperFilterTeam.value;
-        helpers
-            .filter(h => !filterTeam || String(h.team_id) === String(filterTeam))
-            .forEach(helper => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${helper.name}</td><td>${helper.team_name || ''}</td><td>${helper.role}</td>`;
-                const tdDelete = document.createElement('td');
-                const btn = document.createElement('button');
-                btn.className = 'small-delete';
-                btn.textContent = '✖';
-                btn.title = 'Löschen';
-                btn.addEventListener('click', async () => {
-                    if (!confirm('Wirklich löschen?')) return;
-                    try {
-                        const res = await fetch(`${API_URL}/helpers/${helper.id}`, { method: 'DELETE' });
-                        if (!res.ok) throw new Error('Löschen fehlgeschlagen');
-                        fetchAndRenderHelpers();
-                    } catch (err) { console.error('Fehler beim Löschen Helfer:', err); alert('Löschen fehlgeschlagen'); }
-                });
-                tdDelete.appendChild(btn);
-                tr.appendChild(tdDelete);
-                helperListBody.appendChild(tr);
+        const filteredHelpers = allHelpersData.filter(h => !filterTeam || String(h.team_id) === String(filterTeam));
+        
+        helperListContainer.innerHTML = '';
+        
+        // Show up to displayedHelperCount helpers
+        const helpersToShow = filteredHelpers.slice(0, displayedHelperCount);
+        
+        helpersToShow.forEach(helper => {
+            const card = document.createElement('div');
+            card.className = 'helper-card';
+            
+            // Get team color
+            const teamColor = getTeamColorForHelper(helper.team_id);
+            card.style.backgroundColor = teamColor;
+            card.style.color = getTextColorForBackground(teamColor);
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'helper-card-info';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'helper-card-name';
+            nameSpan.textContent = helper.name;
+            infoDiv.appendChild(nameSpan);
+            
+            // Add icons for Minderjaehrig and Orga
+            if (helper.role === 'Minderjaehrig') {
+                const icon = document.createElement('span');
+                icon.className = 'helper-icon';
+                icon.innerHTML = '👶'; // Youth icon
+                icon.title = 'Minderjährig';
+                infoDiv.appendChild(icon);
+            }
+            
+            if (helper.role === 'Orga') {
+                const icon = document.createElement('span');
+                icon.className = 'helper-icon';
+                icon.innerHTML = '⭐'; // Orga icon
+                icon.title = 'Organisation';
+                infoDiv.appendChild(icon);
+            }
+            
+            card.appendChild(infoDiv);
+            
+            // Delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'helper-card-delete';
+            deleteBtn.innerHTML = '✖';
+            deleteBtn.title = 'Löschen';
+            deleteBtn.addEventListener('click', async () => {
+                if (!confirm(`${helper.name} wirklich löschen?`)) return;
+                try {
+                    const res = await fetch(`${API_URL}/helpers/${helper.id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error('Löschen fehlgeschlagen');
+                    fetchAndRenderHelpers();
+                } catch (err) { 
+                    console.error('Fehler beim Löschen Helfer:', err); 
+                    alert('Löschen fehlgeschlagen'); 
+                }
             });
+            card.appendChild(deleteBtn);
+            
+            helperListContainer.appendChild(card);
+        });
+        
+        // Show/hide "Load More" button
+        if (filteredHelpers.length > displayedHelperCount) {
+            loadMoreHelpersBtn.style.display = 'block';
+        } else {
+            loadMoreHelpersBtn.style.display = 'none';
+        }
+    }
+    
+    function getTeamColorForHelper(teamId) {
+        const team = allTeamsData.find(t => String(t.id) === String(teamId));
+        return team ? team.color_hex : '#999';
     }
 
-    helperFilterTeam.addEventListener('change', () => fetchAndRenderHelpers());
+    function renderHelperTable(helpers) {
+        // Deprecated - replaced by renderHelperCards
+        console.warn('renderHelperTable is deprecated, use renderHelperCards instead');
+    }
+
+    helperFilterTeam.addEventListener('change', () => {
+        displayedHelperCount = 10; // Reset count when filtering
+        renderHelperCards();
+    });
+    
+    loadMoreHelpersBtn.addEventListener('click', () => {
+        displayedHelperCount += 20; // Load 20 more at a time
+        renderHelperCards();
+    });
 
     async function fetchAndRenderGroups() {
         try {
