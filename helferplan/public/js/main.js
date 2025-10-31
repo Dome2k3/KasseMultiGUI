@@ -49,12 +49,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auf-/Abbau settings inputs
     const setupDay1 = document.getElementById('setup-day-1');
+    const setupDay1Start = document.getElementById('setup-day-1-start');
+    const setupDay1End = document.getElementById('setup-day-1-end');
     const setupDay1Min = document.getElementById('setup-day-1-min');
     const setupDay2 = document.getElementById('setup-day-2');
+    const setupDay2Start = document.getElementById('setup-day-2-start');
+    const setupDay2End = document.getElementById('setup-day-2-end');
     const setupDay2Min = document.getElementById('setup-day-2-min');
     const setupDay3 = document.getElementById('setup-day-3');
+    const setupDay3Start = document.getElementById('setup-day-3-start');
+    const setupDay3End = document.getElementById('setup-day-3-end');
     const setupDay3Min = document.getElementById('setup-day-3-min');
     const teardownDay1 = document.getElementById('teardown-day-1');
+    const teardownDay1Start = document.getElementById('teardown-day-1-start');
+    const teardownDay1End = document.getElementById('teardown-day-1-end');
     const teardownDay1Min = document.getElementById('teardown-day-1-min');
     const saveAufbauSettingsButton = document.getElementById('save-aufbau-settings-button');
 
@@ -339,12 +347,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Setup/Teardown days
             if (settings.setup_day_1) setupDay1.value = settings.setup_day_1;
+            if (settings.setup_day_1_start) setupDay1Start.value = settings.setup_day_1_start;
+            if (settings.setup_day_1_end) setupDay1End.value = settings.setup_day_1_end;
             if (settings.setup_day_1_min) setupDay1Min.value = settings.setup_day_1_min;
             if (settings.setup_day_2) setupDay2.value = settings.setup_day_2;
+            if (settings.setup_day_2_start) setupDay2Start.value = settings.setup_day_2_start;
+            if (settings.setup_day_2_end) setupDay2End.value = settings.setup_day_2_end;
             if (settings.setup_day_2_min) setupDay2Min.value = settings.setup_day_2_min;
             if (settings.setup_day_3) setupDay3.value = settings.setup_day_3;
+            if (settings.setup_day_3_start) setupDay3Start.value = settings.setup_day_3_start;
+            if (settings.setup_day_3_end) setupDay3End.value = settings.setup_day_3_end;
             if (settings.setup_day_3_min) setupDay3Min.value = settings.setup_day_3_min;
             if (settings.teardown_day_1) teardownDay1.value = settings.teardown_day_1;
+            if (settings.teardown_day_1_start) teardownDay1Start.value = settings.teardown_day_1_start;
+            if (settings.teardown_day_1_end) teardownDay1End.value = settings.teardown_day_1_end;
             if (settings.teardown_day_1_min) teardownDay1Min.value = settings.teardown_day_1_min;
             
             // Cake counts
@@ -380,12 +396,20 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const payload = {
                 setup_day_1: setupDay1.value || '',
+                setup_day_1_start: setupDay1Start.value || '08:00',
+                setup_day_1_end: setupDay1End.value || '20:00',
                 setup_day_1_min: setupDay1Min.value || '10',
                 setup_day_2: setupDay2.value || '',
+                setup_day_2_start: setupDay2Start.value || '08:00',
+                setup_day_2_end: setupDay2End.value || '20:00',
                 setup_day_2_min: setupDay2Min.value || '10',
                 setup_day_3: setupDay3.value || '',
+                setup_day_3_start: setupDay3Start.value || '08:00',
+                setup_day_3_end: setupDay3End.value || '20:00',
                 setup_day_3_min: setupDay3Min.value || '10',
                 teardown_day_1: teardownDay1.value || '',
+                teardown_day_1_start: teardownDay1Start.value || '08:00',
+                teardown_day_1_end: teardownDay1End.value || '20:00',
                 teardown_day_1_min: teardownDay1Min.value || '10'
             };
             const res = await fetch(`${API_URL}/settings`, {

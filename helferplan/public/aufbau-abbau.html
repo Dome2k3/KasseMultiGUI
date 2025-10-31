@@ -31,38 +31,53 @@
             gap: 20px;
             margin-top: 20px;
             overflow-x: auto;
+            padding-bottom: 20px;
         }
-        .day-column {
-            flex: 0 0 280px;
-            min-width: 280px;
-            border: 1px solid #ddd;
+        .day-wrapper {
+            display: flex;
+            gap: 12px;
+            border: 2px solid #005A9F;
             padding: 12px;
             border-radius: 8px;
-            background: #f9f9f9;
+            background: #f0f8ff;
         }
-        .day-column h3 {
-            margin-top: 0;
+        .shift-column {
+            flex: 0 0 180px;
+            min-width: 180px;
+            border: 1px solid #ddd;
+            padding: 8px;
+            border-radius: 6px;
+            background: #fff;
+        }
+        .shift-column h4 {
+            margin: 0 0 8px 0;
             color: #005A9F;
-            border-bottom: 2px solid #005A9F;
-            padding-bottom: 8px;
-            font-size: 16px;
+            font-size: 13px;
             text-align: center;
+            border-bottom: 1px solid #005A9F;
+            padding-bottom: 4px;
+        }
+        .shift-time {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            margin-bottom: 8px;
+            font-weight: 600;
         }
         .shifts-list {
             display: flex;
             flex-direction: column;
-            gap: 4px;
-            margin-top: 12px;
+            gap: 3px;
         }
         .shift-row {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
             background: #fff;
             border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 12px;
+            border-radius: 3px;
+            padding: 3px 5px;
+            font-size: 10px;
         }
         .shift-row.required {
             border-color: #ff9800;
@@ -71,26 +86,28 @@
         .shift-number {
             font-weight: 600;
             color: #666;
-            min-width: 25px;
+            min-width: 18px;
+            font-size: 10px;
         }
         .helper-select {
             flex: 1;
-            padding: 4px 6px;
+            padding: 3px 4px;
             border: 1px solid #ccc;
             border-radius: 3px;
-            font-size: 11px;
+            font-size: 10px;
         }
         .helper-name {
             flex: 1;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 3px 6px;
+            border-radius: 3px;
             color: #fff;
             font-weight: 600;
             text-align: center;
-            min-height: 24px;
+            min-height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 10px;
         }
         .info-text {
             font-size: 13px;
@@ -101,6 +118,13 @@
         .dimmed {
             opacity: 0.3;
             filter: grayscale(80%);
+        }
+        .day-header {
+            font-size: 16px;
+            font-weight: 700;
+            color: #005A9F;
+            margin-bottom: 8px;
+            text-align: center;
         }
     </style>
 </head>
@@ -115,7 +139,7 @@
 
 <main>
     <h1>Auf- und Abbau Planung</h1>
-    <p class="info-text">Jedem Auf-/Abbautag können bis zu 40 Helfer zugewiesen werden (4-Stunden-Schichten). Die ersten Slots (orange markiert) sind für Erwachsene/Orga-Helfer reserviert.</p>
+    <p class="info-text">Jeder Auf-/Abbautag wird in 4-Stunden-Schichten unterteilt. Jedem Schichtblock können bis zu 40 Helfer zugewiesen werden. Die ersten Slots (orange markiert) sind für Erwachsene/Orga-Helfer reserviert.</p>
     
     <div class="filter-panel">
         <div>
@@ -133,7 +157,7 @@
     </div>
     
     <div id="setup-container" class="setup-container">
-        <!-- Days will be generated dynamically -->
+        <!-- Days and shift columns will be generated dynamically -->
     </div>
 </main>
 
@@ -204,6 +228,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         return team ? team.color_hex : '#999';
     }
     
+    // Parse time string "HH:MM" to hours as decimal
+    function parseTime(timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours + minutes / 60;
+    }
+    
+    // Format time from decimal hours to "HH:MM"
+    function formatTime(decimalHours) {
+        const hours = Math.floor(decimalHours);
+        const minutes = Math.round((decimalHours - hours) * 60);
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+    
     function renderDays() {
         container.innerHTML = '';
         
@@ -212,65 +249,146 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Process setup days (1-3)
         for (let i = 1; i <= 3; i++) {
             const dateKey = `setup_day_${i}`;
+            const startKey = `setup_day_${i}_start`;
+            const endKey = `setup_day_${i}_end`;
             const minKey = `setup_day_${i}_min`;
+            
             const date = settings[dateKey];
+            const startTime = settings[startKey] || '08:00';
+            const endTime = settings[endKey] || '20:00';
             const minHelpers = parseInt(settings[minKey] || 10);
             
             if (date) {
-                daysData.push({ type: 'Aufbau', date, minHelpers, dayNumber: i });
+                daysData.push({ 
+                    type: 'Aufbau', 
+                    date, 
+                    startTime, 
+                    endTime, 
+                    minHelpers, 
+                    dayNumber: i 
+                });
             }
         }
         
         // Process teardown day
         const teardownDate = settings.teardown_day_1;
+        const teardownStart = settings.teardown_day_1_start || '08:00';
+        const teardownEnd = settings.teardown_day_1_end || '20:00';
         const teardownMin = parseInt(settings.teardown_day_1_min || 10);
+        
         if (teardownDate) {
-            daysData.push({ type: 'Abbau', date: teardownDate, minHelpers: teardownMin, dayNumber: 1 });
+            daysData.push({ 
+                type: 'Abbau', 
+                date: teardownDate, 
+                startTime: teardownStart, 
+                endTime: teardownEnd, 
+                minHelpers: teardownMin, 
+                dayNumber: 1 
+            });
         }
         
-        // Render all days as columns
-        daysData.forEach(dayData => renderDayColumn(dayData));
+        // Render all days
+        daysData.forEach(dayData => renderDayWithShifts(dayData));
         
         // Apply view filter after rendering
         applyViewFilter();
     }
     
-    function renderDayColumn(dayData) {
-        const { type, date, minHelpers, dayNumber } = dayData;
+    function renderDayWithShifts(dayData) {
+        const { type, date, startTime, endTime, minHelpers, dayNumber } = dayData;
+        
+        // Calculate shift blocks (4 hours each)
+        const startHours = parseTime(startTime);
+        const endHours = parseTime(endTime);
+        const totalHours = endHours - startHours;
+        
+        // Create 4-hour shifts
+        const shiftBlocks = [];
+        let currentStart = startHours;
+        
+        while (currentStart < endHours) {
+            const shiftEnd = Math.min(currentStart + 4, endHours);
+            shiftBlocks.push({
+                start: currentStart,
+                end: shiftEnd,
+                duration: shiftEnd - currentStart
+            });
+            currentStart = shiftEnd;
+        }
+        
+        // Create day wrapper
         const d = new Date(date + 'T00:00:00');
         const weekday = d.toLocaleDateString('de-DE', { weekday: 'long' });
         const dateStr = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
         
-        // Count filled slots for this day
-        const dayShifts = shifts.filter(s => {
+        const dayWrapper = document.createElement('div');
+        dayWrapper.className = 'day-wrapper';
+        
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'day-header';
+        dayHeader.textContent = `${weekday} ${dateStr} - ${type}${type === 'Aufbau' ? ' Tag ' + dayNumber : ''}`;
+        dayWrapper.appendChild(dayHeader);
+        
+        // Create shift columns
+        shiftBlocks.forEach((block, blockIndex) => {
+            const column = renderShiftColumn(dayData, block, blockIndex);
+            dayWrapper.appendChild(column);
+        });
+        
+        container.appendChild(dayWrapper);
+    }
+    
+    function renderShiftColumn(dayData, shiftBlock, blockIndex) {
+        const { type, date, minHelpers } = dayData;
+        const { start, end, duration } = shiftBlock;
+        
+        const startStr = formatTime(start);
+        const endStr = formatTime(end);
+        
+        // Count filled slots for this shift block
+        const blockShifts = shifts.filter(s => {
             if (s.day_type !== type) return false;
             const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
-            return shiftDate === date && s.helper_id;
+            if (shiftDate !== date) return false;
+            
+            // Check if this shift belongs to this block (using hour as identifier)
+            const shiftTime = new Date(s.start_time);
+            const shiftHour = shiftTime.getUTCHours() + shiftTime.getUTCMinutes() / 60;
+            return Math.abs(shiftHour - start) < 0.1 && s.helper_id;
         });
-        const filledCount = dayShifts.length;
+        const filledCount = blockShifts.length;
         
         const column = document.createElement('div');
-        column.className = 'day-column';
-        column.innerHTML = `<h3>${weekday} ${dateStr}<br/>${type}${type === 'Aufbau' ? ' Tag ' + dayNumber : ''}<br/>(${filledCount} / 40)</h3>`;
+        column.className = 'shift-column';
+        
+        const header = document.createElement('h4');
+        header.textContent = `${startStr} - ${endStr}`;
+        column.appendChild(header);
+        
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'shift-time';
+        timeDiv.textContent = `${filledCount} / 40`;
+        column.appendChild(timeDiv);
         
         const shiftsList = document.createElement('div');
         shiftsList.className = 'shifts-list';
         
-        // Create 40 shift rows
+        // Create 40 shift rows for this block
         for (let i = 0; i < 40; i++) {
-            const row = createShiftRow(type, date, i, minHelpers);
+            const row = createShiftRow(type, date, start, i, minHelpers);
             shiftsList.appendChild(row);
         }
         
         column.appendChild(shiftsList);
-        container.appendChild(column);
+        return column;
     }
     
-    function createShiftRow(type, date, slotIndex, minHelpers) {
+    function createShiftRow(type, date, shiftStartHour, slotIndex, minHelpers) {
         const row = document.createElement('div');
         row.className = 'shift-row';
         row.dataset.date = date;
         row.dataset.type = type;
+        row.dataset.shiftHour = shiftStartHour;
         row.dataset.slotIndex = slotIndex;
         
         // Mark first minHelpers slots as required (Erwachsen/Orga only)
@@ -283,8 +401,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (s.day_type !== type) return false;
             const shiftDate = s.start_time ? s.start_time.substring(0, 10) : '';
             if (shiftDate !== date) return false;
+            
+            // Match by hour and slot index (minutes)
             const startTime = new Date(s.start_time);
-            return startTime.getMinutes() === slotIndex;
+            const hour = startTime.getUTCHours() + startTime.getUTCMinutes() / 60;
+            const minutes = startTime.getUTCMinutes();
+            
+            return Math.abs(hour - shiftStartHour) < 0.1 && minutes === slotIndex;
         });
         
         const shiftNumber = document.createElement('div');
@@ -309,26 +432,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 helperName.addEventListener('click', () => {
                     // Clear the shift and show dropdown
                     row.removeChild(helperName);
-                    const select = createHelperSelect(type, date, slotIndex, minHelpers, null);
+                    const select = createHelperSelect(type, date, shiftStartHour, slotIndex, minHelpers, null);
                     row.appendChild(select);
-                    saveShift(date, type, slotIndex, null);
+                    saveShift(date, type, shiftStartHour, slotIndex, null);
                 });
                 row.appendChild(helperName);
             }
         } else {
             // Show dropdown
-            const select = createHelperSelect(type, date, slotIndex, minHelpers, null);
+            const select = createHelperSelect(type, date, shiftStartHour, slotIndex, minHelpers, null);
             row.appendChild(select);
         }
         
         return row;
     }
     
-    function createHelperSelect(type, date, slotIndex, minHelpers, selectedHelperId) {
+    function createHelperSelect(type, date, shiftStartHour, slotIndex, minHelpers, selectedHelperId) {
         const select = document.createElement('select');
         select.className = 'helper-select';
         select.dataset.date = date;
         select.dataset.type = type;
+        select.dataset.shiftHour = shiftStartHour;
         select.dataset.slotIndex = slotIndex;
         
         // Get filter value
@@ -361,21 +485,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Add change listener
         select.addEventListener('change', async (e) => {
-            await saveShift(date, type, slotIndex, e.target.value);
+            await saveShift(date, type, shiftStartHour, slotIndex, e.target.value);
         });
         
         return select;
     }
     
-    async function saveShift(date, dayType, slotIndex, helperId) {
+    async function saveShift(date, dayType, shiftStartHour, slotIndex, helperId) {
         try {
             // Calculate start and end times with unique minutes for each slot
-            const baseDate = new Date(date + 'T08:00:00Z');
-            baseDate.setMinutes(baseDate.getMinutes() + slotIndex);
+            const startHours = Math.floor(shiftStartHour);
+            const startMinutes = Math.round((shiftStartHour - startHours) * 60);
+            
+            const baseDate = new Date(date + 'T00:00:00Z');
+            baseDate.setUTCHours(startHours);
+            baseDate.setUTCMinutes(startMinutes + slotIndex); // Use slotIndex as minute offset
             const startTime = baseDate.toISOString();
             
             const endDate = new Date(baseDate);
-            endDate.setHours(endDate.getHours() + 4); // 4 hour shift
+            endDate.setUTCHours(endDate.getUTCHours() + 4); // 4 hour shift
             const endTime = endDate.toISOString();
             
             const payload = {
