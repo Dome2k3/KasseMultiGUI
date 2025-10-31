@@ -441,9 +441,341 @@ document.addEventListener('DOMContentLoaded', () => {
     async function initialLoad() {
         await fetchAndRenderTeams();
         await fetchAndRenderHelpers();
-        await fetchAndRenderGroups();
         await fetchAndRenderActivities();
         await loadSettings();
+        
+        // Populate export team filter
+        const exportTeamFilter = document.getElementById('export-team-filter');
+        if (exportTeamFilter) {
+            exportTeamFilter.innerHTML = '<option value="">Alle Teams</option>';
+            allTeams.forEach(team => exportTeamFilter.add(new Option(team.name, team.id)));
+        }
+    }
+
+    // PDF Export functionality
+    const exportPdfButton = document.getElementById('export-pdf-button');
+    if (exportPdfButton) {
+        exportPdfButton.addEventListener('click', async () => {
+            const exportType = document.getElementById('export-type').value;
+            const teamFilter = document.getElementById('export-team-filter').value;
+            const orientation = document.getElementById('export-orientation').value;
+            
+            try {
+                exportPdfButton.disabled = true;
+                exportPdfButton.textContent = 'Erstelle PDF...';
+                
+                if (exportType === 'tournament') {
+                    await exportTournamentPDF(teamFilter, orientation);
+                } else if (exportType === 'setup') {
+                    await exportSetupPDF(teamFilter, orientation);
+                } else if (exportType === 'cakes') {
+                    await exportCakesPDF(teamFilter, orientation);
+                }
+            } catch (err) {
+                console.error('PDF Export Fehler:', err);
+                alert('Fehler beim Erstellen des PDFs: ' + err.message);
+            } finally {
+                exportPdfButton.disabled = false;
+                exportPdfButton.textContent = 'PDF erstellen';
+            }
+        });
+    }
+    
+    async function exportTournamentPDF(teamFilter, orientation) {
+        // Load tournament shifts
+        const shiftsRes = await fetch(`${API_URL}/tournament-shifts`);
+        let shifts = await shiftsRes.json();
+        
+        // Filter by team if needed
+        if (teamFilter) {
+            shifts = shifts.filter(shift => {
+                const helper = allHelpers.find(h => h.id == shift.helper_id);
+                return helper && String(helper.team_id) === String(teamFilter);
+            });
+        }
+        
+        // Load activities
+        const activitiesRes = await fetch(`${API_URL}/activities`);
+        const activities = await activitiesRes.json();
+        
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: orientation,
+            unit: 'mm',
+            format: 'a4'
+        });
+        
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        
+        // Title
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('Turnier-Planung', pageWidth / 2, 15, { align: 'center' });
+        
+        if (teamFilter) {
+            const team = allTeams.find(t => t.id == teamFilter);
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
+        }
+        
+        // Group shifts by activity and time
+        const groupedShifts = {};
+        shifts.forEach(shift => {
+            const activity = activities.find(a => a.id == shift.activity_id);
+            if (!activity) return;
+            
+            const activityName = activity.name;
+            if (!groupedShifts[activityName]) {
+                groupedShifts[activityName] = [];
+            }
+            groupedShifts[activityName].push(shift);
+        });
+        
+        // Render content
+        let yPos = 30;
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        
+        Object.keys(groupedShifts).sort().forEach(activityName => {
+            if (yPos > pageHeight - 20) {
+                doc.addPage();
+                yPos = 15;
+            }
+            
+            // Activity name
+            doc.setFont(undefined, 'bold');
+            doc.text(activityName, 10, yPos);
+            yPos += 5;
+            doc.setFont(undefined, 'normal');
+            
+            // List shifts
+            const activityShifts = groupedShifts[activityName].sort((a, b) => 
+                new Date(a.start_time) - new Date(b.start_time)
+            );
+            
+            activityShifts.forEach(shift => {
+                if (yPos > pageHeight - 10) {
+                    doc.addPage();
+                    yPos = 15;
+                }
+                
+                const startDate = new Date(shift.start_time);
+                const timeStr = startDate.toLocaleString('de-DE', { 
+                    weekday: 'short', 
+                    day: '2-digit', 
+                    month: '2-digit',
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                const helperName = shift.helper_name || 'N/A';
+                doc.text(`  ${timeStr}: ${helperName}`, 10, yPos);
+                yPos += 4;
+            });
+            
+            yPos += 3;
+        });
+        
+        // Save PDF
+        const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        doc.save(`Turnier-Planung-${teamName}.pdf`);
+    }
+    
+    async function exportSetupPDF(teamFilter, orientation) {
+        // Load setup/cleanup shifts
+        const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
+        let shifts = await shiftsRes.json();
+        
+        // Filter by team if needed
+        if (teamFilter) {
+            shifts = shifts.filter(shift => {
+                const helper = allHelpers.find(h => h.id == shift.helper_id);
+                return helper && String(helper.team_id) === String(teamFilter);
+            });
+        }
+        
+        // Filter out empty shifts
+        shifts = shifts.filter(s => s.helper_id);
+        
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: orientation,
+            unit: 'mm',
+            format: 'a4'
+        });
+        
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        
+        // Title
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('Auf- und Abbau Planung', pageWidth / 2, 15, { align: 'center' });
+        
+        if (teamFilter) {
+            const team = allTeams.find(t => t.id == teamFilter);
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
+        }
+        
+        // Group shifts by date and type
+        const groupedByDay = {};
+        shifts.forEach(shift => {
+            const date = shift.start_time.substring(0, 10);
+            const key = `${date}-${shift.day_type}`;
+            if (!groupedByDay[key]) {
+                groupedByDay[key] = {
+                    date: date,
+                    type: shift.day_type,
+                    shifts: []
+                };
+            }
+            groupedByDay[key].shifts.push(shift);
+        });
+        
+        // Render content
+        let yPos = 30;
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        
+        Object.values(groupedByDay).sort((a, b) => a.date.localeCompare(b.date)).forEach(day => {
+            if (yPos > pageHeight - 20) {
+                doc.addPage();
+                yPos = 15;
+            }
+            
+            // Day header
+            const d = new Date(day.date + 'T00:00:00');
+            const dateStr = d.toLocaleDateString('de-DE', { 
+                weekday: 'long', 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric' 
+            });
+            
+            doc.setFont(undefined, 'bold');
+            doc.text(`${day.type} - ${dateStr} (${day.shifts.length} Helfer)`, 10, yPos);
+            yPos += 5;
+            doc.setFont(undefined, 'normal');
+            
+            // List helpers
+            day.shifts.forEach((shift, idx) => {
+                if (yPos > pageHeight - 10) {
+                    doc.addPage();
+                    yPos = 15;
+                }
+                
+                const helperName = shift.helper_name || 'N/A';
+                doc.text(`  ${idx + 1}. ${helperName}`, 10, yPos);
+                yPos += 4;
+            });
+            
+            yPos += 3;
+        });
+        
+        // Save PDF
+        const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        doc.save(`Aufbau-Abbau-${teamName}.pdf`);
+    }
+    
+    async function exportCakesPDF(teamFilter, orientation) {
+        // Load cakes
+        const cakesRes = await fetch(`${API_URL}/cakes`);
+        let cakes = await cakesRes.json();
+        
+        // Filter by team if needed
+        if (teamFilter) {
+            cakes = cakes.filter(cake => {
+                const helper = allHelpers.find(h => h.id == cake.helper_id);
+                return helper && String(helper.team_id) === String(teamFilter);
+            });
+        }
+        
+        // Filter out empty cakes
+        cakes = cakes.filter(c => c.helper_id);
+        
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: orientation,
+            unit: 'mm',
+            format: 'a4'
+        });
+        
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        
+        // Title
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('Kuchen-Spenden Planung', pageWidth / 2, 15, { align: 'center' });
+        
+        if (teamFilter) {
+            const team = allTeams.find(t => t.id == teamFilter);
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
+        }
+        
+        // Group cakes by day
+        const groupedByDay = {
+            'Freitag': [],
+            'Samstag': [],
+            'Sonntag': []
+        };
+        
+        cakes.forEach(cake => {
+            if (groupedByDay[cake.donation_day]) {
+                groupedByDay[cake.donation_day].push(cake);
+            }
+        });
+        
+        // Render content
+        let yPos = 30;
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        
+        Object.keys(groupedByDay).forEach(day => {
+            const dayCakes = groupedByDay[day];
+            if (dayCakes.length === 0) return;
+            
+            if (yPos > pageHeight - 20) {
+                doc.addPage();
+                yPos = 15;
+            }
+            
+            // Day header
+            doc.setFont(undefined, 'bold');
+            doc.text(`${day} (${dayCakes.length} Kuchen)`, 10, yPos);
+            yPos += 5;
+            doc.setFont(undefined, 'normal');
+            
+            // List cakes
+            dayCakes.forEach((cake, idx) => {
+                if (yPos > pageHeight - 10) {
+                    doc.addPage();
+                    yPos = 15;
+                }
+                
+                const helperName = cake.helper_name || 'N/A';
+                const cakeType = cake.cake_type || 'unbenannt';
+                const nuts = cake.contains_nuts ? ' (enthält Nüsse)' : '';
+                
+                doc.text(`  ${idx + 1}. ${helperName}: ${cakeType}${nuts}`, 10, yPos);
+                yPos += 4;
+            });
+            
+            yPos += 3;
+        });
+        
+        // Save PDF
+        const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        doc.save(`Kuchen-${teamName}.pdf`);
     }
 
     initialLoad();

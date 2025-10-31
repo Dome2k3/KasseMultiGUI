@@ -176,11 +176,40 @@
             <label>Sonntag: <input type="number" id="cakes-sunday" min="0" value="4" style="width:70px"></label>
             <button id="save-cakes-settings-button">Kuchen-Anzahl speichern</button>
         </div>
+
+        <!-- PDF Export -->
+        <h3>PDF Export</h3>
+        <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:16px; max-width:600px;">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label style="min-width:100px;">Export-Typ:</label>
+                <select id="export-type" style="padding:6px; flex:1;">
+                    <option value="tournament">Turnier-Planung</option>
+                    <option value="setup">Auf-/Abbau</option>
+                    <option value="cakes">Kuchen</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label style="min-width:100px;">Team-Filter:</label>
+                <select id="export-team-filter" style="padding:6px; flex:1;">
+                    <option value="">Alle Teams</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label style="min-width:100px;">Seitenformat:</label>
+                <select id="export-orientation" style="padding:6px; flex:1;">
+                    <option value="landscape">Querformat (Landscape)</option>
+                    <option value="portrait">Hochformat (Portrait)</option>
+                </select>
+            </div>
+            <button id="export-pdf-button" style="padding:10px 20px; background:#005A9F; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:600;">PDF erstellen</button>
+        </div>
     </section>
 
 </main>
 <!-- Lade runtime config (muss vor den App-Skripten geladen werden) -->
 <script src="/helferplan/public/config.js"></script>
+<!-- jsPDF library for PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="/helferplan/public/js/main.js" defer></script>
 </body>
 </html>
