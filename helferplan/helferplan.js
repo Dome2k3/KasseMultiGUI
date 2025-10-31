@@ -386,7 +386,15 @@ app.post('/api/tournament-shifts', async (req, res) => {
         // Prüfen, ob die Rolle passt
         const [helper] = await pool.query("SELECT role FROM helferplan_helpers WHERE id = ?", [helper_id]);
         if (helper.length === 0) return res.status(404).json({ error: 'Helfer nicht gefunden.' });
-        if (roleRequirement !== 'Alle' && helper[0].role !== roleRequirement) {
+        
+        // Orga helpers can fill any role, minors can only fill 'Alle' roles
+        const helperRole = helper[0].role;
+        if (roleRequirement === 'Erwachsen') {
+            // For 'Erwachsen' requirement, allow both 'Erwachsen' and 'Orga' helpers
+            if (helperRole !== 'Erwachsen' && helperRole !== 'Orga') {
+                return res.status(400).json({ error: 'Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht.' });
+            }
+        } else if (roleRequirement !== 'Alle' && helperRole !== roleRequirement) {
             return res.status(400).json({ error: 'Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht.' });
         }
 

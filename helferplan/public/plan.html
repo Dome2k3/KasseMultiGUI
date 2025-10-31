@@ -7,10 +7,50 @@
     <link rel="stylesheet" href="css/style.css">
     <style>
         html, body { overflow-x: hidden; }
-        .plan-main { max-width: 1200px; margin: 0 auto; }
-        .plan-layout { display: flex; gap: 12px; align-items: flex-start; }
-        /* Left panel moved upward for better landscape mode visibility */
-        .left-panel { width: 240px; flex: 0 0 240px; align-self: flex-start; position: sticky; top: 0; max-height: 95vh; overflow-y: auto; }
+        .plan-main { max-width: 100%; margin: 0 auto; padding: 20px; }
+        /* Top panel with controls moved above timeline */
+        .top-controls { 
+            background: #f5f5f5; 
+            padding: 16px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+            display: flex; 
+            gap: 30px; 
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .control-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+            min-width: 200px;
+        }
+        .control-group h3 { 
+            margin: 0; 
+            font-size: 14px; 
+            color: #005A9F; 
+            border: none; 
+            padding: 0;
+        }
+        .control-group select { 
+            padding: 6px 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            font-size: 14px;
+        }
+        .team-list-panel { 
+            display: flex; 
+            gap: 8px; 
+            flex-wrap: wrap;
+        }
+        #helper-pool { 
+            display: flex; 
+            gap: 8px; 
+            flex-wrap: wrap; 
+            max-height: 200px; 
+            overflow-y: auto;
+        }
+        .plan-layout { display: block; }
 
         #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; }
         #timeline-header { position: sticky; top: 0; background: #fff; z-index: 10; display:block; }
@@ -72,21 +112,30 @@
 
 <main class="plan-main">
     <h1>Turnier-Planung (Fr 12:00 - So 17:00)</h1>
-    <div class="plan-layout">
-        <div class="left-panel">
+    
+    <div class="top-controls">
+        <div class="control-group">
             <h3>Teams</h3>
             <div id="team-list-panel" class="team-list-panel"></div>
+        </div>
 
-            <h3 class="view-filter">Ansicht-Filter (nur Teamfarben)</h3>
+        <div class="control-group">
+            <h3>Ansicht-Filter (nur Teamfarben)</h3>
             <select id="view-team-filter"><option value="">Alle Teams</option></select>
+        </div>
 
+        <div class="control-group">
             <h3>Wähle Team (Filter für Helfer)</h3>
             <select id="plan-team-filter"><option value="">-- Team wählen --</option></select>
+        </div>
 
+        <div class="control-group">
             <h3>Helfer (ziehen)</h3>
             <div id="helper-pool"><div id="helper-pool-empty">Wähle ein Team um Helfer anzuzeigen.</div></div>
         </div>
-
+    </div>
+    
+    <div class="plan-layout">
         <div id="plan-container">
             <div id="timeline-header" aria-hidden="true"></div>
             <div id="grid-container" role="grid"></div>
