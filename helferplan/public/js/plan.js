@@ -319,7 +319,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isLocked = isSlotLocked(activity.id, i);
                     if (isLocked) {
                         slot.classList.add('locked-slot');
-                        slot.style.backgroundColor = '#ffffff';
+                        slot.style.backgroundColor = '#ffcccc'; // Light red for blocked slots
+                        slot.style.opacity = '0.7';
                         slot.style.cursor = 'not-allowed';
                         slot.title = 'Dieser Zeitslot ist gesperrt';
                     } else {
