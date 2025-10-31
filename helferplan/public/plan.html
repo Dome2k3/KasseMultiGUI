@@ -7,10 +7,34 @@
     <link rel="stylesheet" href="css/style.css">
     <style>
         html, body { overflow-x: hidden; }
-        .plan-main { max-width: 1200px; margin: 0 auto; }
+        .plan-main { max-width: 1400px; margin: 0 auto; }
         .plan-layout { display: flex; gap: 12px; align-items: flex-start; }
-        /* Left panel moved upward for better landscape mode visibility */
-        .left-panel { width: 240px; flex: 0 0 240px; align-self: flex-start; position: sticky; top: 0; max-height: 95vh; overflow-y: auto; }
+        /* Left panel positioned above timeline grid with sticky positioning */
+        .left-panel { 
+            width: 240px; 
+            flex: 0 0 240px; 
+            align-self: flex-start; 
+            position: sticky; 
+            top: 0; 
+            max-height: 95vh; 
+            overflow-y: auto; 
+            z-index: 15; /* Above timeline */
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 13px; /* Smaller font for better visibility */
+        }
+        
+        .left-panel h3 {
+            font-size: 14px;
+            margin-top: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .left-panel h3:first-child {
+            margin-top: 0;
+        }
 
         #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; }
         #timeline-header { position: sticky; top: 0; background: #fff; z-index: 10; display:block; }
@@ -46,6 +70,7 @@
             display:flex;
             align-items:center;
             font-weight:600;
+            font-size: 11px; /* Smaller font */
         }
 
         /* Activity group headers sticky when scrolling horizontally */
@@ -57,6 +82,7 @@
             position: sticky; 
             left: 0; 
             z-index: 6;
+            font-size: 12px; /* Smaller font */
         }
         #grid-container { overflow: visible; }
     </style>
