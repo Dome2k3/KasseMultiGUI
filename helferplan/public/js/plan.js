@@ -412,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const team = allTeams.find(t => t.id == helper.team_id);
                             const teamColor = team ? team.color_hex : '#888';
 
-                            slot.innerHTML = helper.name.split(' ')[0];
+                            slot.innerHTML = helper.name.split(' ')[0] || helper.name;
                             slot.classList.add('filled');
                             slot.style.backgroundColor = teamColor;
                             slot.dataset.helperId = helperId;
