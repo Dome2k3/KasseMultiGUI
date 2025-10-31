@@ -107,6 +107,48 @@
             font-size: 16px;
             color: #333;
         }
+        /* Helper card styles */
+        .helper-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            border: 1px solid rgba(0,0,0,0.1);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .helper-card-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+        .helper-card-name {
+            flex: 1;
+        }
+        .helper-icon {
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .helper-card-delete {
+            background: transparent;
+            border: none;
+            color: #b00020;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .helper-card-delete:hover {
+            background: rgba(176, 0, 32, 0.1);
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -158,12 +200,11 @@
                     <option value="">Alle</option>
                 </select>
 
-                <div class="table-wrapper">
-                    <table id="helper-table">
-                        <thead><tr><th>Name</th><th>Team</th><th>Rolle</th><th></th></tr></thead>
-                        <tbody id="helper-list-body"></tbody>
-                    </table>
+                <div id="helper-list-container" style="margin-top: 12px;">
+                    <!-- Helfer werden hier als farbige Cards angezeigt -->
                 </div>
+                <button id="load-more-helpers" style="margin-top: 8px; display: none;">Mehr laden</button>
+                
                 <h4 style="margin-top: 16px; font-size: 14px;">Neuer Helfer</h4>
                 <form id="add-helper-form">
                     <input type="text" id="helper-name-input" placeholder="Name" required>
@@ -306,6 +347,7 @@
 </main>
 <!-- Lade runtime config (muss vor den App-Skripten geladen werden) -->
 <script src="/helferplan/public/config.js"></script>
+<script src="/helferplan/public/js/utils.js"></script>
 <!-- jsPDF library for PDF generation -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="/helferplan/public/js/main.js" defer></script>
