@@ -441,6 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function initialLoad() {
         await fetchAndRenderTeams();
         await fetchAndRenderHelpers();
+        await fetchAndRenderGroups();
         await fetchAndRenderActivities();
         await loadSettings();
         
@@ -482,6 +483,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function exportTournamentPDF(teamFilter, orientation) {
+        // Check if jsPDF is loaded
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
+        }
+        
         // Load tournament shifts
         const shiftsRes = await fetch(`${API_URL}/tournament-shifts`);
         let shifts = await shiftsRes.json();
@@ -585,6 +591,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function exportSetupPDF(teamFilter, orientation) {
+        // Check if jsPDF is loaded
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
+        }
+        
         // Load setup/cleanup shifts
         const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
         let shifts = await shiftsRes.json();
@@ -684,6 +695,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function exportCakesPDF(teamFilter, orientation) {
+        // Check if jsPDF is loaded
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
+        }
+        
         // Load cakes
         const cakesRes = await fetch(`${API_URL}/cakes`);
         let cakes = await cakesRes.json();

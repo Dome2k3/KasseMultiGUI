@@ -155,6 +155,7 @@
 
 <!-- Lade runtime config vor den App-Skripten -->
 <script src="/helferplan/public/config.js"></script>
+<script src="/helferplan/public/js/utils.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
     // API URL setup (same pattern as plan.js)
@@ -217,16 +218,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     function getTeamColor(teamId) {
         const team = teams.find(t => t.id === teamId);
         return team ? team.color_hex : '#999';
-    }
-    
-    function luminanceForHex(hex) {
-        try {
-            const c = hex.replace('#','');
-            const r = parseInt(c.slice(0,2),16);
-            const g = parseInt(c.slice(2,4),16);
-            const b = parseInt(c.slice(4,6),16);
-            return (0.299*r + 0.587*g + 0.114*b);
-        } catch (e) { return 0; }
     }
     
     function renderDays() {
@@ -297,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 helperName.className = 'helper-name';
                 const teamColor = getTeamColor(helper.team_id);
                 helperName.style.backgroundColor = teamColor;
-                helperName.style.color = luminanceForHex(teamColor) > 160 ? '#111' : '#fff';
+                helperName.style.color = getTextColorForBackground(teamColor);
                 helperName.textContent = helper.name;
                 helperName.dataset.helperId = helper.id;
                 helperName.dataset.teamId = helper.team_id;
