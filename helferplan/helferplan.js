@@ -27,6 +27,9 @@ const pool = mysql.createPool({
 // Admin-Passwort (Standard: 1881)
 const ADMIN_PASSWORD = '1881';
 
+// Time constants
+const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
+
 // --- 3b. Sicherstellen, dass Settings-Tabelle existiert ---
 (async function ensureSettingsTable() {
     try {
@@ -403,7 +406,8 @@ app.post('/api/tournament-shifts', async (req, res) => {
         // We need to convert these to actual datetimes based on event_friday setting
         if (allowedTimeBlocks && Array.isArray(allowedTimeBlocks) && allowedTimeBlocks.length > 0) {
             // Get event start date from settings
-            const [settingsRows] = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'event_friday'");
+            const settingsResult = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'event_friday'");
+            const settingsRows = settingsResult[0];
             const eventFriday = settingsRows && settingsRows.length > 0 ? settingsRows[0].setting_value : '2024-07-19';
             
             // Event starts at 12:00 on Friday
@@ -411,7 +415,7 @@ app.post('/api/tournament-shifts', async (req, res) => {
             const shiftStart = new Date(start_time);
             
             // Calculate hour index of the shift start time
-            const hoursDiff = (shiftStart - eventStartDate) / (1000 * 60 * 60);
+            const hoursDiff = (shiftStart - eventStartDate) / MS_PER_HOUR;
             const shiftHourIndex = Math.round(hoursDiff);
             
             // Check if shift hour index is within any allowed block
@@ -420,7 +424,7 @@ app.post('/api/tournament-shifts', async (req, res) => {
             });
             
             if (!isAllowed) {
-                console.log(`Time block validation failed: shiftHourIndex=${shiftHourIndex}, allowedBlocks=`, allowedTimeBlocks);
+                console.warn(`Time block validation failed: shiftHourIndex=${shiftHourIndex}, allowedBlocks=`, allowedTimeBlocks);
                 return res.status(400).json({ error: 'Die ausgewählte Zeit liegt außerhalb der zulässigen Schichtblöcke.' });
             }
         }
