@@ -140,7 +140,36 @@ Die folgenden Tabellen werden beim Server-Start automatisch erstellt, falls nich
 4. Automatische Speicherung nach Änderungen
 5. Optional: Einträge über "Kuchen entfernen" löschen
 
-## 7. Zusammenfassung
+## 7. Bugfix: Zeitblock-Validierung (Dezember 2024)
+
+### Problem
+Nach dem Neuanlegen von Aktivitäten und Schichten sowie der Konfiguration von erlaubten Zeitblöcken über plan-admin.html konnten keine Helfer zugewiesen werden. Der Fehler "Die ausgewählte Zeit liegt außerhalb der zulässigen Schichtblöcke." trat immer auf, auch wenn die Zeitblöcke korrekt konfiguriert waren.
+
+### Ursache
+Die Backend-Validierung in `helferplan.js` (POST /api/tournament-shifts) behandelte Stunden-Indizes fälschlicherweise als Date-Objekte:
+- Die `allowed_time_blocks` werden als Stunden-Indizes gespeichert (z.B., `{start: 2, end: 6}` bedeutet Stunde 2 bis Stunde 6)
+- Der Code versuchte, Date-Objekte direkt aus diesen Zahlen zu erstellen: `new Date(block.start)`
+- Dies führte zu ungültigen Datumsberechnungen und die Validierung schlug immer fehl
+
+### Lösung
+Die Zeitblock-Validierung wurde korrigiert, um Stunden-Indizes korrekt zu verarbeiten:
+1. Event-Startdatum wird aus den Settings abgerufen (event_friday, Standardwert: 2024-07-19)
+2. Event-Start wird als Freitag 12:00 UTC berechnet
+3. Der Stunden-Index der Schicht wird berechnet: `Math.round((shiftStart - eventStart) / (1000 * 60 * 60))`
+4. Dieser Index wird mit den erlaubten Blöcken verglichen: `shiftHourIndex >= block.start && shiftHourIndex < block.end`
+
+### Technische Details
+- **Datei geändert**: `helferplan/helferplan.js` (Zeilen 401-425)
+- **Debug-Logging hinzugefügt**: Bei Validierungsfehlern werden der berechnete Stunden-Index und die erlaubten Blöcke protokolliert
+- **Kompatibilität**: Die Logik stimmt jetzt mit der Frontend-Validierung in `plan.js` überein
+
+### Beispiel
+Für erlaubte Blöcke `[{start: 0, end: 2}, {start: 2, end: 6}]`:
+- Stunde 0-5 (Freitag 12:00-18:00) sind erlaubt
+- Stunde 6+ (Freitag 18:00+) sind gesperrt
+- Eine Schicht um 14:00 (Stunde 2) wird jetzt korrekt als erlaubt erkannt
+
+## 8. Zusammenfassung
 
 Alle Anforderungen wurden vollständig implementiert:
 - ✅ Layout-Verbesserungen (Sticky Headers, optimiertes Panel)
@@ -152,3 +181,4 @@ Alle Anforderungen wurden vollständig implementiert:
 - ✅ Navigation auf allen Seiten
 - ✅ Konsistenter Code-Stil
 - ✅ Gut dokumentiert und annotiert
+- ✅ Zeitblock-Validierung korrigiert (Dezember 2024)
