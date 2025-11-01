@@ -149,6 +149,17 @@
             background: rgba(176, 0, 32, 0.1);
             border-radius: 4px;
         }
+        /* Activity table row styling - add border around each row */
+        #activity-table tbody tr {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #activity-table tbody tr td {
+            border-bottom: none;
+        }
+        #activity-table tbody tr:not(:last-child) {
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 <body>
@@ -200,7 +211,7 @@
                     <option value="">Alle</option>
                 </select>
 
-                <div id="helper-list-container" style="margin-top: 12px;">
+                <div id="helper-list-container" style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px;">
                     <!-- Helfer werden hier als farbige Cards angezeigt -->
                 </div>
                 <button id="load-more-helpers" style="margin-top: 8px; display: none;">Mehr laden</button>

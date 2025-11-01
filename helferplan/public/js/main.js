@@ -641,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const exportTeamFilter = document.getElementById('export-team-filter');
         if (exportTeamFilter) {
             exportTeamFilter.innerHTML = '<option value="">Alle Teams</option>';
-            allTeams.forEach(team => exportTeamFilter.add(new Option(team.name, team.id)));
+            allTeamsData.forEach(team => exportTeamFilter.add(new Option(team.name, team.id)));
         }
     }
 
@@ -687,7 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filter by team if needed
         if (teamFilter) {
             shifts = shifts.filter(shift => {
-                const helper = allHelpers.find(h => h.id == shift.helper_id);
+                const helper = allHelpersData.find(h => h.id == shift.helper_id);
                 return helper && String(helper.team_id) === String(teamFilter);
             });
         }
@@ -713,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.text('Turnier-Planung', pageWidth / 2, 15, { align: 'center' });
         
         if (teamFilter) {
-            const team = allTeams.find(t => t.id == teamFilter);
+            const team = allTeamsData.find(t => t.id == teamFilter);
             doc.setFontSize(12);
             doc.setFont(undefined, 'normal');
             doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
@@ -778,7 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Save PDF
-        const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        const teamName = teamFilter ? allTeamsData.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
         doc.save(`Turnier-Planung-${teamName}.pdf`);
     }
     
@@ -799,7 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filter by team if needed
         if (teamFilter) {
             shifts = shifts.filter(shift => {
-                const helper = allHelpers.find(h => h.id == shift.helper_id);
+                const helper = allHelpersData.find(h => h.id == shift.helper_id);
                 return helper && String(helper.team_id) === String(teamFilter);
             });
         }
@@ -821,7 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.text('Auf- und Abbau Planung', pageWidth / 2, 10, { align: 'center' });
         
         if (teamFilter) {
-            const team = allTeams.find(t => t.id == teamFilter);
+            const team = allTeamsData.find(t => t.id == teamFilter);
             doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
             doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 16, { align: 'center' });
@@ -914,10 +914,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Draw helper boxes (max 20 for PDF space)
                 blockShifts.slice(0, 20).forEach((shift, idx) => {
-                    const helper = allHelpers.find(h => h.id == shift.helper_id);
+                    const helper = allHelpersData.find(h => h.id == shift.helper_id);
                     if (!helper) return;
                     
-                    const team = allTeams.find(t => t.id == helper.team_id);
+                    const team = allTeamsData.find(t => t.id == helper.team_id);
                     const color = team ? hexToRgb(team.color_hex) : { r: 150, g: 150, b: 150 };
                     
                     // Draw colored box
@@ -957,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // Save PDF
-        const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        const teamName = teamFilter ? allTeamsData.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
         doc.save(`Aufbau-Abbau-${teamName}.pdf`);
     }
     
@@ -978,7 +978,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Filter by team if needed
         if (teamFilter) {
             cakes = cakes.filter(cake => {
-                const helper = allHelpers.find(h => h.id == cake.helper_id);
+                const helper = allHelpersData.find(h => h.id == cake.helper_id);
                 return helper && String(helper.team_id) === String(teamFilter);
             });
         }
@@ -1000,7 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.text('Kuchen-Spenden Planung', pageWidth / 2, 12, { align: 'center' });
         
         if (teamFilter) {
-            const team = allTeams.find(t => t.id == teamFilter);
+            const team = allTeamsData.find(t => t.id == teamFilter);
             doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
             doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 18, { align: 'center' });
@@ -1041,10 +1041,10 @@ document.addEventListener('DOMContentLoaded', () => {
             dayCakes.forEach((cake, cakeIdx) => {
                 if (rowY > pageHeight - 10) return; // Page limit
                 
-                const helper = allHelpers.find(h => h.id == cake.helper_id);
+                const helper = allHelpersData.find(h => h.id == cake.helper_id);
                 if (!helper) return;
                 
-                const team = allTeams.find(t => t.id == helper.team_id);
+                const team = allTeamsData.find(t => t.id == helper.team_id);
                 const color = team ? hexToRgb(team.color_hex) : { r: 150, g: 150, b: 150 };
                 
                 // Draw colored box for helper name
@@ -1079,7 +1079,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.text('🥜 = enthält Nüsse', 10, pageHeight - 5);
         
         // Save PDF
-        const teamName = teamFilter ? allTeams.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        const teamName = teamFilter ? allTeamsData.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
         doc.save(`Kuchen-${teamName}.pdf`);
     }
 
