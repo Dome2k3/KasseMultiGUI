@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Pagination state
     let allHelpersData = [];
-    let displayedHelperCount = 10;
+    let displayedHelperCount = 40; // Show 40 helpers (2x20) initially
     let allTeamsData = [];
 
 
@@ -47,6 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const addActivityForm = document.getElementById('add-activity-form');
     const activityGroupSelect = document.getElementById('activity-group-select');
     const groupSortInput = document.getElementById('group-sort-input');
+    
+    // Activity filter elements
+    const activityFilterName = document.getElementById('activity-filter-name');
+    const activityFilterGroup = document.getElementById('activity-filter-group');
+    const activityFilterRole = document.getElementById('activity-filter-role');
+    
+    // Store all activities for filtering
+    let allActivitiesData = [];
 
     // Settings inputs
     const settingFriday = document.getElementById('setting-friday');
@@ -115,9 +123,34 @@ document.addEventListener('DOMContentLoaded', () => {
             helperFilterTeam.innerHTML = '<option value="">Alle</option>';
             allTeamsData.forEach(team => {
                 const li = document.createElement('li');
-                // team-name erhält data-color, damit JS/CSS den Hintergrund setzen kann
-                li.innerHTML = `<div class="color-swatch" style="background-color: ${team.color_hex}; width:14px; height:14px; display:inline-block; margin-right:8px; vertical-align:middle; border-rad[...]
-                                <span class="team-name" data-color="${team.color_hex}">${team.name}</span>`;
+                // Create team display with wider color bar
+                const teamDiv = document.createElement('div');
+                teamDiv.style.marginBottom = '8px';
+                
+                const colorBar = document.createElement('div');
+                colorBar.style.backgroundColor = team.color_hex;
+                colorBar.style.padding = '6px 10px';
+                colorBar.style.borderRadius = '6px';
+                colorBar.style.color = '#fff';
+                colorBar.style.fontWeight = '600';
+                colorBar.style.display = 'inline-block';
+                colorBar.style.minWidth = '120px';
+                colorBar.textContent = team.name;
+                
+                // Check luminance for text color
+                const luminance = (() => {
+                    try {
+                        const c = team.color_hex.replace('#','');
+                        const r = parseInt(c.slice(0,2),16);
+                        const g = parseInt(c.slice(2,4),16);
+                        const b = parseInt(c.slice(4,6),16);
+                        return (0.299*r + 0.587*g + 0.114*b);
+                    } catch (e) { return 0; }
+                })();
+                colorBar.style.color = luminance > 160 ? '#111' : '#fff';
+                
+                teamDiv.appendChild(colorBar);
+                li.appendChild(teamDiv);
                 teamList.appendChild(li);
 
                 const option = document.createElement('option');
@@ -155,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(`${API_URL}/helpers`);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             allHelpersData = await response.json();
-            displayedHelperCount = 10; // Reset to initial count
+            displayedHelperCount = 40; // Reset to initial count (2x20)
             renderHelperCards();
         } catch (error) { console.error('Fehler Helfer:', error); }
     }
@@ -190,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (helper.role === 'Minderjaehrig') {
                 const icon = document.createElement('span');
                 icon.className = 'helper-icon';
-                icon.innerHTML = '👶'; // Youth icon
+                icon.innerHTML = '🧒'; // Youth icon (changed from baby)
                 icon.title = 'Minderjährig';
                 infoDiv.appendChild(icon);
             }
@@ -240,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     helperFilterTeam.addEventListener('change', () => {
-        displayedHelperCount = 10; // Reset count when filtering
+        displayedHelperCount = 40; // Reset count when filtering (2x20)
         renderHelperCards();
     });
     
@@ -248,6 +281,25 @@ document.addEventListener('DOMContentLoaded', () => {
         displayedHelperCount += 20; // Load 20 more at a time
         renderHelperCards();
     });
+    
+    // Activity filter event listeners
+    if (activityFilterName) {
+        activityFilterName.addEventListener('input', () => {
+            renderFilteredActivities();
+        });
+    }
+    
+    if (activityFilterGroup) {
+        activityFilterGroup.addEventListener('change', () => {
+            renderFilteredActivities();
+        });
+    }
+    
+    if (activityFilterRole) {
+        activityFilterRole.addEventListener('change', () => {
+            renderFilteredActivities();
+        });
+    }
 
     async function fetchAndRenderGroups() {
         try {
@@ -256,6 +308,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const groups = await response.json();
             groupList.innerHTML = '';
             activityGroupSelect.innerHTML = '<option value="" disabled selected>Gruppe auswählen</option>';
+            
+            // Also populate the filter dropdown
+            if (activityFilterGroup) {
+                activityFilterGroup.innerHTML = '<option value="">Alle Gruppen</option>';
+            }
+            
             groups.forEach(group => {
                 const li = document.createElement('li');
                 li.style.display = 'flex';
@@ -283,6 +341,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 option.value = group.id;
                 option.textContent = group.name;
                 activityGroupSelect.appendChild(option);
+                
+                // Add to filter dropdown
+                if (activityFilterGroup) {
+                    const filterOption = document.createElement('option');
+                    filterOption.value = group.name;
+                    filterOption.textContent = group.name;
+                    activityFilterGroup.appendChild(filterOption);
+                }
             });
             // For activities list refresh (to show group names)
             await fetchAndRenderActivities();
@@ -293,29 +359,50 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`${API_URL}/activities`);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const activities = await response.json();
-            activityListBody.innerHTML = '';
-            activities.forEach(activity => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${activity.name}</td><td>${activity.group_name || ''}</td><td>${activity.role_requirement}</td>`;
-                const tdDelete = document.createElement('td');
-                const btn = document.createElement('button');
-                btn.className = 'small-delete';
-                btn.textContent = '✖';
-                btn.title = 'Löschen';
-                btn.addEventListener('click', async () => {
-                    if (!confirm('Wirklich löschen?')) return;
-                    try {
-                        const res = await fetch(`${API_URL}/activities/${activity.id}`, { method: 'DELETE' });
-                        if (!res.ok) throw new Error('Löschen fehlgeschlagen');
-                        fetchAndRenderActivities();
-                    } catch (err) { console.error('Fehler beim Löschen Aktivität:', err); alert('Löschen fehlgeschlagen'); }
-                });
-                tdDelete.appendChild(btn);
-                tr.appendChild(tdDelete);
-                activityListBody.appendChild(tr);
-            });
+            allActivitiesData = await response.json();
+            renderFilteredActivities();
         } catch (error) { console.error('Fehler Taetigkeiten:', error); }
+    }
+    
+    function renderFilteredActivities() {
+        const nameFilter = activityFilterName ? activityFilterName.value.toLowerCase() : '';
+        const groupFilter = activityFilterGroup ? activityFilterGroup.value : '';
+        const roleFilter = activityFilterRole ? activityFilterRole.value : '';
+        
+        const filteredActivities = allActivitiesData.filter(activity => {
+            if (nameFilter && !activity.name.toLowerCase().includes(nameFilter)) {
+                return false;
+            }
+            if (groupFilter && activity.group_name !== groupFilter) {
+                return false;
+            }
+            if (roleFilter && activity.role_requirement !== roleFilter) {
+                return false;
+            }
+            return true;
+        });
+        
+        activityListBody.innerHTML = '';
+        filteredActivities.forEach(activity => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${activity.name}</td><td>${activity.group_name || ''}</td><td>${activity.role_requirement}</td>`;
+            const tdDelete = document.createElement('td');
+            const btn = document.createElement('button');
+            btn.className = 'small-delete';
+            btn.textContent = '✖';
+            btn.title = 'Löschen';
+            btn.addEventListener('click', async () => {
+                if (!confirm('Wirklich löschen?')) return;
+                try {
+                    const res = await fetch(`${API_URL}/activities/${activity.id}`, { method: 'DELETE' });
+                    if (!res.ok) throw new Error('Löschen fehlgeschlagen');
+                    await fetchAndRenderActivities();
+                } catch (err) { console.error('Fehler beim Löschen Aktivität:', err); alert('Löschen fehlgeschlagen'); }
+            });
+            tdDelete.appendChild(btn);
+            tr.appendChild(tdDelete);
+            activityListBody.appendChild(tr);
+        });
     }
 
     async function handleFormSubmit(event, url, body, successCallback) {
