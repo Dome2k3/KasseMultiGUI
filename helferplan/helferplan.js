@@ -420,6 +420,7 @@ app.post('/api/tournament-shifts', async (req, res) => {
             });
             
             if (!isAllowed) {
+                console.log(`Time block validation failed: shiftHourIndex=${shiftHourIndex}, allowedBlocks=`, allowedTimeBlocks);
                 return res.status(400).json({ error: 'Die ausgewählte Zeit liegt außerhalb der zulässigen Schichtblöcke.' });
             }
         }
