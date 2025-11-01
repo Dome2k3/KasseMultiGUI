@@ -399,13 +399,26 @@ app.post('/api/tournament-shifts', async (req, res) => {
         }
 
         // 2. Zeitblock validieren
-        if (allowedTimeBlocks) {
-            const start = new Date(start_time);
+        // allowed_time_blocks contain hour indices (e.g., {start: 2, end: 6})
+        // We need to convert these to actual datetimes based on event_friday setting
+        if (allowedTimeBlocks && Array.isArray(allowedTimeBlocks) && allowedTimeBlocks.length > 0) {
+            // Get event start date from settings
+            const [settingsRows] = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'event_friday'");
+            const eventFriday = settingsRows && settingsRows.length > 0 ? settingsRows[0].setting_value : '2024-07-19';
+            
+            // Event starts at 12:00 on Friday
+            const eventStartDate = new Date(`${eventFriday}T12:00:00Z`);
+            const shiftStart = new Date(start_time);
+            
+            // Calculate hour index of the shift start time
+            const hoursDiff = (shiftStart - eventStartDate) / (1000 * 60 * 60);
+            const shiftHourIndex = Math.round(hoursDiff);
+            
+            // Check if shift hour index is within any allowed block
             const isAllowed = allowedTimeBlocks.some(block => {
-                const blockStart = new Date(block.start);
-                const blockEnd = new Date(block.end);
-                return start >= blockStart && start < blockEnd;
+                return shiftHourIndex >= block.start && shiftHourIndex < block.end;
             });
+            
             if (!isAllowed) {
                 return res.status(400).json({ error: 'Die ausgewählte Zeit liegt außerhalb der zulässigen Schichtblöcke.' });
             }
