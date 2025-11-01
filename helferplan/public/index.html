@@ -150,15 +150,20 @@
             border-radius: 4px;
         }
         /* Activity table row styling - add border around each row */
-        #activity-table tbody tr {
-            border: 1px solid #ccc;
-            border-radius: 4px;
+        #activity-table {
+            border-collapse: separate;
+            border-spacing: 0 8px;
         }
         #activity-table tbody tr td {
-            border-bottom: none;
+            border-top: 1px solid #ccc;
+            border-bottom: 1px solid #ccc;
+            background: white;
         }
-        #activity-table tbody tr:not(:last-child) {
-            margin-bottom: 4px;
+        #activity-table tbody tr td:first-child {
+            border-left: 1px solid #ccc;
+        }
+        #activity-table tbody tr td:last-child {
+            border-right: 1px solid #ccc;
         }
     </style>
 </head>
