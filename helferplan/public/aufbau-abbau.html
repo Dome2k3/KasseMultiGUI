@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         filteredHelpers.forEach(h => {
             const option = document.createElement('option');
             option.value = h.id;
-            option.textContent = `${h.name}${h.team_name ? ' - ' + h.team_name : ''}`;
+            option.textContent = h.name; // Only show name, not team
             if (selectedHelperId && h.id == selectedHelperId) {
                 option.selected = true;
             }

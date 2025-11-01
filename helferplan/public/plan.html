@@ -42,6 +42,7 @@
             display: flex; 
             gap: 8px; 
             flex-wrap: wrap;
+            flex-direction: row; /* Make teams horizontal */
         }
         #helper-pool { 
             display: flex; 
@@ -49,6 +50,17 @@
             flex-wrap: wrap; 
             max-height: 200px; 
             overflow-y: auto;
+        }
+        /* Helper item with icons */
+        .helper-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .helper-icon {
+            font-size: 16px;
+            display: inline-flex;
+            align-items: center;
         }
         .plan-layout { display: block; }
 

@@ -194,7 +194,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const team = allTeams.find(t => t.id == h.team_id);
             const color = team ? team.color_hex : '#888';
             div.dataset.teamColor = color;
-            div.innerHTML = `<strong>${h.name}</strong>`;
+            
+            // Build HTML with name and icons
+            let html = `<strong>${h.name}</strong>`;
+            
+            // Add Minderjährig icon (youth icon instead of baby)
+            if (h.role === 'Minderjaehrig') {
+                html += `<span class="helper-icon" title="Minderjährig">🧒</span>`;
+            }
+            
+            // Add ORGA icon
+            if (h.role === 'Orga') {
+                html += `<span class="helper-icon" title="Orga">⭐</span>`;
+            }
+            
+            div.innerHTML = html;
+            
             div.addEventListener('dragstart', (ev) => {
                 const payload = JSON.stringify({ helper_id: h.id, helper_name: h.name, team_color: color, team_id: h.team_id });
                 ev.dataTransfer.setData('application/json', payload);
@@ -428,15 +443,48 @@ document.addEventListener('DOMContentLoaded', () => {
                             const team = allTeams.find(t => t.id == helper.team_id);
                             const teamColor = team ? team.color_hex : '#888';
 
-                            slot.innerHTML = helper.name.split(' ')[0] || helper.name;
-                            slot.classList.add('filled');
-                            slot.style.backgroundColor = teamColor;
-                            slot.dataset.helperId = helperId;
-                            slot.dataset.startTime = startTime.toISOString();
+                            // Find the start slot (walk left if we dropped on a hidden slot)
+                            let displaySlot = slot;
+                            const row = slot.parentElement;
+                            const startIdx = parseInt(slot.dataset.hourIndex);
+                            
+                            if (slot.classList.contains('slot-hidden')) {
+                                // Walk left to find visible slot
+                                let back = startIdx - 1;
+                                while (back >= 0) {
+                                    const cand = row.querySelector(`.shift-slot[data-hour-index='${back}']`);
+                                    if (cand && !cand.classList.contains('slot-hidden')) {
+                                        displaySlot = cand;
+                                        break;
+                                    }
+                                    back--;
+                                }
+                            }
+                            
+                            displaySlot.innerHTML = helper.name.split(' ')[0] || helper.name;
+                            displaySlot.classList.add('filled');
+                            displaySlot.style.backgroundColor = teamColor;
+                            displaySlot.style.opacity = '1';
+                            displaySlot.dataset.helperId = helperId;
+                            displaySlot.dataset.startTime = startTime.toISOString();
                             
                             const responseData = await resp.json();
                             if (responseData.id) {
-                                slot.dataset.shiftId = responseData.id;
+                                displaySlot.dataset.shiftId = responseData.id;
+                            }
+
+                            // Apply 2-hour span (same logic as in fetchAndRenderAllShifts)
+                            const duration = 2; // 2 hours
+                            const displayStartIdx = parseInt(displaySlot.dataset.hourIndex);
+                            displaySlot.style.gridColumn = `span ${duration}`;
+                            
+                            // Hide the follow slot
+                            for (let k = 1; k < duration; k++) {
+                                const follow = row.querySelector(`.shift-slot[data-activity-id='${activityId}'][data-hour-index='${displayStartIdx + k}']`);
+                                if (follow) {
+                                    follow.classList.add('slot-hidden');
+                                    follow.dataset.hiddenForSpan = 'true';
+                                }
                             }
 
                             // Anwenden des View-Filters auf den neu hinzugefügten Slot
