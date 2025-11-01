@@ -107,6 +107,41 @@
             font-size: 16px;
             color: #333;
         }
+        /* Collapsible section styles */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+        }
+        .section-header:focus {
+            outline: 2px solid #005A9F;
+            outline-offset: 2px;
+        }
+        .section-header h2 {
+            margin: 0;
+            flex: 1;
+        }
+        .toggle-icon {
+            font-size: 20px;
+            transition: transform 0.3s ease;
+            color: #005A9F;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .toggle-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+        .section-content {
+            max-height: 5000px;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .section-content.collapsed {
+            max-height: 0;
+            transition: max-height 0.3s ease-in;
+        }
         /* Helper card styles */
         .helper-card {
             display: flex;
@@ -183,8 +218,12 @@
 
     <!-- Stammdaten Section - Teams & Helfer -->
     <div class="section-group">
-        <h2>Teams & Helfer</h2>
+        <div class="section-header" onclick="toggleSection('teams-helfer')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSection('teams-helfer');}" role="button" tabindex="0" aria-expanded="true" aria-controls="content-teams-helfer">
+            <h2>Teams & Helfer</h2>
+            <span class="toggle-icon" id="toggle-teams-helfer" aria-hidden="true">▼</span>
+        </div>
         
+        <div class="section-content" id="content-teams-helfer">
         <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
             <!-- Teams -->
             <div class="subsection">
@@ -235,12 +274,17 @@
                 </form>
             </div>
         </div>
+        </div>
     </div>
 
     <!-- Tätigkeiten Section -->
     <div class="section-group">
-        <h2>Tätigkeiten & Gruppen</h2>
+        <div class="section-header" onclick="toggleSection('taetigkeiten')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSection('taetigkeiten');}" role="button" tabindex="0" aria-expanded="true" aria-controls="content-taetigkeiten">
+            <h2>Tätigkeiten & Gruppen</h2>
+            <span class="toggle-icon" id="toggle-taetigkeiten" aria-hidden="true">▼</span>
+        </div>
         
+        <div class="section-content" id="content-taetigkeiten">
         <div class="subsection">
             <h3>Gruppen</h3>
             <ul id="group-list"></ul>
@@ -296,12 +340,17 @@
                 <button type="submit">Anlegen</button>
             </form>
         </div>
+        </div>
     </div>
 
     <!-- Event-Daten & Einstellungen Section -->
     <div class="section-group">
-        <h2>Event-Daten & Einstellungen</h2>
+        <div class="section-header" onclick="toggleSection('event-einstellungen')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSection('event-einstellungen');}" role="button" tabindex="0" aria-expanded="true" aria-controls="content-event-einstellungen">
+            <h2>Event-Daten & Einstellungen</h2>
+            <span class="toggle-icon" id="toggle-event-einstellungen" aria-hidden="true">▼</span>
+        </div>
         
+        <div class="section-content" id="content-event-einstellungen">
         <!-- Turniertage -->
         <div class="subsection">
             <h3>Turniertage (Fr - So)</h3>
@@ -353,6 +402,7 @@
             </div>
             <button id="save-cakes-settings-button">Kuchen-Anzahl speichern</button>
         </div>
+        </div>
     </div>
 
     <!-- PDF Export Section -->
@@ -385,6 +435,32 @@
     </div>
 
 </main>
+<script>
+// Toggle section function for collapsible sections
+function toggleSection(sectionId) {
+    const content = document.getElementById('content-' + sectionId);
+    const icon = document.getElementById('toggle-' + sectionId);
+    const header = document.querySelector(`[onclick*="${sectionId}"]`);
+    
+    // Validate that elements exist
+    if (!content || !icon) {
+        console.error('Toggle section elements not found for:', sectionId);
+        return;
+    }
+    
+    const isCollapsed = content.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        content.classList.remove('collapsed');
+        icon.classList.remove('collapsed');
+        if (header) header.setAttribute('aria-expanded', 'true');
+    } else {
+        content.classList.add('collapsed');
+        icon.classList.add('collapsed');
+        if (header) header.setAttribute('aria-expanded', 'false');
+    }
+}
+</script>
 <!-- Lade runtime config (muss vor den App-Skripten geladen werden) -->
 <script src="/helferplan/public/config.js"></script>
 <script src="/helferplan/public/js/utils.js"></script>
