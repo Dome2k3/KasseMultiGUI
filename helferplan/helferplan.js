@@ -182,7 +182,12 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
     : ['http://localhost:3003', 'http://localhost:8080', 'http://127.0.0.1:3003', 'http://127.0.0.1:8080'];
 
-console.log('CORS: Allowed origins:', allowedOrigins);
+// Log allowed origins count for verification, but not the full list in production
+if (process.env.NODE_ENV === 'production') {
+    console.log('CORS: Configured with', allowedOrigins.length, 'allowed origin(s)');
+} else {
+    console.log('CORS: Allowed origins:', allowedOrigins);
+}
 
 app.use(cors({
     origin: function(origin, callback) {
@@ -195,7 +200,7 @@ app.use(cors({
             console.log('CORS: Allowing origin in non-production mode:', origin);
             callback(null, true);
         } else {
-            console.warn('CORS: Blocking origin:', origin, 'Allowed origins:', allowedOrigins);
+            console.warn('CORS: Blocked request from origin:', origin);
             callback(new Error('Not allowed by CORS'));
         }
     },
