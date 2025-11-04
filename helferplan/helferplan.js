@@ -8,6 +8,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 
 
 // --- 2. Express-App initialisieren ---
@@ -176,10 +177,34 @@ const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
 })();
 
 // --- 4. Middleware einrichten ---
+// Configure CORS with specific origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:3003', 'http://localhost:8080', 'http://127.0.0.1:3003', 'http://127.0.0.1:8080'];
+
 app.use(cors({
-    origin: true,
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
+
+// Rate limiting for authentication endpoint
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // limit each IP to 10 requests per windowMs
+    message: 'Zu viele Anmeldeversuche. Bitte versuchen Sie es später erneut.',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 app.use(express.json());
 app.use(cookieParser());
 app.use((req, res, next) => {
@@ -329,7 +354,7 @@ async function logAudit({ userId, actorName, action, tableName, rowId, before, a
 // --- Authentication Endpoints ---
 
 // POST /api/auth/identify - Create or update user and return session token
-app.post('/api/auth/identify', async (req, res) => {
+app.post('/api/auth/identify', authLimiter, async (req, res) => {
     try {
         const { name, email } = req.body;
         
@@ -337,9 +362,15 @@ app.post('/api/auth/identify', async (req, res) => {
             return res.status(400).json({ error: 'Name und E-Mail sind erforderlich.' });
         }
         
-        // Validate email format
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
+        // Validate email format with a simple, non-vulnerable regex
+        // This regex is simple and not susceptible to ReDoS
+        if (!email.includes('@') || email.length > 255 || email.length < 3) {
+            return res.status(400).json({ error: 'Ungültige E-Mail-Adresse.' });
+        }
+        
+        // Additional validation: basic email structure
+        const emailParts = email.split('@');
+        if (emailParts.length !== 2 || !emailParts[0] || !emailParts[1] || !emailParts[1].includes('.')) {
             return res.status(400).json({ error: 'Ungültige E-Mail-Adresse.' });
         }
         
