@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         allowedTimeBlocks = {};
         const promises = activities.map(async (activity) => {
             try {
-                const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+                const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, { credentials: 'include' });
                 if (res.ok) {
                     const blocks = await res.json();
                     allowedTimeBlocks[activity.id] = blocks;
@@ -402,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function generateGrid(timelineConfig) {
-        const resp = await fetch(`${API_URL_HELFERPLAN}/activities`);
+        const resp = await fetch(`${API_URL_HELFERPLAN}/activities`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Fehler beim Laden der Taetigkeiten');
         const activities = await resp.json();
 

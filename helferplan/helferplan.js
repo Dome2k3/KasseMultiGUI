@@ -429,10 +429,15 @@ app.post('/api/auth/identify', authLimiter, async (req, res) => {
         );
         
         // Set HTTP-only secure cookie
+        // sameSite can be 'lax' (default, works for same-site and top-level navigation)
+        // or 'none' (for cross-site requests, requires secure=true)
+        const sameSiteMode = process.env.COOKIE_SAMESITE || 'lax';
+        const cookieSecure = process.env.NODE_ENV === 'production' || sameSiteMode === 'none';
+        
         res.cookie('hp_session', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
+            secure: cookieSecure,
+            sameSite: sameSiteMode,
             maxAge: 24 * 60 * 60 * 1000 // 24 hours
         });
         

@@ -251,7 +251,7 @@
     let dragMode = null; // 'lock' or 'unlock'
 
     async function fetchActivities() {
-      const res = await fetch(`${API_URL_HELFERPLAN}/activities`);
+      const res = await fetch(`${API_URL_HELFERPLAN}/activities`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der Aktivitäten');
       activities = await res.json();
       
@@ -283,7 +283,7 @@
 
     async function fetchAllowedBlocks() {
       for (const activity of activities) {
-        const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`);
+        const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, { credentials: 'include' });
         allowedBlocks[activity.id] = await res.json();
       }
     }

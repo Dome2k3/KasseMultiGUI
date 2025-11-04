@@ -205,10 +205,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function loadData() {
         try {
             const [helpersRes, teamsRes, settingsRes, shiftsRes] = await Promise.all([
-                fetch(`${API_URL}/helpers`),
-                fetch(`${API_URL}/teams`),
-                fetch(`${API_URL}/settings`),
-                fetch(`${API_URL}/setup-cleanup-shifts`)
+                fetch(`${API_URL}/helpers`, { credentials: 'include' }),
+                fetch(`${API_URL}/teams`, { credentials: 'include' }),
+                fetch(`${API_URL}/settings`, { credentials: 'include' }),
+                fetch(`${API_URL}/setup-cleanup-shifts`, { credentials: 'include' })
             ]);
             
             helpers = await helpersRes.json();
@@ -534,13 +534,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const response = await fetch(`${API_URL}/setup-cleanup-shifts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                credentials: 'include'
             });
             
             if (!response.ok) throw new Error('Speichern fehlgeschlagen');
             
             // Reload shifts and re-render
-            const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`);
+            const shiftsRes = await fetch(`${API_URL}/setup-cleanup-shifts`, { credentials: 'include' });
             shifts = await shiftsRes.json();
             renderDays();
         } catch (err) {

@@ -191,10 +191,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function loadData() {
         try {
             const [helpersRes, teamsRes, settingsRes, cakesRes] = await Promise.all([
-                fetch(`${API_URL}/helpers`),
-                fetch(`${API_URL}/teams`),
-                fetch(`${API_URL}/settings`),
-                fetch(`${API_URL}/cakes`)
+                fetch(`${API_URL}/helpers`, { credentials: 'include' }),
+                fetch(`${API_URL}/teams`, { credentials: 'include' }),
+                fetch(`${API_URL}/settings`, { credentials: 'include' }),
+                fetch(`${API_URL}/cakes`, { credentials: 'include' })
             ]);
             
             helpers = await helpersRes.json();
@@ -404,13 +404,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const response = await fetch(`${API_URL}/cakes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                credentials: 'include'
             });
             
             if (!response.ok) throw new Error('Speichern fehlgeschlagen');
             
             // Reload data and re-render
-            const cakesRes = await fetch(`${API_URL}/cakes`);
+            const cakesRes = await fetch(`${API_URL}/cakes`, { credentials: 'include' });
             cakes = await cakesRes.json();
             renderDays();
         } catch (err) {
