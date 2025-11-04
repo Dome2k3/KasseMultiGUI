@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('auth-email').value = currentUser ? currentUser.email : '';
         document.getElementById('auth-error').textContent = '';
         
-        authModal.style.display = 'block';
+        authModal.style.display = 'flex';
     }
 
     async function handleAuthSubmit() {

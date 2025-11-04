@@ -165,7 +165,8 @@ const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
                 INDEX idx_timestamp (timestamp),
                 INDEX idx_user_id (user_id),
                 INDEX idx_table_name (table_name),
-                INDEX idx_action (action)
+                INDEX idx_action (action),
+                FOREIGN KEY (user_id) REFERENCES helferplan_users(id) ON DELETE SET NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
         console.log('helferplan_audit table OK');
@@ -892,12 +893,39 @@ app.delete('/api/tournament-shifts', attachUser, requireEditor, async (req, res)
     const attempts = [];
 
     try {
+        // Helper to get shift data before deletion for audit log
+        async function getShiftForAudit(sql, params) {
+            const selectSql = sql.replace('DELETE FROM', 'SELECT * FROM').replace('DELETE ts FROM', 'SELECT ts.* FROM');
+            try {
+                const [rows] = await pool.query(selectSql, params);
+                return rows.length > 0 ? rows[0] : null;
+            } catch (e) {
+                return null;
+            }
+        }
+        
         if (helper_id) {
             for (const st of variants) {
                 const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ? AND helper_id = ?';
-                attempts.push({ sql, params: [activity_id, st, helper_id] });
-                const affected = await runDelete(sql, [activity_id, st, helper_id]);
+                const params = [activity_id, st, helper_id];
+                attempts.push({ sql, params });
+                
+                const shiftData = await getShiftForAudit(sql, params);
+                const affected = await runDelete(sql, params);
+                
                 if (affected > 0) {
+                    // Audit log
+                    if (shiftData) {
+                        await logAudit({
+                            userId: req.currentUser.id,
+                            actorName: req.currentUser.display_name,
+                            action: 'DELETE',
+                            tableName: 'helferplan_tournament_shifts',
+                            rowId: shiftData.id,
+                            before: shiftData,
+                            req
+                        });
+                    }
                     return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
                 }
             }
@@ -906,18 +934,50 @@ app.delete('/api/tournament-shifts', attachUser, requireEditor, async (req, res)
                    WHERE ts.activity_id = ?
                      AND ts.helper_id = ?
                      AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
-            attempts.push({ sql, params: [activity_id, helper_id, start_time] });
-            const affected2 = await runDelete(sql, [activity_id, helper_id, start_time]);
+            const params = [activity_id, helper_id, start_time];
+            attempts.push({ sql, params });
+            
+            const shiftData = await getShiftForAudit(sql, params);
+            const affected2 = await runDelete(sql, params);
+            
             if (affected2 > 0) {
+                // Audit log
+                if (shiftData) {
+                    await logAudit({
+                        userId: req.currentUser.id,
+                        actorName: req.currentUser.display_name,
+                        action: 'DELETE',
+                        tableName: 'helferplan_tournament_shifts',
+                        rowId: shiftData.id,
+                        before: shiftData,
+                        req
+                    });
+                }
                 return res.json({ message: 'Schicht geloescht (fuzzy match helper)', deletedCount: affected2, attempts });
             }
         }
 
         for (const st of variants) {
             const sql = 'DELETE FROM helferplan_tournament_shifts WHERE activity_id = ? AND start_time = ?';
-            attempts.push({ sql, params: [activity_id, st] });
-            const affected = await runDelete(sql, [activity_id, st]);
+            const params = [activity_id, st];
+            attempts.push({ sql, params });
+            
+            const shiftData = await getShiftForAudit(sql, params);
+            const affected = await runDelete(sql, params);
+            
             if (affected > 0) {
+                // Audit log
+                if (shiftData) {
+                    await logAudit({
+                        userId: req.currentUser.id,
+                        actorName: req.currentUser.display_name,
+                        action: 'DELETE',
+                        tableName: 'helferplan_tournament_shifts',
+                        rowId: shiftData.id,
+                        before: shiftData,
+                        req
+                    });
+                }
                 return res.json({ message: 'Schicht geloescht', deletedCount: affected, attempts });
             }
         }
@@ -926,9 +986,25 @@ app.delete('/api/tournament-shifts', attachUser, requireEditor, async (req, res)
             const sql = `DELETE ts FROM helferplan_tournament_shifts ts
                    WHERE ts.activity_id = ?
                      AND ABS(TIMESTAMPDIFF(SECOND, ts.start_time, ?)) <= 3600`;
-            attempts.push({ sql, params: [activity_id, start_time] });
-            const affected = await runDelete(sql, [activity_id, start_time]);
+            const params = [activity_id, start_time];
+            attempts.push({ sql, params });
+            
+            const shiftData = await getShiftForAudit(sql, params);
+            const affected = await runDelete(sql, params);
+            
             if (affected > 0) {
+                // Audit log
+                if (shiftData) {
+                    await logAudit({
+                        userId: req.currentUser.id,
+                        actorName: req.currentUser.display_name,
+                        action: 'DELETE',
+                        tableName: 'helferplan_tournament_shifts',
+                        rowId: shiftData.id,
+                        before: shiftData,
+                        req
+                    });
+                }
                 return res.json({ message: 'Schicht geloescht (fuzzy match)', deletedCount: affected, attempts });
             }
         }
