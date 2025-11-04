@@ -179,7 +179,7 @@ const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
 // --- 4. Middleware einrichten ---
 // Configure CORS with specific origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(origin => origin.length > 0)
     : ['http://localhost:3003', 'http://localhost:8080', 'http://127.0.0.1:3003', 'http://127.0.0.1:8080'];
 
 // Log allowed origins count for verification, but not the full list in production
@@ -194,7 +194,7 @@ app.use(cors({
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
         
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else if (process.env.NODE_ENV !== 'production') {
             console.log('CORS: Allowing origin in non-production mode:', origin);
