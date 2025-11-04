@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchAndRenderTeams() {
         try {
-            const response = await fetch(`${API_URL}/teams`);
+            const response = await fetch(`${API_URL}/teams`, { credentials: 'include' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             allTeamsData = await response.json();
             teamList.innerHTML = '';
@@ -174,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!id) return alert('Kein Team ausgewählt.');
         if (!confirm('Soll das Team wirklich gelöscht werden?')) return;
         try {
-            const res = await fetch(`${API_URL}/teams/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API_URL}/teams/${id}`, { method: 'DELETE', credentials: 'include' });
             if (!res.ok) throw new Error('Löschen fehlgeschlagen');
             await fetchAndRenderTeams();
             await fetchAndRenderHelpers(); // team changes can affect helper list
@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchAndRenderHelpers() {
         try {
-            const response = await fetch(`${API_URL}/helpers`);
+            const response = await fetch(`${API_URL}/helpers`, { credentials: 'include' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             allHelpersData = await response.json();
             displayedHelperCount = 40; // Reset to initial count (2x20)
@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteBtn.addEventListener('click', async () => {
                 if (!confirm(`${helper.name} wirklich löschen?`)) return;
                 try {
-                    const res = await fetch(`${API_URL}/helpers/${helper.id}`, { method: 'DELETE' });
+                    const res = await fetch(`${API_URL}/helpers/${helper.id}`, { method: 'DELETE', credentials: 'include' });
                     if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                     fetchAndRenderHelpers();
                 } catch (err) { 
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchAndRenderGroups() {
         try {
-            const response = await fetch(`${API_URL}/activity-groups`);
+            const response = await fetch(`${API_URL}/activity-groups`, { credentials: 'include' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const groups = await response.json();
             groupList.innerHTML = '';
@@ -328,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delBtn.addEventListener('click', async () => {
                     if (!confirm('Wirklich löschen?')) return;
                     try {
-                        const res = await fetch(`${API_URL}/activity-groups/${group.id}`, { method: 'DELETE' });
+                        const res = await fetch(`${API_URL}/activity-groups/${group.id}`, { method: 'DELETE', credentials: 'include' });
                         if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                         fetchAndRenderGroups();
                     } catch (err) { console.error('Fehler beim Löschen Gruppe:', err); alert('Löschen fehlgeschlagen'); }
@@ -357,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchAndRenderActivities() {
         try {
-            const response = await fetch(`${API_URL}/activities`);
+            const response = await fetch(`${API_URL}/activities`, { credentials: 'include' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             allActivitiesData = await response.json();
             renderFilteredActivities();
@@ -394,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', async () => {
                 if (!confirm('Wirklich löschen?')) return;
                 try {
-                    const res = await fetch(`${API_URL}/activities/${activity.id}`, { method: 'DELETE' });
+                    const res = await fetch(`${API_URL}/activities/${activity.id}`, { method: 'DELETE', credentials: 'include' });
                     if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                     await fetchAndRenderActivities();
                 } catch (err) { console.error('Fehler beim Löschen Aktivität:', err); alert('Löschen fehlgeschlagen'); }
@@ -411,7 +411,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify(body),
+                credentials: 'include'
             });
             if (!response.ok) {
                 const text = await response.text();
@@ -442,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // Hole alle Helfer und prüfe auf Doppelten Namen (case-insensitive)
-            const res = await fetch(`${API_URL}/helpers`);
+            const res = await fetch(`${API_URL}/helpers`, { credentials: 'include' });
             if (!res.ok) throw new Error('Fehler beim Prüfen vorhandener Helfer');
             const helpers = await res.json();
             const exists = helpers.some(h => (h.name || '').trim().toLowerCase() === name.toLowerCase());
@@ -461,7 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const postRes = await fetch(`${API_URL}/helpers`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, team_id, role })
+                body: JSON.stringify({ name, team_id, role }),
+                credentials: 'include'
             });
             if (!postRes.ok) {
                 const text = await postRes.text();
@@ -491,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings: load and save (inkl. Aufbau/Abbau Tage)
     async function loadSettings() {
         try {
-            const res = await fetch(`${API_URL}/settings`);
+            const res = await fetch(`${API_URL}/settings`, { credentials: 'include' });
             if (!res.ok) throw new Error('Settings load failed');
             const settings = await res.json();
             
@@ -545,7 +547,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: payload })
+                body: JSON.stringify({ settings: payload }),
+                credentials: 'include'
             });
             if (!res.ok) throw new Error('Speichern fehlgeschlagen');
             alert('Einstellungen gespeichert');
@@ -583,7 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: payload })
+                body: JSON.stringify({ settings: payload }),
+                credentials: 'include'
             });
             if (!res.ok) throw new Error('Speichern fehlgeschlagen');
             alert('Auf-/Abbau Einstellungen gespeichert');
@@ -601,7 +605,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: payload })
+                body: JSON.stringify({ settings: payload }),
+                credentials: 'include'
             });
             if (!res.ok) throw new Error('Speichern fehlgeschlagen');
             alert('Kuchen-Anzahl gespeichert');
@@ -681,7 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Load tournament shifts
-        const shiftsRes = await fetch(`${API_URL}/tournament-shifts`);
+        const shiftsRes = await fetch(`${API_URL}/tournament-shifts`, { credentials: 'include' });
         let shifts = await shiftsRes.json();
         
         // Filter by team if needed
@@ -693,7 +698,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Load activities
-        const activitiesRes = await fetch(`${API_URL}/activities`);
+        const activitiesRes = await fetch(`${API_URL}/activities`, { credentials: 'include' });
         const activities = await activitiesRes.json();
         
         // Initialize jsPDF
@@ -790,8 +795,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Load all required data
         const [shiftsRes, settingsRes] = await Promise.all([
-            fetch(`${API_URL}/setup-cleanup-shifts`),
-            fetch(`${API_URL}/settings`)
+            fetch(`${API_URL}/setup-cleanup-shifts`, { credentials: 'include' }),
+            fetch(`${API_URL}/settings`, { credentials: 'include' })
         ]);
         let shifts = await shiftsRes.json();
         const settings = await settingsRes.json();
@@ -969,8 +974,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Load all required data
         const [cakesRes, settingsRes] = await Promise.all([
-            fetch(`${API_URL}/cakes`),
-            fetch(`${API_URL}/settings`)
+            fetch(`${API_URL}/cakes`, { credentials: 'include' }),
+            fetch(`${API_URL}/settings`, { credentials: 'include' })
         ]);
         let cakes = await cakesRes.json();
         const settings = await settingsRes.json();
