@@ -125,7 +125,14 @@
 </nav>
 
 <main class="plan-main">
-    <h1>Turnier-Planung (Fr 12:00 - So 17:00)</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h1 style="margin: 0;">Turnier-Planung (Fr 12:00 - So 17:00)</h1>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="auth-status" style="display: none;"></span>
+            <button id="write-mode-btn" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Bearbeitungsmodus</button>
+            <button id="logout-btn" style="display: none; padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Abmelden</button>
+        </div>
+    </div>
     
     <div class="top-controls">
         <div class="control-group">
@@ -174,6 +181,29 @@
         </form>
     </div>
 </div>
+
+<!-- Authentication Modal -->
+<div id="auth-modal" style="display:none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 8px; max-width: 500px; width: 90%;">
+        <h2>Anmeldung für Bearbeitungsmodus</h2>
+        <p>Bitte geben Sie Ihren Namen und Ihre E-Mail-Adresse ein, um sich zu identifizieren.</p>
+        <form id="auth-form" onsubmit="return false;">
+            <label for="auth-name">Name:</label>
+            <input type="text" id="auth-name" required style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;">
+            
+            <label for="auth-email">E-Mail:</label>
+            <input type="email" id="auth-email" required style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;">
+            
+            <div id="auth-error" style="color: red; margin-bottom: 10px; min-height: 20px;"></div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" id="auth-submit" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Anmelden</button>
+                <button type="button" id="auth-cancel" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Lade runtime config vor den App-Skripten -->
 <script src="/helferplan/public/config.js"></script>
 <script src="/helferplan/public/js/plan.js"></script>
