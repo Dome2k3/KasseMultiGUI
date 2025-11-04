@@ -548,6 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
                                 body: JSON.stringify({
                                     activity_id: activityId,
                                     start_time: startTime.toISOString(),
@@ -842,6 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
             });
 
@@ -855,13 +857,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (confirm(`Konflikt: Es existiert bereits eine Schicht (${who}). Überschreiben?`)) {
                         // attempt delete by id if server provided it
                         if (existing.id) {
-                            const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE' });
+                            const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE', credentials: 'include' });
                             if (!del.ok) alert('Löschen der bestehenden Schicht fehlgeschlagen; siehe Konsole.');
                             else {
                                 // retry create
                                 const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
                                     body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
                                 });
                                 if (!retry.ok) alert('Erneutes Anlegen nach Löschung fehlgeschlagen.');
@@ -896,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const shiftId = currentSlot.dataset.shiftId;
             if (shiftId) {
                 try {
-                    const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${shiftId}`, { method: 'DELETE' });
+                    const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${shiftId}`, { method: 'DELETE', credentials: 'include' });
                     const text = await del.text().catch(()=>null);
                     console.log('DELETE by id response', del.status, text);
                     if (!del.ok) {
@@ -922,6 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ activity_id: activityId, start_time: startTimeIso, helper_id: helperId })
                 });
                 const text = await resp.text().catch(()=>null);
