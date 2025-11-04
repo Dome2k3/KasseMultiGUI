@@ -6,6 +6,8 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 
 // --- 2. Express-App initialisieren ---
@@ -26,6 +28,10 @@ const pool = mysql.createPool({
 
 // Admin-Passwort (Standard: 1881)
 const ADMIN_PASSWORD = '1881';
+
+// Session secret for JWT
+const SESSION_SECRET = process.env.HELFERPLAN_SESSION_SECRET || 'change-this-secret-in-production';
+const SESSION_EXPIRY = '24h'; // JWT token validity
 
 // Time constants
 const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
@@ -116,9 +122,65 @@ const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
     }
 })();
 
+// Ensure helferplan_users table exists
+(async function ensureUsersTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                display_name VARCHAR(255) NOT NULL,
+                is_editor TINYINT(1) NOT NULL DEFAULT 0,
+                is_admin TINYINT(1) NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                extra JSON DEFAULT NULL,
+                INDEX idx_email (email),
+                INDEX idx_last_seen (last_seen)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+        console.log('helferplan_users table OK');
+    } catch (err) {
+        console.error('Could not create helferplan_users table:', err && err.message ? err.message : err);
+    }
+})();
+
+// Ensure helferplan_audit table exists
+(async function ensureAuditTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS volleyball_turnier.helferplan_audit (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT DEFAULT NULL,
+                actor_name VARCHAR(255) NOT NULL,
+                action ENUM('CREATE', 'UPDATE', 'DELETE') NOT NULL,
+                table_name VARCHAR(100) NOT NULL,
+                row_id INT DEFAULT NULL,
+                timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ip_addr VARCHAR(45) DEFAULT NULL,
+                user_agent TEXT DEFAULT NULL,
+                before_data JSON DEFAULT NULL,
+                after_data JSON DEFAULT NULL,
+                note TEXT DEFAULT NULL,
+                INDEX idx_timestamp (timestamp),
+                INDEX idx_user_id (user_id),
+                INDEX idx_table_name (table_name),
+                INDEX idx_action (action)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+        console.log('helferplan_audit table OK');
+    } catch (err) {
+        console.error('Could not create helferplan_audit table:', err && err.message ? err.message : err);
+    }
+})();
+
 // --- 4. Middleware einrichten ---
-app.use(cors());
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 app.use((req, res, next) => {
     const csp = "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline';";
     res.setHeader('Content-Security-Policy', csp);
@@ -180,7 +242,199 @@ function mapShiftRow(row) {
     };
 }
 
+// --- Authentication Middleware ---
+// Extract user from JWT token (cookie or Authorization header)
+function extractUser(req) {
+    let token = null;
+    
+    // Try cookie first
+    if (req.cookies && req.cookies.hp_session) {
+        token = req.cookies.hp_session;
+    }
+    // Try Authorization header as fallback
+    else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        token = req.headers.authorization.substring(7);
+    }
+    
+    if (!token) return null;
+    
+    try {
+        const decoded = jwt.verify(token, SESSION_SECRET);
+        return decoded;
+    } catch (err) {
+        console.warn('Invalid token:', err.message);
+        return null;
+    }
+}
+
+// Middleware to attach currentUser to request
+function attachUser(req, res, next) {
+    req.currentUser = extractUser(req);
+    next();
+}
+
+// Middleware to require authenticated user with editor role
+function requireEditor(req, res, next) {
+    if (!req.currentUser) {
+        return res.status(403).json({ error: 'Authentifizierung erforderlich. Bitte über "Bearbeitungsmodus" anmelden.' });
+    }
+    if (!req.currentUser.is_editor) {
+        return res.status(403).json({ error: 'Bearbeitungsrechte erforderlich.' });
+    }
+    next();
+}
+
+// Middleware to require authenticated user with admin role
+function requireAdmin(req, res, next) {
+    if (!req.currentUser) {
+        return res.status(403).json({ error: 'Authentifizierung erforderlich. Bitte über "Bearbeitungsmodus" anmelden.' });
+    }
+    if (!req.currentUser.is_admin) {
+        return res.status(403).json({ error: 'Admin-Rechte erforderlich.' });
+    }
+    next();
+}
+
+// --- Audit Logging ---
+async function logAudit({ userId, actorName, action, tableName, rowId, before, after, req, note }) {
+    try {
+        const ipAddr = req ? (req.ip || req.connection?.remoteAddress || null) : null;
+        const userAgent = req ? (req.get('user-agent') || null) : null;
+        
+        await pool.query(`
+            INSERT INTO helferplan_audit 
+            (user_id, actor_name, action, table_name, row_id, ip_addr, user_agent, before_data, after_data, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            userId || null,
+            actorName,
+            action,
+            tableName,
+            rowId || null,
+            ipAddr,
+            userAgent,
+            before ? JSON.stringify(before) : null,
+            after ? JSON.stringify(after) : null,
+            note || null
+        ]);
+    } catch (err) {
+        console.error('Audit logging failed:', err);
+        // Don't throw - audit failure shouldn't break the request
+    }
+}
+
 // --- 5. API-Endpunkte ---
+
+// --- Authentication Endpoints ---
+
+// POST /api/auth/identify - Create or update user and return session token
+app.post('/api/auth/identify', async (req, res) => {
+    try {
+        const { name, email } = req.body;
+        
+        if (!name || !email) {
+            return res.status(400).json({ error: 'Name und E-Mail sind erforderlich.' });
+        }
+        
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Ungültige E-Mail-Adresse.' });
+        }
+        
+        // Check if user exists
+        const [existingUsers] = await pool.query(
+            'SELECT id, email, display_name, is_editor, is_admin FROM helferplan_users WHERE email = ?',
+            [email]
+        );
+        
+        let userId, isEditor, isAdmin;
+        
+        if (existingUsers.length > 0) {
+            // Update existing user
+            const user = existingUsers[0];
+            userId = user.id;
+            isEditor = user.is_editor;
+            isAdmin = user.is_admin;
+            
+            await pool.query(
+                'UPDATE helferplan_users SET display_name = ?, last_seen = NOW() WHERE id = ?',
+                [name, userId]
+            );
+        } else {
+            // Create new user with default permissions
+            const [result] = await pool.query(
+                'INSERT INTO helferplan_users (email, display_name, is_editor, is_admin) VALUES (?, ?, 0, 0)',
+                [email, name]
+            );
+            userId = result.insertId;
+            isEditor = 0;
+            isAdmin = 0;
+        }
+        
+        // Generate JWT token
+        const token = jwt.sign(
+            {
+                id: userId,
+                email: email,
+                display_name: name,
+                is_editor: Boolean(isEditor),
+                is_admin: Boolean(isAdmin)
+            },
+            SESSION_SECRET,
+            { expiresIn: SESSION_EXPIRY }
+        );
+        
+        // Set HTTP-only secure cookie
+        res.cookie('hp_session', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
+        
+        // Also return token in response for clients that can't use cookies
+        res.json({
+            token,
+            user: {
+                id: userId,
+                email: email,
+                display_name: name,
+                is_editor: Boolean(isEditor),
+                is_admin: Boolean(isAdmin)
+            }
+        });
+    } catch (err) {
+        console.error('Error in /api/auth/identify:', err);
+        res.status(500).json({ error: 'Serverfehler bei der Authentifizierung.' });
+    }
+});
+
+// GET /api/current-user - Return current user if authenticated
+app.get('/api/current-user', attachUser, (req, res) => {
+    if (!req.currentUser) {
+        return res.status(401).json({ authenticated: false });
+    }
+    
+    res.json({
+        authenticated: true,
+        user: {
+            id: req.currentUser.id,
+            email: req.currentUser.email,
+            display_name: req.currentUser.display_name,
+            is_editor: req.currentUser.is_editor,
+            is_admin: req.currentUser.is_admin
+        }
+    });
+});
+
+// DELETE /api/auth/session - Clear session
+app.delete('/api/auth/session', (req, res) => {
+    res.clearCookie('hp_session');
+    res.json({ message: 'Session beendet.' });
+});
+
+// --- Existing Endpoints (updated with authentication) ---
 
 // Teams abrufen
 app.get('/api/teams', async (req, res) => {
@@ -194,12 +448,25 @@ app.get('/api/teams', async (req, res) => {
 });
 
 // Team erstellen
-app.post('/api/teams', async (req, res) => {
+app.post('/api/teams', attachUser, requireEditor, async (req, res) => {
     try {
         const {name, color_hex} = req.body;
         if (!name || !color_hex) return res.status(400).json({error: 'Name und Farbwert sind erforderlich.'});
         const [result] = await pool.query("INSERT INTO helferplan_teams (name, color_hex) VALUES (?, ?);", [name, color_hex]);
-        res.status(201).json({id: Number(result.insertId), name, color_hex});
+        const teamId = Number(result.insertId);
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'CREATE',
+            tableName: 'helferplan_teams',
+            rowId: teamId,
+            after: { id: teamId, name, color_hex },
+            req
+        });
+        
+        res.status(201).json({id: teamId, name, color_hex});
     } catch (err) {
         console.error('DB-Fehler POST /api/teams', err);
         res.status(500).json({error: 'DB-Fehler beim Erstellen des Teams'});
@@ -223,7 +490,7 @@ app.get('/api/helpers', async (req, res) => {
 });
 
 // Helfer erstellen
-app.post('/api/helpers', async (req, res) => {
+app.post('/api/helpers', attachUser, requireEditor, async (req, res) => {
     try {
         const {name, team_id, role} = req.body;
         if (!name || !team_id || !role) return res.status(400).json({error: 'Name, Team-ID und Rolle sind erforderlich.'});
@@ -238,7 +505,20 @@ app.post('/api/helpers', async (req, res) => {
         }
 
         const [result] = await pool.query("INSERT INTO helferplan_helpers (name, team_id, role) VALUES (?, ?, ?);", [trimmed, team_id, role]);
-        res.status(201).json({id: Number(result.insertId), name: trimmed, team_id, role});
+        const helperId = Number(result.insertId);
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'CREATE',
+            tableName: 'helferplan_helpers',
+            rowId: helperId,
+            after: { id: helperId, name: trimmed, team_id, role },
+            req
+        });
+        
+        res.status(201).json({id: helperId, name: trimmed, team_id, role});
     } catch (err) {
         if (err && err.errno === 1452) {
             return res.status(400).json({error: `Team mit der ID ${req.body.team_id} existiert nicht.`});
@@ -252,10 +532,29 @@ app.post('/api/helpers', async (req, res) => {
 });
 
 // Helfer löschen
-app.delete('/api/helpers/:id', async (req, res) => {
+app.delete('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
+        
+        // Get helper data before deletion for audit log
+        const [helpers] = await pool.query("SELECT * FROM helferplan_helpers WHERE id = ?;", [id]);
+        const helper = helpers.length > 0 ? helpers[0] : null;
+        
         await pool.query("DELETE FROM helferplan_helpers WHERE id = ?;", [id]);
+        
+        // Audit log
+        if (helper) {
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'DELETE',
+                tableName: 'helferplan_helpers',
+                rowId: Number(id),
+                before: helper,
+                req
+            });
+        }
+        
         res.status(200).json({message: 'Helfer gelöscht'});
     } catch (err) {
         // If ON DELETE RESTRICT is in place and there are shifts referencing this helper, MySQL returns errno 1451
@@ -278,22 +577,54 @@ app.get('/api/activity-groups', async (req, res) => {
     }
 });
 
-app.post('/api/activity-groups', async (req, res) => {
+app.post('/api/activity-groups', attachUser, requireEditor, async (req, res) => {
     try {
         const {name, sort_order} = req.body;
         if (!name) return res.status(400).json({error: 'Name ist erforderlich.'});
         const [result] = await pool.query("INSERT INTO helferplan_activity_groups (name, sort_order) VALUES (?, ?);", [name, sort_order || 0]);
-        res.status(201).json({id: Number(result.insertId), name, sort_order: Number(sort_order) || 0});
+        const groupId = Number(result.insertId);
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'CREATE',
+            tableName: 'helferplan_activity_groups',
+            rowId: groupId,
+            after: { id: groupId, name, sort_order: Number(sort_order) || 0 },
+            req
+        });
+        
+        res.status(201).json({id: groupId, name, sort_order: Number(sort_order) || 0});
     } catch (err) {
         console.error('DB-Fehler POST /api/activity-groups', err);
         res.status(500).json({error: 'DB-Fehler beim Erstellen der Gruppe'});
     }
 });
 
-app.delete('/api/activity-groups/:id', async (req, res) => {
+app.delete('/api/activity-groups/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
+        
+        // Get group data before deletion for audit log
+        const [groups] = await pool.query("SELECT * FROM helferplan_activity_groups WHERE id = ?;", [id]);
+        const group = groups.length > 0 ? groups[0] : null;
+        
         await pool.query("DELETE FROM helferplan_activity_groups WHERE id = ?;", [id]);
+        
+        // Audit log
+        if (group) {
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'DELETE',
+                tableName: 'helferplan_activity_groups',
+                rowId: Number(id),
+                before: group,
+                req
+            });
+        }
+        
         res.status(200).json({message: 'Gruppe gelöscht'});
     } catch (err) {
         console.error('DB-Fehler DELETE /api/activity-groups', err);
@@ -324,12 +655,25 @@ app.get('/api/activities', async (req, res) => {
     }
 });
 
-app.post('/api/activities', async (req, res) => {
+app.post('/api/activities', attachUser, requireEditor, async (req, res) => {
     try {
         const {name, group_id, role_requirement} = req.body;
         if (!name || !group_id || !role_requirement) return res.status(400).json({error: 'Name, Gruppen-ID und Rollen-Anforderung sind erforderlich.'});
         const [result] = await pool.query("INSERT INTO helferplan_activities (name, group_id, role_requirement) VALUES (?, ?, ?);", [name, group_id, role_requirement]);
-        res.status(201).json({id: Number(result.insertId), name, group_id, role_requirement});
+        const activityId = Number(result.insertId);
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'CREATE',
+            tableName: 'helferplan_activities',
+            rowId: activityId,
+            after: { id: activityId, name, group_id, role_requirement },
+            req
+        });
+        
+        res.status(201).json({id: activityId, name, group_id, role_requirement});
     } catch (err) {
         if (err && err.errno === 1452) return res.status(400).json({error: `Gruppe mit der ID ${req.body.group_id} existiert nicht.`});
         console.error('DB-Fehler POST /api/activities', err);
@@ -337,10 +681,29 @@ app.post('/api/activities', async (req, res) => {
     }
 });
 
-app.delete('/api/activities/:id', async (req, res) => {
+app.delete('/api/activities/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
+        
+        // Get activity data before deletion for audit log
+        const [activities] = await pool.query("SELECT * FROM helferplan_activities WHERE id = ?;", [id]);
+        const activity = activities.length > 0 ? activities[0] : null;
+        
         await pool.query("DELETE FROM helferplan_activities WHERE id = ?;", [id]);
+        
+        // Audit log
+        if (activity) {
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'DELETE',
+                tableName: 'helferplan_activities',
+                rowId: Number(id),
+                before: activity,
+                req
+            });
+        }
+        
         res.status(200).json({message: 'Taetigkeit gelöscht'});
     } catch (err) {
         console.error('DB-Fehler DELETE /api/activities', err);
@@ -373,7 +736,7 @@ app.get('/api/tournament-shifts', async (req, res) => {
 });
 
 /// Schicht hinzufügen: Validierung der Rolle und Berücksichtigung von Schichtblöcken
-app.post('/api/tournament-shifts', async (req, res) => {
+app.post('/api/tournament-shifts', attachUser, requireEditor, async (req, res) => {
     try {
         const { activity_id, start_time, end_time, helper_id } = req.body;
         const startMy = isoToMySQLDatetime(start_time);
@@ -434,7 +797,20 @@ app.post('/api/tournament-shifts', async (req, res) => {
             "INSERT INTO helferplan_tournament_shifts (activity_id, start_time, end_time, helper_id) VALUES (?, ?, ?, ?)",
             [activity_id, startMy, endMy, helper_id]
         );
-        res.json({ success: true, id: result.insertId });
+        const shiftId = result.insertId;
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'CREATE',
+            tableName: 'helferplan_tournament_shifts',
+            rowId: shiftId,
+            after: { id: shiftId, activity_id, start_time, end_time, helper_id },
+            req
+        });
+        
+        res.json({ success: true, id: shiftId });
     } catch (err) {
         console.error('Fehler beim Hinzufügen der Schicht:', err);
         res.status(500).json({ error: 'Serverfehler beim Hinzufügen der Schicht.' });
@@ -444,11 +820,29 @@ app.post('/api/tournament-shifts', async (req, res) => {
 /**
  * DELETE by shift id (most reliable)
  */
-app.delete('/api/tournament-shifts/:id', async (req, res) => {
+app.delete('/api/tournament-shifts/:id', attachUser, requireEditor, async (req, res) => {
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'shift id required' });
     try {
+        // Get shift data before deletion for audit log
+        const [shifts] = await pool.query("SELECT * FROM helferplan_tournament_shifts WHERE id = ?", [id]);
+        const shift = shifts.length > 0 ? shifts[0] : null;
+        
         const [result] = await pool.query("DELETE FROM helferplan_tournament_shifts WHERE id = ?", [id]);
+        
+        // Audit log
+        if (shift) {
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'DELETE',
+                tableName: 'helferplan_tournament_shifts',
+                rowId: Number(id),
+                before: shift,
+                req
+            });
+        }
+        
         return res.json({ deletedCount: result.affectedRows || 0 });
     } catch (err) {
         console.error('DELETE /api/tournament-shifts/:id error', err);
@@ -459,7 +853,7 @@ app.delete('/api/tournament-shifts/:id', async (req, res) => {
 /**
  * Body-based DELETE (legacy fallback). Tries multiple match strategies (exact, tolerant)
  */
-app.delete('/api/tournament-shifts', async (req, res) => {
+app.delete('/api/tournament-shifts', attachUser, requireEditor, async (req, res) => {
     // Expect JSON body: { activity_id, start_time, helper_id? }
     const { activity_id, start_time, helper_id } = req.body || {};
 
@@ -561,7 +955,7 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-app.post('/api/settings', async (req, res) => {
+app.post('/api/settings', attachUser, requireEditor, async (req, res) => {
     try {
         const payload = req.body;
         let entries = [];
@@ -570,6 +964,14 @@ app.post('/api/settings', async (req, res) => {
         } else {
             entries = Object.entries(payload);
         }
+        
+        // Get current settings for audit log
+        const [currentSettings] = await pool.query("SELECT setting_key, setting_value FROM helferplan_settings");
+        const beforeData = {};
+        currentSettings.forEach(s => {
+            beforeData[s.setting_key] = s.setting_value;
+        });
+        
         const conn = await pool.getConnection();
         try {
             await conn.beginTransaction();
@@ -580,6 +982,23 @@ app.post('/api/settings', async (req, res) => {
                 );
             }
             await conn.commit();
+            
+            // Audit log
+            const afterData = { ...beforeData };
+            entries.forEach(([key, value]) => {
+                afterData[key] = String(value);
+            });
+            
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'UPDATE',
+                tableName: 'helferplan_settings',
+                before: beforeData,
+                after: afterData,
+                req
+            });
+            
             res.status(200).json({message: 'Einstellungen gespeichert'});
         } catch (err) {
             await conn.rollback();
@@ -619,24 +1038,43 @@ app.get('/api/activities/:id/allowed-time-blocks', async (req, res) => {
 });
 
 // 2. POST: Erlaubte Zeitblöcke für eine Aktivität aktualisieren
-app.post('/api/activities/:id/allowed-time-blocks', async (req, res) => {
+app.post('/api/activities/:id/allowed-time-blocks', attachUser, requireAdmin, async (req, res) => {
     const activityId = req.params.id;
-    const { blocks, password } = req.body;
-
-    if (password !== ADMIN_PASSWORD) {
-        return res.status(403).json({ error: 'Ungültiges Admin-Passwort.' });
-    }
+    const { blocks } = req.body;
 
     if (!Array.isArray(blocks)) {
         return res.status(400).json({ error: 'blocks muss ein Array sein.' });
     }
 
     try {
+        // Get current blocks for audit log
+        const [current] = await pool.query(
+            "SELECT allowed_time_blocks FROM helferplan_activities WHERE id = ?",
+            [activityId]
+        );
+        const beforeBlocks = current.length > 0 && current[0].allowed_time_blocks 
+            ? JSON.parse(current[0].allowed_time_blocks) 
+            : null;
+        
         const blocksJson = JSON.stringify(blocks);
         await pool.query(
             "UPDATE helferplan_activities SET allowed_time_blocks = ? WHERE id = ?",
             [blocksJson, activityId]
         );
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'UPDATE',
+            tableName: 'helferplan_activities',
+            rowId: Number(activityId),
+            before: { allowed_time_blocks: beforeBlocks },
+            after: { allowed_time_blocks: blocks },
+            req,
+            note: 'Updated allowed_time_blocks'
+        });
+        
         res.status(200).json({ success: true });
     } catch (err) {
         console.error('POST /api/activities/:id/allowed-time-blocks Fehler:', err);
@@ -681,7 +1119,7 @@ app.get('/api/setup-cleanup-shifts', async (req, res) => {
 });
 
 // POST: Schicht zuweisen oder erstellen
-app.post('/api/setup-cleanup-shifts', async (req, res) => {
+app.post('/api/setup-cleanup-shifts', attachUser, requireEditor, async (req, res) => {
     try {
         const {day_type, start_time, end_time, helper_id} = req.body;
         if (!day_type || !start_time || !end_time) {
@@ -693,24 +1131,53 @@ app.post('/api/setup-cleanup-shifts', async (req, res) => {
         
         // Check if slot exists
         const [existing] = await pool.query(
-            "SELECT id FROM helferplan_setup_cleanup_shifts WHERE day_type = ? AND start_time = ? LIMIT 1",
+            "SELECT id, helper_id FROM helferplan_setup_cleanup_shifts WHERE day_type = ? AND start_time = ? LIMIT 1",
             [day_type, startMySQL]
         );
         
         if (existing && existing[0]) {
             // Update existing
+            const shiftId = existing[0].id;
+            const oldHelperId = existing[0].helper_id;
+            
             await pool.query(
                 "UPDATE helferplan_setup_cleanup_shifts SET helper_id = ? WHERE id = ?",
-                [helper_id || null, existing[0].id]
+                [helper_id || null, shiftId]
             );
-            res.json({message: 'Schicht aktualisiert', id: existing[0].id});
+            
+            // Audit log
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'UPDATE',
+                tableName: 'helferplan_setup_cleanup_shifts',
+                rowId: shiftId,
+                before: { helper_id: oldHelperId },
+                after: { helper_id: helper_id || null },
+                req
+            });
+            
+            res.json({message: 'Schicht aktualisiert', id: shiftId});
         } else {
             // Create new
             const [result] = await pool.query(
                 "INSERT INTO helferplan_setup_cleanup_shifts (day_type, start_time, end_time, helper_id) VALUES (?, ?, ?, ?)",
                 [day_type, startMySQL, endMySQL, helper_id || null]
             );
-            res.status(201).json({message: 'Schicht erstellt', id: Number(result.insertId)});
+            const shiftId = Number(result.insertId);
+            
+            // Audit log
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'CREATE',
+                tableName: 'helferplan_setup_cleanup_shifts',
+                rowId: shiftId,
+                after: { id: shiftId, day_type, start_time, end_time, helper_id: helper_id || null },
+                req
+            });
+            
+            res.status(201).json({message: 'Schicht erstellt', id: shiftId});
         }
     } catch (err) {
         console.error('DB-Fehler POST /api/setup-cleanup-shifts', err);
@@ -719,10 +1186,31 @@ app.post('/api/setup-cleanup-shifts', async (req, res) => {
 });
 
 // DELETE: Schicht leeren (helper_id auf NULL setzen)
-app.delete('/api/setup-cleanup-shifts/:id', async (req, res) => {
+app.delete('/api/setup-cleanup-shifts/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
+        
+        // Get shift data before update for audit log
+        const [shifts] = await pool.query("SELECT * FROM helferplan_setup_cleanup_shifts WHERE id = ?", [id]);
+        const shift = shifts.length > 0 ? shifts[0] : null;
+        
         await pool.query("UPDATE helferplan_setup_cleanup_shifts SET helper_id = NULL WHERE id = ?", [id]);
+        
+        // Audit log
+        if (shift) {
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'UPDATE',
+                tableName: 'helferplan_setup_cleanup_shifts',
+                rowId: Number(id),
+                before: { helper_id: shift.helper_id },
+                after: { helper_id: null },
+                req,
+                note: 'Cleared helper assignment'
+            });
+        }
+        
         res.json({message: 'Schicht geleert'});
     } catch (err) {
         console.error('DB-Fehler DELETE /api/setup-cleanup-shifts', err);
@@ -759,7 +1247,7 @@ app.get('/api/cakes', async (req, res) => {
 });
 
 // POST: Kuchenspende erstellen oder aktualisieren
-app.post('/api/cakes', async (req, res) => {
+app.post('/api/cakes', attachUser, requireEditor, async (req, res) => {
     try {
         const {id, donation_day, helper_id, cake_type, contains_nuts} = req.body;
         
@@ -768,6 +1256,10 @@ app.post('/api/cakes', async (req, res) => {
         }
         
         if (id) {
+            // Get existing cake for audit log
+            const [cakes] = await pool.query("SELECT * FROM helferplan_cakes WHERE id = ?", [id]);
+            const beforeCake = cakes.length > 0 ? cakes[0] : null;
+            
             // Update existing
             await pool.query(
                 `UPDATE helferplan_cakes 
@@ -775,6 +1267,21 @@ app.post('/api/cakes', async (req, res) => {
                  WHERE id = ?`,
                 [helper_id || null, cake_type || null, contains_nuts ? 1 : 0, id]
             );
+            
+            // Audit log
+            if (beforeCake) {
+                await logAudit({
+                    userId: req.currentUser.id,
+                    actorName: req.currentUser.display_name,
+                    action: 'UPDATE',
+                    tableName: 'helferplan_cakes',
+                    rowId: Number(id),
+                    before: beforeCake,
+                    after: { helper_id: helper_id || null, cake_type: cake_type || null, contains_nuts: contains_nuts ? 1 : 0 },
+                    req
+                });
+            }
+            
             res.json({message: 'Kuchen aktualisiert', id});
         } else {
             // Create new
@@ -783,7 +1290,20 @@ app.post('/api/cakes', async (req, res) => {
                  VALUES (?, ?, ?, ?)`,
                 [donation_day, helper_id || null, cake_type || null, contains_nuts ? 1 : 0]
             );
-            res.status(201).json({message: 'Kuchen erstellt', id: Number(result.insertId)});
+            const cakeId = Number(result.insertId);
+            
+            // Audit log
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'CREATE',
+                tableName: 'helferplan_cakes',
+                rowId: cakeId,
+                after: { id: cakeId, donation_day, helper_id: helper_id || null, cake_type: cake_type || null, contains_nuts: contains_nuts ? 1 : 0 },
+                req
+            });
+            
+            res.status(201).json({message: 'Kuchen erstellt', id: cakeId});
         }
     } catch (err) {
         console.error('DB-Fehler POST /api/cakes', err);
@@ -792,10 +1312,29 @@ app.post('/api/cakes', async (req, res) => {
 });
 
 // DELETE: Kuchenspende löschen
-app.delete('/api/cakes/:id', async (req, res) => {
+app.delete('/api/cakes/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
+        
+        // Get cake data before deletion for audit log
+        const [cakes] = await pool.query("SELECT * FROM helferplan_cakes WHERE id = ?", [id]);
+        const cake = cakes.length > 0 ? cakes[0] : null;
+        
         await pool.query("DELETE FROM helferplan_cakes WHERE id = ?", [id]);
+        
+        // Audit log
+        if (cake) {
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'DELETE',
+                tableName: 'helferplan_cakes',
+                rowId: Number(id),
+                before: cake,
+                req
+            });
+        }
+        
         res.json({message: 'Kuchen gelöscht'});
     } catch (err) {
         console.error('DB-Fehler DELETE /api/cakes', err);
