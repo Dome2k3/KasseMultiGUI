@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
     let allShifts = []; // cached shift array from server; used to find shift ids
     let allowedTimeBlocks = {}; // {activityId: [{start, end}, ...]}
+    let currentUser = null; // Current authenticated user
 
     // --- Helpers ---
     function hourIndexToDate(index) {
@@ -166,6 +167,128 @@ document.addEventListener('DOMContentLoaded', () => {
         teamSelect.innerHTML = '<option value="">Team auswaehlen</option>';
         allTeams.forEach(team => teamSelect.add(new Option(team.name, team.id)));
     }
+
+    // --- Authentication Functions ---
+    
+    async function checkCurrentUser() {
+        try {
+            const res = await fetch(`${API_URL_HELFERPLAN}/current-user`, { 
+                credentials: 'include' 
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.authenticated && data.user) {
+                    currentUser = data.user;
+                    updateAuthUI();
+                    return true;
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to check current user:', err);
+        }
+        currentUser = null;
+        updateAuthUI();
+        return false;
+    }
+
+    function updateAuthUI() {
+        const authStatus = document.getElementById('auth-status');
+        const writeModeBtn = document.getElementById('write-mode-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        
+        if (!authStatus || !writeModeBtn) return;
+        
+        if (currentUser && currentUser.is_editor) {
+            authStatus.textContent = `Bearbeite als: ${currentUser.display_name}`;
+            authStatus.style.display = 'inline-block';
+            authStatus.style.color = '#28a745';
+            authStatus.style.fontWeight = 'bold';
+            writeModeBtn.style.display = 'none';
+            if (logoutBtn) {
+                logoutBtn.style.display = 'inline-block';
+            }
+        } else if (currentUser) {
+            authStatus.textContent = `Angemeldet: ${currentUser.display_name} (nur Lesezugriff)`;
+            authStatus.style.display = 'inline-block';
+            authStatus.style.color = '#ffc107';
+            writeModeBtn.style.display = 'inline-block';
+            writeModeBtn.textContent = 'Schreibrechte beantragen';
+            if (logoutBtn) {
+                logoutBtn.style.display = 'inline-block';
+            }
+        } else {
+            authStatus.style.display = 'none';
+            writeModeBtn.style.display = 'inline-block';
+            writeModeBtn.textContent = 'Bearbeitungsmodus';
+            if (logoutBtn) {
+                logoutBtn.style.display = 'none';
+            }
+        }
+    }
+
+    function showAuthModal() {
+        const authModal = document.getElementById('auth-modal');
+        if (!authModal) return;
+        
+        // Clear previous inputs
+        document.getElementById('auth-name').value = currentUser ? currentUser.display_name : '';
+        document.getElementById('auth-email').value = currentUser ? currentUser.email : '';
+        document.getElementById('auth-error').textContent = '';
+        
+        authModal.style.display = 'block';
+    }
+
+    async function handleAuthSubmit() {
+        const name = document.getElementById('auth-name').value.trim();
+        const email = document.getElementById('auth-email').value.trim();
+        const errorDiv = document.getElementById('auth-error');
+        
+        if (!name || !email) {
+            errorDiv.textContent = 'Bitte Name und E-Mail eingeben.';
+            return;
+        }
+        
+        try {
+            const res = await fetch(`${API_URL_HELFERPLAN}/auth/identify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ name, email })
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                currentUser = data.user;
+                updateAuthUI();
+                document.getElementById('auth-modal').style.display = 'none';
+                
+                if (!currentUser.is_editor) {
+                    alert('Sie wurden erfolgreich angemeldet, haben aber noch keine Schreibrechte. Bitte kontaktieren Sie einen Administrator.');
+                }
+            } else {
+                const error = await res.json().catch(() => ({ error: 'Unbekannter Fehler' }));
+                errorDiv.textContent = error.error || 'Anmeldung fehlgeschlagen.';
+            }
+        } catch (err) {
+            console.error('Auth error:', err);
+            errorDiv.textContent = 'Verbindungsfehler. Bitte versuchen Sie es erneut.';
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await fetch(`${API_URL_HELFERPLAN}/auth/session`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+        } catch (err) {
+            console.warn('Logout request failed:', err);
+        }
+        
+        currentUser = null;
+        updateAuthUI();
+    }
+
 
     function renderHelperPool() {
         helperPool.innerHTML = '';
@@ -828,6 +951,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // ignore, keep fallback
         }
 
+        // Check authentication status
+        await checkCurrentUser();
+
         [allHelpers, allTeams] = await Promise.all([
             fetch(`${API_URL_HELFERPLAN}/helpers`).then(r => r.ok ? r.json() : []),
             fetch(`${API_URL_HELFERPLAN}/teams`).then(r => r.ok ? r.json() : [])
@@ -845,9 +971,44 @@ document.addEventListener('DOMContentLoaded', () => {
         await generateGrid(timelineConfig);
         await fetchAndRenderAllShifts();
         setupModalListeners();
+        setupAuthListeners();
 
         planTeamFilter.addEventListener('change', () => renderHelperPool());
         viewTeamFilter.addEventListener('change', () => applyViewFilter());
+    }
+
+    function setupAuthListeners() {
+        const writeModeBtn = document.getElementById('write-mode-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const authModal = document.getElementById('auth-modal');
+        const authSubmitBtn = document.getElementById('auth-submit');
+        const authCancelBtn = document.getElementById('auth-cancel');
+        
+        if (writeModeBtn) {
+            writeModeBtn.addEventListener('click', showAuthModal);
+        }
+        
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', handleLogout);
+        }
+        
+        if (authSubmitBtn) {
+            authSubmitBtn.addEventListener('click', handleAuthSubmit);
+        }
+        
+        if (authCancelBtn) {
+            authCancelBtn.addEventListener('click', () => {
+                authModal.style.display = 'none';
+            });
+        }
+        
+        if (authModal) {
+            authModal.addEventListener('click', (e) => {
+                if (e.target === authModal) {
+                    authModal.style.display = 'none';
+                }
+            });
+        }
     }
 
     init().catch(err => console.error('Init error:', err));
