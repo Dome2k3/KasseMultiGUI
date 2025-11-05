@@ -1,8 +1,6 @@
 // teams.js
 require('dotenv').config({path: '/var/www/html/kasse/Umgebung.env'});
 
-<script src="../config.js"></script>
-
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
