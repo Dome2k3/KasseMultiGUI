@@ -13,6 +13,7 @@ const rateLimit = require('express-rate-limit');
 
 // --- 2. Express-App initialisieren ---
 const app = express();
+app.set('trust proxy', 1);
 const port = Number(process.env.PORT) || 3003;
 
 // DB-Pool
