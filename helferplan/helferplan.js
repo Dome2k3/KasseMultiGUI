@@ -436,7 +436,7 @@ app.post('/api/auth/identify', authLimiter, async (req, res) => {
         
         // Set secure flag for HTTPS connections or when sameSite is 'none'
         // req.secure is true when the connection is HTTPS (works with trust proxy)
-        const cookieSecure = req.secure || req.protocol === 'https' || sameSiteMode === 'none';
+        const cookieSecure = req.secure || sameSiteMode === 'none';
         
         res.cookie('hp_session', token, {
             httpOnly: true,
