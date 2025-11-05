@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Änderungsprotokoll - Helferplan</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .changelog-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .filter-panel {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-panel label {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        
+        .filter-panel select,
+        .filter-panel input {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .changelog-entry {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .changelog-entry:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .entry-actor {
+            font-weight: 700;
+            color: #005A9F;
+            font-size: 16px;
+        }
+        
+        .entry-timestamp {
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .entry-action {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-right: 8px;
+        }
+        
+        .action-CREATE {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .action-UPDATE {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        .action-DELETE {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .entry-table {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #555;
+        }
+        
+        .entry-description {
+            margin-top: 8px;
+            line-height: 1.6;
+        }
+        
+        .entry-description p {
+            margin: 4px 0;
+        }
+        
+        .entry-description strong {
+            color: #005A9F;
+        }
+        
+        .data-change {
+            background: #f9f9f9;
+            border-left: 3px solid #005A9F;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 13px;
+        }
+        
+        .data-change .label {
+            font-weight: 600;
+            color: #666;
+            margin-right: 8px;
+        }
+        
+        .data-change .before {
+            color: #c62828;
+            text-decoration: line-through;
+        }
+        
+        .data-change .after {
+            color: #2e7d32;
+            font-weight: 600;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .load-more {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .load-more button {
+            padding: 10px 24px;
+            background: #005A9F;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .load-more button:hover {
+            background: #004170;
+        }
+        
+        .load-more button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .entry-note {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #fff8e1;
+            border-left: 3px solid #ffc107;
+            font-style: italic;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="index.html">Admin: Stammdaten</a>
+    <a href="plan.html">Turnier-Planung</a>
+    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="aufbau-abbau.html">Auf-/Abbau</a>
+    <a href="kuchen.html">Kuchen</a>
+    <a href="statistik.html">Statistik</a>
+    <a href="changelog.html" class="active">Änderungen</a>
+</nav>
+
+<main class="changelog-container">
+    <h1>Änderungsprotokoll</h1>
+    <p style="color: #666; margin-bottom: 20px;">
+        Hier werden alle Änderungen am Helferplan protokolliert. Sie können nach Aktion filtern, um nur bestimmte Arten von Änderungen anzuzeigen.
+    </p>
+    
+    <div class="filter-panel">
+        <div>
+            <label for="action-filter">Aktion filtern:</label>
+            <select id="action-filter">
+                <option value="">Alle Aktionen</option>
+                <option value="CREATE">Erstellt</option>
+                <option value="UPDATE">Aktualisiert</option>
+                <option value="DELETE">Gelöscht</option>
+            </select>
+        </div>
+        <div>
+            <label for="table-filter">Tabelle filtern:</label>
+            <select id="table-filter">
+                <option value="">Alle Tabellen</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="changelog-list">
+        <div class="no-data">Lade Änderungen...</div>
+    </div>
+    
+    <div class="load-more" id="load-more-section" style="display: none;">
+        <button id="load-more-btn">Weitere laden</button>
+    </div>
+</main>
+
+<script src="/helferplan/public/config.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    // API URL setup
+    const API_URL = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
+    
+    const changelogList = document.getElementById('changelog-list');
+    const actionFilter = document.getElementById('action-filter');
+    const tableFilter = document.getElementById('table-filter');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    const loadMoreSection = document.getElementById('load-more-section');
+    
+    let allLogs = [];
+    let displayedLogs = [];
+    let offset = 0;
+    const limit = 50;
+    
+    // Load audit logs
+    async function loadAuditLogs() {
+        try {
+            const response = await fetch(`${API_URL}/audit?limit=${limit}&offset=${offset}`, { 
+                credentials: 'include' 
+            });
+            const data = await response.json();
+            
+            allLogs = allLogs.concat(data.audit_logs);
+            
+            // Populate table filter
+            if (offset === 0) {
+                populateTableFilter();
+            }
+            
+            // Show/hide load more button
+            if (allLogs.length < data.total) {
+                loadMoreSection.style.display = 'block';
+            } else {
+                loadMoreSection.style.display = 'none';
+            }
+            
+            applyFilters();
+        } catch (err) {
+            console.error('Error loading audit logs:', err);
+            changelogList.innerHTML = '<div class="no-data" style="color: red;">Fehler beim Laden der Änderungen</div>';
+        }
+    }
+    
+    function populateTableFilter() {
+        const tables = [...new Set(allLogs.map(log => log.table_name))].sort();
+        tableFilter.innerHTML = '<option value="">Alle Tabellen</option>';
+        tables.forEach(table => {
+            const option = document.createElement('option');
+            option.value = table;
+            option.textContent = getTableDisplayName(table);
+            tableFilter.appendChild(option);
+        });
+    }
+    
+    function applyFilters() {
+        const actionValue = actionFilter.value;
+        const tableValue = tableFilter.value;
+        
+        displayedLogs = allLogs.filter(log => {
+            if (actionValue && log.action !== actionValue) return false;
+            if (tableValue && log.table_name !== tableValue) return false;
+            return true;
+        });
+        
+        renderChangelog();
+    }
+    
+    function renderChangelog() {
+        if (displayedLogs.length === 0) {
+            changelogList.innerHTML = '<div class="no-data">Keine Änderungen gefunden</div>';
+            return;
+        }
+        
+        let html = '';
+        displayedLogs.forEach(log => {
+            html += renderChangelogEntry(log);
+        });
+        
+        changelogList.innerHTML = html;
+    }
+    
+    function renderChangelogEntry(log) {
+        const timestamp = new Date(log.timestamp);
+        const formattedDate = timestamp.toLocaleString('de-DE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        
+        const description = generateDescription(log);
+        
+        return `
+            <div class="changelog-entry">
+                <div class="entry-header">
+                    <div>
+                        <span class="entry-action action-${log.action}">${getActionName(log.action)}</span>
+                        <span class="entry-table">${getTableDisplayName(log.table_name)}</span>
+                    </div>
+                    <div class="entry-timestamp">${formattedDate}</div>
+                </div>
+                <div class="entry-actor">
+                    ${log.actor_name}
+                </div>
+                <div class="entry-description">
+                    ${description}
+                </div>
+                ${log.note ? `<div class="entry-note">${log.note}</div>` : ''}
+            </div>
+        `;
+    }
+    
+    function generateDescription(log) {
+        const tableName = getTableDisplayName(log.table_name);
+        let description = '';
+        
+        switch (log.action) {
+            case 'CREATE':
+                description = `<p>Neuer Eintrag in <strong>${tableName}</strong> erstellt.</p>`;
+                if (log.after_data) {
+                    description += renderDataChanges(null, log.after_data, log.table_name);
+                }
+                break;
+            
+            case 'UPDATE':
+                description = `<p>Eintrag in <strong>${tableName}</strong> aktualisiert.</p>`;
+                if (log.before_data && log.after_data) {
+                    description += renderDataChanges(log.before_data, log.after_data, log.table_name);
+                }
+                break;
+            
+            case 'DELETE':
+                description = `<p>Eintrag aus <strong>${tableName}</strong> gelöscht.</p>`;
+                if (log.before_data) {
+                    description += renderDataChanges(log.before_data, null, log.table_name);
+                }
+                break;
+        }
+        
+        return description;
+    }
+    
+    function renderDataChanges(before, after, tableName) {
+        let html = '<div class="data-change">';
+        
+        if (after && !before) {
+            // CREATE - show new data
+            html += renderDataFields(after, tableName);
+        } else if (before && !after) {
+            // DELETE - show deleted data
+            html += renderDataFields(before, tableName);
+        } else if (before && after) {
+            // UPDATE - show changes
+            const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+            keys.forEach(key => {
+                if (key === 'id') return; // Skip ID
+                
+                const beforeValue = before[key];
+                const afterValue = after[key];
+                
+                if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+                    const fieldName = getFieldDisplayName(key, tableName);
+                    html += `
+                        <p>
+                            <span class="label">${fieldName}:</span>
+                            <span class="before">${formatValue(beforeValue)}</span>
+                            →
+                            <span class="after">${formatValue(afterValue)}</span>
+                        </p>
+                    `;
+                }
+            });
+        }
+        
+        html += '</div>';
+        return html;
+    }
+    
+    function renderDataFields(data, tableName) {
+        let html = '';
+        Object.entries(data).forEach(([key, value]) => {
+            if (key === 'id') return; // Skip ID
+            const fieldName = getFieldDisplayName(key, tableName);
+            html += `<p><span class="label">${fieldName}:</span> ${formatValue(value)}</p>`;
+        });
+        return html;
+    }
+    
+    function formatValue(value) {
+        if (value === null || value === undefined) return '<em>leer</em>';
+        if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    }
+    
+    function getActionName(action) {
+        const names = {
+            'CREATE': 'Erstellt',
+            'UPDATE': 'Aktualisiert',
+            'DELETE': 'Gelöscht'
+        };
+        return names[action] || action;
+    }
+    
+    function getTableDisplayName(tableName) {
+        const names = {
+            'helferplan_helpers': 'Helfer',
+            'helferplan_teams': 'Teams',
+            'helferplan_tournament_shifts': 'Turnier-Schichten',
+            'helferplan_setup_cleanup_shifts': 'Aufbau/Abbau-Schichten',
+            'helferplan_activities': 'Aktivitäten',
+            'helferplan_activity_groups': 'Aktivitätsgruppen',
+            'helferplan_cakes': 'Kuchen',
+            'helferplan_settings': 'Einstellungen'
+        };
+        return names[tableName] || tableName;
+    }
+    
+    function getFieldDisplayName(fieldName, tableName) {
+        const fieldNames = {
+            'name': 'Name',
+            'team_id': 'Team-ID',
+            'role': 'Rolle',
+            'color_hex': 'Farbe',
+            'helper_id': 'Helfer-ID',
+            'activity_id': 'Aktivität-ID',
+            'start_time': 'Startzeit',
+            'end_time': 'Endzeit',
+            'day_type': 'Tag-Typ',
+            'donation_day': 'Spende-Tag',
+            'cake_type': 'Kuchen-Typ',
+            'contains_nuts': 'Enthält Nüsse',
+            'group_id': 'Gruppen-ID',
+            'role_requirement': 'Rollen-Anforderung',
+            'sort_order': 'Sortierung',
+            'setting_key': 'Einstellungs-Schlüssel',
+            'setting_value': 'Einstellungs-Wert',
+            'is_override': 'Überschreibung'
+        };
+        return fieldNames[fieldName] || fieldName;
+    }
+    
+    // Event listeners
+    actionFilter.addEventListener('change', applyFilters);
+    tableFilter.addEventListener('change', applyFilters);
+    
+    loadMoreBtn.addEventListener('click', async () => {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.textContent = 'Lädt...';
+        
+        offset += limit;
+        await loadAuditLogs();
+        
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Weitere laden';
+    });
+    
+    // Initial load
+    await loadAuditLogs();
+});
+</script>
+</body>
+</html>

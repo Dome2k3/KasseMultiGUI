@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helferplan Statistik</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .stats-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .filter-panel {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-panel label {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        
+        .filter-panel select {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .stats-table thead th {
+            background: #005A9F;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .stats-table tbody td {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .stats-table tbody tr:hover {
+            background: #f8f8f8;
+        }
+        
+        .team-header {
+            background: #e3f2fd;
+            font-weight: 700;
+            font-size: 15px;
+        }
+        
+        .team-header td {
+            padding: 12px 8px !important;
+            border-top: 2px solid #005A9F;
+            border-bottom: 2px solid #005A9F;
+        }
+        
+        .helper-row {
+            background: white;
+        }
+        
+        .helper-name-cell {
+            font-weight: 600;
+            padding-left: 20px !important;
+        }
+        
+        .team-summary {
+            font-style: italic;
+            color: #666;
+            padding-left: 20px !important;
+        }
+        
+        .number-cell {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .kpi-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .kpi-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .kpi-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #666;
+            border: none;
+            padding: 0;
+        }
+        
+        .kpi-card .kpi-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #005A9F;
+        }
+        
+        .distribution-section {
+            margin-top: 40px;
+        }
+        
+        .distribution-section h2 {
+            margin-bottom: 20px;
+        }
+        
+        .chart-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-wrapper {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        
+        .chart-wrapper h3 {
+            margin: 0 0 15px 0;
+            padding: 0;
+            border: none;
+        }
+        
+        .chart-canvas {
+            max-height: 300px;
+        }
+        
+        .distribution-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        .distribution-table th,
+        .distribution-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .distribution-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+        
+        .distribution-table td.number {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        
+        @media (max-width: 768px) {
+            .chart-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="index.html">Admin: Stammdaten</a>
+    <a href="plan.html">Turnier-Planung</a>
+    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="aufbau-abbau.html">Auf-/Abbau</a>
+    <a href="kuchen.html">Kuchen</a>
+    <a href="statistik.html" class="active">Statistik</a>
+    <a href="changelog.html">Änderungen</a>
+</nav>
+
+<main class="stats-container">
+    <h1>Helferplan Statistik</h1>
+    
+    <div class="filter-panel">
+        <div>
+            <label for="team-filter">Team filtern:</label>
+            <select id="team-filter">
+                <option value="">Alle Teams</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="kpi-section" id="kpi-section">
+        <!-- KPI cards will be inserted here -->
+    </div>
+    
+    <h2>Helfer-Statistik nach Team</h2>
+    <div style="overflow-x: auto;">
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Helfer/Team</th>
+                    <th class="number-cell">Stunden Plan</th>
+                    <th class="number-cell">Schichten Plan</th>
+                    <th class="number-cell">Stunden Auf/Abbau</th>
+                    <th class="number-cell">Schichten Auf/Abbau</th>
+                    <th class="number-cell">Gesamtstunden</th>
+                    <th class="number-cell">Gesamtschichten</th>
+                </tr>
+            </thead>
+            <tbody id="stats-tbody">
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 20px;">Lade Daten...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="distribution-section">
+        <h2>Schicht-Verteilung</h2>
+        <p style="color: #666; margin-bottom: 20px;">
+            Diese Statistik zeigt, wie viele Helfer wie viele Schichten übernommen haben.
+        </p>
+        
+        <div class="chart-container">
+            <div class="chart-wrapper">
+                <h3>Verteilung nach Schichtanzahl</h3>
+                <canvas id="distribution-bar-chart" class="chart-canvas"></canvas>
+            </div>
+            <div class="chart-wrapper">
+                <h3>Prozentuale Verteilung</h3>
+                <canvas id="distribution-pie-chart" class="chart-canvas"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-wrapper">
+            <h3>Detaillierte Tabelle</h3>
+            <table class="distribution-table" id="distribution-table">
+                <thead>
+                    <tr>
+                        <th>Schichtanzahl</th>
+                        <th class="number">Anzahl Helfer</th>
+                        <th class="number">Anteil (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="3" style="text-align: center; padding: 20px;">Lade Daten...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script src="/helferplan/public/config.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    // API URL setup
+    const API_URL = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
+    
+    const teamFilter = document.getElementById('team-filter');
+    const statsTbody = document.getElementById('stats-tbody');
+    const kpiSection = document.getElementById('kpi-section');
+    const distributionTable = document.getElementById('distribution-table').querySelector('tbody');
+    
+    let statsData = null;
+    let teams = [];
+    
+    // Load data
+    async function loadData() {
+        try {
+            const [statsRes, teamsRes] = await Promise.all([
+                fetch(`${API_URL}/statistics`, { credentials: 'include' }),
+                fetch(`${API_URL}/teams`, { credentials: 'include' })
+            ]);
+            
+            statsData = await statsRes.json();
+            teams = await teamsRes.json();
+            
+            populateTeamFilter();
+            renderKPIs();
+            renderTable();
+            renderDistributionCharts();
+            renderDistributionTable();
+        } catch (err) {
+            console.error('Error loading data:', err);
+            statsTbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: red; padding: 20px;">Fehler beim Laden der Daten</td></tr>';
+        }
+    }
+    
+    function populateTeamFilter() {
+        teamFilter.innerHTML = '<option value="">Alle Teams</option>';
+        teams.forEach(team => {
+            const option = document.createElement('option');
+            option.value = team.id;
+            option.textContent = team.name;
+            teamFilter.appendChild(option);
+        });
+    }
+    
+    function renderKPIs() {
+        const filterTeamId = teamFilter.value;
+        let filteredStats = statsData.helper_stats;
+        
+        if (filterTeamId) {
+            filteredStats = filteredStats.filter(h => String(h.team_id) === String(filterTeamId));
+        }
+        
+        const totalHelpers = filteredStats.length;
+        const totalShifts = filteredStats.reduce((sum, h) => sum + h.total_shifts, 0);
+        const totalHours = filteredStats.reduce((sum, h) => sum + h.total_hours, 0);
+        const avgShiftsPerHelper = totalHelpers > 0 ? (totalShifts / totalHelpers).toFixed(1) : '0';
+        const avgHoursPerHelper = totalHelpers > 0 ? (totalHours / totalHelpers).toFixed(1) : '0';
+        
+        kpiSection.innerHTML = `
+            <div class="kpi-card">
+                <h3>Anzahl Helfer</h3>
+                <div class="kpi-value">${totalHelpers}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Gesamtschichten</h3>
+                <div class="kpi-value">${totalShifts}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Gesamtstunden</h3>
+                <div class="kpi-value">${totalHours.toFixed(1)}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Ø Schichten/Helfer</h3>
+                <div class="kpi-value">${avgShiftsPerHelper}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Ø Stunden/Helfer</h3>
+                <div class="kpi-value">${avgHoursPerHelper}</div>
+            </div>
+        `;
+    }
+    
+    function renderTable() {
+        const filterTeamId = teamFilter.value;
+        
+        // Group helpers by team
+        const helpersByTeam = {};
+        statsData.helper_stats.forEach(helper => {
+            if (filterTeamId && String(helper.team_id) !== String(filterTeamId)) {
+                return;
+            }
+            
+            const teamId = helper.team_id || 'none';
+            if (!helpersByTeam[teamId]) {
+                helpersByTeam[teamId] = {
+                    team_name: helper.team_name || 'Kein Team',
+                    team_color: helper.team_color || '#999999',
+                    helpers: []
+                };
+            }
+            helpersByTeam[teamId].helpers.push(helper);
+        });
+        
+        // Build table HTML
+        let html = '';
+        
+        Object.values(helpersByTeam).forEach(team => {
+            // Sort helpers by name
+            team.helpers.sort((a, b) => a.helper_name.localeCompare(b.helper_name));
+            
+            // Calculate team totals
+            const teamTotalPlanHours = team.helpers.reduce((sum, h) => sum + h.plan_hours, 0);
+            const teamTotalPlanShifts = team.helpers.reduce((sum, h) => sum + h.plan_shifts, 0);
+            const teamTotalSetupHours = team.helpers.reduce((sum, h) => sum + h.setup_cleanup_hours, 0);
+            const teamTotalSetupShifts = team.helpers.reduce((sum, h) => sum + h.setup_cleanup_shifts, 0);
+            const teamTotalHours = team.helpers.reduce((sum, h) => sum + h.total_hours, 0);
+            const teamTotalShifts = team.helpers.reduce((sum, h) => sum + h.total_shifts, 0);
+            
+            // Team header row
+            html += `
+                <tr class="team-header" style="background-color: ${team.team_color}; color: ${getTextColorForBackground(team.team_color)};">
+                    <td colspan="7">
+                        <strong>${team.team_name}</strong> 
+                        (${team.helpers.length} Helfer, ${teamTotalShifts} Schichten, ${teamTotalHours.toFixed(1)}h)
+                    </td>
+                </tr>
+            `;
+            
+            // Helper rows
+            team.helpers.forEach(helper => {
+                html += `
+                    <tr class="helper-row">
+                        <td class="helper-name-cell">${helper.helper_name}</td>
+                        <td class="number-cell">${helper.plan_hours.toFixed(1)}</td>
+                        <td class="number-cell">${helper.plan_shifts}</td>
+                        <td class="number-cell">${helper.setup_cleanup_hours.toFixed(1)}</td>
+                        <td class="number-cell">${helper.setup_cleanup_shifts}</td>
+                        <td class="number-cell"><strong>${helper.total_hours.toFixed(1)}</strong></td>
+                        <td class="number-cell"><strong>${helper.total_shifts}</strong></td>
+                    </tr>
+                `;
+            });
+        });
+        
+        if (html === '') {
+            html = '<tr><td colspan="7" style="text-align: center; padding: 20px;">Keine Daten verfügbar</td></tr>';
+        }
+        
+        statsTbody.innerHTML = html;
+    }
+    
+    function renderDistributionCharts() {
+        const distribution = statsData.shift_distribution;
+        
+        if (distribution.length === 0) {
+            return;
+        }
+        
+        const labels = distribution.map(d => `${d.shift_count} Schicht${d.shift_count !== 1 ? 'en' : ''}`);
+        const data = distribution.map(d => d.helper_count);
+        const percentages = distribution.map(d => parseFloat(d.percentage));
+        
+        // Bar chart
+        const barCtx = document.getElementById('distribution-bar-chart').getContext('2d');
+        new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Anzahl Helfer',
+                    data: data,
+                    backgroundColor: 'rgba(0, 90, 159, 0.7)',
+                    borderColor: 'rgba(0, 90, 159, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Pie chart
+        const pieCtx = document.getElementById('distribution-pie-chart').getContext('2d');
+        new Chart(pieCtx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        'rgba(0, 90, 159, 0.8)',
+                        'rgba(76, 175, 80, 0.8)',
+                        'rgba(255, 152, 0, 0.8)',
+                        'rgba(244, 67, 54, 0.8)',
+                        'rgba(156, 39, 176, 0.8)',
+                        'rgba(33, 150, 243, 0.8)',
+                        'rgba(255, 193, 7, 0.8)',
+                        'rgba(96, 125, 139, 0.8)'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+    }
+    
+    function renderDistributionTable() {
+        const distribution = statsData.shift_distribution;
+        
+        if (distribution.length === 0) {
+            distributionTable.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px;">Keine Daten verfügbar</td></tr>';
+            return;
+        }
+        
+        let html = '';
+        distribution.forEach(d => {
+            html += `
+                <tr>
+                    <td>${d.shift_count}</td>
+                    <td class="number">${d.helper_count}</td>
+                    <td class="number">${d.percentage}%</td>
+                </tr>
+            `;
+        });
+        
+        distributionTable.innerHTML = html;
+    }
+    
+    function getTextColorForBackground(hexColor) {
+        if (!hexColor) return '#000';
+        const hex = hexColor.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        return brightness > 128 ? '#000' : '#fff';
+    }
+    
+    // Event listener for filter
+    teamFilter.addEventListener('change', () => {
+        renderKPIs();
+        renderTable();
+    });
+    
+    // Initial load
+    await loadData();
+});
+</script>
+</body>
+</html>

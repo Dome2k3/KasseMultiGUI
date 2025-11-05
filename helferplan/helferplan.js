@@ -1469,6 +1469,154 @@ app.delete('/api/cakes/:id', attachUser, requireEditor, async (req, res) => {
     }
 });
 
+// GET: Statistik-Daten
+app.get('/api/statistics', async (req, res) => {
+    try {
+        // Get all helpers with their teams
+        const helpers = await safeQuery(`
+            SELECT h.id, h.name, h.team_id, h.role, t.name as team_name, t.color_hex
+            FROM helferplan_helpers h
+            LEFT JOIN helferplan_teams t ON h.team_id = t.id
+            ORDER BY t.name, h.name
+        `);
+        
+        // Get tournament shifts (Plan)
+        const tournamentShifts = await safeQuery(`
+            SELECT 
+                ts.helper_id,
+                ts.start_time,
+                ts.end_time
+            FROM helferplan_tournament_shifts ts
+            WHERE ts.helper_id IS NOT NULL
+        `);
+        
+        // Get setup/cleanup shifts (Aufbau/Abbau)
+        const setupCleanupShifts = await safeQuery(`
+            SELECT 
+                helper_id,
+                day_type,
+                start_time,
+                end_time
+            FROM helferplan_setup_cleanup_shifts
+            WHERE helper_id IS NOT NULL
+        `);
+        
+        // Calculate statistics per helper
+        const helperStats = helpers.map(helper => {
+            // Calculate tournament shift hours
+            const tournamentHours = tournamentShifts
+                .filter(shift => shift.helper_id === helper.id)
+                .reduce((sum, shift) => {
+                    const start = new Date(shift.start_time);
+                    const end = new Date(shift.end_time);
+                    const hours = (end - start) / MS_PER_HOUR;
+                    return sum + hours;
+                }, 0);
+            
+            // Count tournament shifts
+            const tournamentShiftCount = tournamentShifts
+                .filter(shift => shift.helper_id === helper.id).length;
+            
+            // Calculate setup/cleanup shift hours
+            const setupCleanupHours = setupCleanupShifts
+                .filter(shift => shift.helper_id === helper.id)
+                .reduce((sum, shift) => {
+                    const start = new Date(shift.start_time);
+                    const end = new Date(shift.end_time);
+                    const hours = (end - start) / MS_PER_HOUR;
+                    return sum + hours;
+                }, 0);
+            
+            // Count setup/cleanup shifts
+            const setupCleanupShiftCount = setupCleanupShifts
+                .filter(shift => shift.helper_id === helper.id).length;
+            
+            return {
+                helper_id: helper.id,
+                helper_name: helper.name,
+                team_id: helper.team_id,
+                team_name: helper.team_name,
+                team_color: helper.color_hex,
+                role: helper.role,
+                plan_hours: tournamentHours,
+                plan_shifts: tournamentShiftCount,
+                setup_cleanup_hours: setupCleanupHours,
+                setup_cleanup_shifts: setupCleanupShiftCount,
+                total_hours: tournamentHours + setupCleanupHours,
+                total_shifts: tournamentShiftCount + setupCleanupShiftCount
+            };
+        });
+        
+        // Calculate shift distribution (how many helpers have X shifts)
+        const shiftCounts = helperStats.map(h => h.total_shifts);
+        const distribution = {};
+        shiftCounts.forEach(count => {
+            distribution[count] = (distribution[count] || 0) + 1;
+        });
+        
+        const shiftDistribution = Object.entries(distribution)
+            .map(([shifts, count]) => ({
+                shift_count: parseInt(shifts),
+                helper_count: count,
+                percentage: ((count / helpers.length) * 100).toFixed(1)
+            }))
+            .sort((a, b) => a.shift_count - b.shift_count);
+        
+        res.json({
+            helper_stats: helperStats,
+            shift_distribution: shiftDistribution,
+            total_helpers: helpers.length
+        });
+    } catch (err) {
+        console.error('DB-Fehler GET /api/statistics', err);
+        res.status(500).json({error: 'DB-Fehler beim Abrufen der Statistiken'});
+    }
+});
+
+// GET: Audit-Log (Changelog)
+app.get('/api/audit', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 100;
+        const offset = parseInt(req.query.offset) || 0;
+        
+        const auditLogs = await safeQuery(`
+            SELECT 
+                a.id,
+                a.actor_name,
+                a.action,
+                a.table_name,
+                a.row_id,
+                a.timestamp,
+                a.ip_addr,
+                a.before_data,
+                a.after_data,
+                a.note
+            FROM helferplan_audit a
+            ORDER BY a.timestamp DESC
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
+        
+        // Get total count
+        const [countResult] = await pool.query('SELECT COUNT(*) as total FROM helferplan_audit');
+        const total = countResult[0].total;
+        
+        res.json({
+            audit_logs: auditLogs.map(log => ({
+                ...log,
+                timestamp: mySQLDatetimeToISOString(log.timestamp),
+                before_data: log.before_data ? JSON.parse(log.before_data) : null,
+                after_data: log.after_data ? JSON.parse(log.after_data) : null
+            })),
+            total,
+            limit,
+            offset
+        });
+    } catch (err) {
+        console.error('DB-Fehler GET /api/audit', err);
+        res.status(500).json({error: 'DB-Fehler beim Abrufen der Audit-Logs'});
+    }
+});
+
 // --- 6. Server starten ---
 app.listen(port, () => {
     console.log(`Helferplan-Backend laeuft auf http://localhost:${port}`);
