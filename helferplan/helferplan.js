@@ -1501,6 +1501,14 @@ app.get('/api/statistics', async (req, res) => {
             WHERE helper_id IS NOT NULL
         `);
         
+        // Get cake count
+        const cakeCountResult = await safeQuery(`
+            SELECT COUNT(*) as total_cakes 
+            FROM helferplan_cakes
+            WHERE helper_id IS NOT NULL
+        `);
+        const totalCakes = cakeCountResult[0]?.total_cakes || 0;
+        
         // Calculate statistics per helper
         const helperStats = helpers.map(helper => {
             // Calculate tournament shift hours
@@ -1565,7 +1573,8 @@ app.get('/api/statistics', async (req, res) => {
         res.json({
             helper_stats: helperStats,
             shift_distribution: shiftDistribution,
-            total_helpers: helpers.length
+            total_helpers: helpers.length,
+            total_cakes: totalCakes
         });
     } catch (err) {
         console.error('DB-Fehler GET /api/statistics', err);

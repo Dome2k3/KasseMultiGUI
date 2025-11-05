@@ -214,6 +214,16 @@
                 <option value="">Alle Tabellen</option>
             </select>
         </div>
+        <div>
+            <label for="actor-filter">Benutzer filtern:</label>
+            <select id="actor-filter">
+                <option value="">Alle Benutzer</option>
+            </select>
+        </div>
+        <div>
+            <label for="date-filter">Datum filtern:</label>
+            <input type="date" id="date-filter">
+        </div>
     </div>
     
     <div id="changelog-list">
@@ -242,13 +252,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const changelogList = document.getElementById('changelog-list');
     const actionFilter = document.getElementById('action-filter');
     const tableFilter = document.getElementById('table-filter');
+    const actorFilter = document.getElementById('actor-filter');
+    const dateFilter = document.getElementById('date-filter');
     const loadMoreBtn = document.getElementById('load-more-btn');
     const loadMoreSection = document.getElementById('load-more-section');
     
     let allLogs = [];
     let displayedLogs = [];
+    let helpers = []; // Store helpers for ID to name resolution
     let offset = 0;
     const limit = 50;
+    
+    // Load helpers for name resolution
+    async function loadHelpers() {
+        try {
+            const response = await fetch(`${API_URL}/helpers`, { credentials: 'include' });
+            helpers = await response.json();
+        } catch (err) {
+            console.error('Error loading helpers:', err);
+        }
+    }
+    
+    // Get helper name by ID
+    function getHelperNameById(helperId) {
+        if (!helperId) return null;
+        const helper = helpers.find(h => h.id === helperId);
+        return helper ? helper.name : `ID: ${helperId}`;
+    }
     
     // Load audit logs
     async function loadAuditLogs() {
@@ -263,6 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Populate table filter
             if (offset === 0) {
                 populateTableFilter();
+                populateActorFilter();
             }
             
             // Show/hide load more button
@@ -290,13 +321,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     
+    function populateActorFilter() {
+        const actors = [...new Set(allLogs.map(log => log.actor_name))].sort();
+        actorFilter.innerHTML = '<option value="">Alle Benutzer</option>';
+        actors.forEach(actor => {
+            const option = document.createElement('option');
+            option.value = actor;
+            option.textContent = actor;
+            actorFilter.appendChild(option);
+        });
+    }
+    
     function applyFilters() {
         const actionValue = actionFilter.value;
         const tableValue = tableFilter.value;
+        const actorValue = actorFilter.value;
+        const dateValue = dateFilter.value;
         
         displayedLogs = allLogs.filter(log => {
             if (actionValue && log.action !== actionValue) return false;
             if (tableValue && log.table_name !== tableValue) return false;
+            if (actorValue && log.actor_name !== actorValue) return false;
+            
+            if (dateValue) {
+                const logDate = new Date(log.timestamp);
+                const filterDate = new Date(dateValue);
+                // Compare only date part (year, month, day) in UTC to avoid timezone issues
+                const logDateStr = `${logDate.getUTCFullYear()}-${String(logDate.getUTCMonth() + 1).padStart(2, '0')}-${String(logDate.getUTCDate()).padStart(2, '0')}`;
+                if (logDateStr !== dateValue) return false;
+            }
+            
             return true;
         });
         
@@ -403,9 +457,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     html += `
                         <p>
                             <span class="label">${fieldName}:</span>
-                            <span class="before">${formatValue(beforeValue)}</span>
+                            <span class="before">${formatValue(beforeValue, key)}</span>
                             →
-                            <span class="after">${formatValue(afterValue)}</span>
+                            <span class="after">${formatValue(afterValue, key)}</span>
                         </p>
                     `;
                 }
@@ -421,13 +475,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         Object.entries(data).forEach(([key, value]) => {
             if (key === 'id') return; // Skip ID
             const fieldName = getFieldDisplayName(key, tableName);
-            html += `<p><span class="label">${fieldName}:</span> ${formatValue(value)}</p>`;
+            html += `<p><span class="label">${fieldName}:</span> ${formatValue(value, key)}</p>`;
         });
         return html;
     }
     
-    function formatValue(value) {
+    function formatValue(value, fieldName) {
         if (value === null || value === undefined) return '<em>leer</em>';
+        
+        // Replace helper_id with helper name
+        if (fieldName === 'helper_id' && value) {
+            const helperName = getHelperNameById(value);
+            return helperName || String(value);
+        }
+        
         if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
         if (typeof value === 'object') return JSON.stringify(value);
         return String(value);
@@ -462,7 +523,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'team_id': 'Team-ID',
             'role': 'Rolle',
             'color_hex': 'Farbe',
-            'helper_id': 'Helfer-ID',
+            'helper_id': 'Helfer',
             'activity_id': 'Aktivität-ID',
             'start_time': 'Startzeit',
             'end_time': 'Endzeit',
@@ -483,6 +544,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Event listeners
     actionFilter.addEventListener('change', applyFilters);
     tableFilter.addEventListener('change', applyFilters);
+    actorFilter.addEventListener('change', applyFilters);
+    dateFilter.addEventListener('change', applyFilters);
     
     loadMoreBtn.addEventListener('click', async () => {
         loadMoreBtn.disabled = true;
@@ -496,7 +559,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Initial load
-    await loadAuditLogs();
+    await Promise.all([loadHelpers(), loadAuditLogs()]);
 });
 </script>
 </body>
