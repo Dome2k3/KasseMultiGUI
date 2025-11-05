@@ -10,11 +10,11 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 
-
 // --- 2. Express-App initialisieren ---
 const app = express();
 app.set('trust proxy', 1);
 const port = Number(process.env.PORT) || 3003;
+app.set('trust proxy', 1);
 
 // DB-Pool
 const pool = mysql.createPool({
@@ -32,7 +32,7 @@ const pool = mysql.createPool({
 const ADMIN_PASSWORD = '1881';
 
 // Session secret for JWT
-const SESSION_SECRET = process.env.HELFERPLAN_SESSION_SECRET || 'change-this-secret-in-production';
+const SESSION_SECRET = process.env.HELFERPLAN_SESSION_SECRET || '123441231235564352354';
 const SESSION_EXPIRY = '24h'; // JWT token validity
 
 // Time constants
@@ -181,7 +181,7 @@ const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
 // Configure CORS with specific origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(origin => origin.length > 0)
-    : ['http://localhost:3003', 'http://localhost:8080', 'http://127.0.0.1:3003', 'http://127.0.0.1:8080'];
+    : ['http://localhost:3003', 'http://localhost:8080', 'http://127.0.0.1:3003', 'http://127.0.0.1:8080', 'https://kassemultigui.onrender.com'];
 
 // Log allowed origins count for verification, but not the full list in production
 if (process.env.NODE_ENV === 'production') {
@@ -432,7 +432,7 @@ app.post('/api/auth/identify', authLimiter, async (req, res) => {
         // Set HTTP-only secure cookie
         // sameSite can be 'lax' (default, works for same-site and top-level navigation)
         // or 'none' (for cross-site requests, requires secure=true)
-        const sameSiteMode = process.env.COOKIE_SAMESITE || 'lax';
+        const sameSiteMode = process.env.COOKIE_SAMESITE || 'none';
         
         // Set secure flag for HTTPS connections or when sameSite is 'none'
         // req.secure is true when the connection is HTTPS (works with trust proxy)
