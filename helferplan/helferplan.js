@@ -1597,7 +1597,7 @@ app.get('/api/audit', async (req, res) => {
         `, [limit, offset]);
         
         // Get total count
-        const [countResult] = await pool.query('SELECT COUNT(*) as total FROM helferplan_audit');
+        const countResult = await safeQuery('SELECT COUNT(*) as total FROM helferplan_audit');
         const total = countResult[0].total;
         
         res.json({
