@@ -346,10 +346,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (dateValue) {
                 const logDate = new Date(log.timestamp);
                 const filterDate = new Date(dateValue);
-                // Compare only date part (ignore time)
-                const logDateStr = logDate.toISOString().split('T')[0];
-                const filterDateStr = filterDate.toISOString().split('T')[0];
-                if (logDateStr !== filterDateStr) return false;
+                // Compare only date part (year, month, day) in UTC to avoid timezone issues
+                const logDateStr = `${logDate.getUTCFullYear()}-${String(logDate.getUTCMonth() + 1).padStart(2, '0')}-${String(logDate.getUTCDate()).padStart(2, '0')}`;
+                if (logDateStr !== dateValue) return false;
             }
             
             return true;
@@ -560,8 +559,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Initial load
-    await loadHelpers();
-    await loadAuditLogs();
+    await Promise.all([loadHelpers(), loadAuditLogs()]);
 });
 </script>
 </body>
