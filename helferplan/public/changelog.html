@@ -260,6 +260,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     let allLogs = [];
     let displayedLogs = [];
     let helpers = []; // Store helpers for ID to name resolution
+    let teams = []; // Store teams for ID to name resolution
+    let activities = []; // Store activities for ID to name resolution
+    let settings = {}; // Store settings for event start time
     let offset = 0;
     const limit = 50;
     
@@ -273,11 +276,82 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
+    // Load teams for name resolution
+    async function loadTeams() {
+        try {
+            const response = await fetch(`${API_URL}/teams`, { credentials: 'include' });
+            teams = await response.json();
+        } catch (err) {
+            console.error('Error loading teams:', err);
+        }
+    }
+    
+    // Load activities for name resolution
+    async function loadActivities() {
+        try {
+            const response = await fetch(`${API_URL}/activities`, { credentials: 'include' });
+            activities = await response.json();
+        } catch (err) {
+            console.error('Error loading activities:', err);
+        }
+    }
+    
+    // Load settings for event start time
+    async function loadSettings() {
+        try {
+            const response = await fetch(`${API_URL}/settings`, { credentials: 'include' });
+            settings = await response.json();
+        } catch (err) {
+            console.error('Error loading settings:', err);
+        }
+    }
+    
     // Get helper name by ID
     function getHelperNameById(helperId) {
         if (!helperId) return null;
         const helper = helpers.find(h => h.id === helperId);
         return helper ? helper.name : `ID: ${helperId}`;
+    }
+    
+    // Get team name by ID
+    function getTeamNameById(teamId) {
+        if (!teamId) return null;
+        const team = teams.find(t => t.id === teamId);
+        return team ? team.name : null;
+    }
+    
+    // Get activity name by ID
+    function getActivityNameById(activityId) {
+        if (!activityId) return null;
+        const activity = activities.find(a => a.id === activityId);
+        return activity ? activity.name : null;
+    }
+    
+    // Convert hour index to readable time
+    function hourIndexToTime(index) {
+        const eventStartDate = settings.event_start_date || '2024-07-19T12:00:00Z';
+        const start = new Date(eventStartDate);
+        start.setHours(start.getHours() + index);
+        return start.toLocaleString('de-DE', { 
+            weekday: 'short',
+            day: '2-digit', 
+            month: '2-digit',
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+    }
+    
+    // Format time blocks to readable format
+    function formatTimeBlocks(blocks) {
+        if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
+            return '<em>keine Zeitblöcke</em>';
+        }
+        
+        return blocks.map(block => {
+            const startTime = hourIndexToTime(block.start);
+            const endTime = hourIndexToTime(block.end);
+            return `${startTime} – ${endTime}`;
+        }).join('<br>');
     }
     
     // Load audit logs
@@ -483,10 +557,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     function formatValue(value, fieldName) {
         if (value === null || value === undefined) return '<em>leer</em>';
         
-        // Replace helper_id with helper name
+        // Replace helper_id with helper name and ID
         if (fieldName === 'helper_id' && value) {
             const helperName = getHelperNameById(value);
-            return helperName || String(value);
+            if (helperName && !helperName.startsWith('ID:')) {
+                return `${helperName} (ID: ${value})`;
+            }
+            return `ID: ${value}`;
+        }
+        
+        // Replace team_id with team name and ID
+        if (fieldName === 'team_id' && value) {
+            const teamName = getTeamNameById(value);
+            if (teamName) {
+                return `${teamName} (ID: ${value})`;
+            }
+            return `ID: ${value}`;
+        }
+        
+        // Replace activity_id with activity name and ID
+        if (fieldName === 'activity_id' && value) {
+            const activityName = getActivityNameById(value);
+            if (activityName) {
+                return `${activityName} (ID: ${value})`;
+            }
+            return `ID: ${value}`;
+        }
+        
+        // Format allowed_time_blocks
+        if (fieldName === 'allowed_time_blocks') {
+            if (typeof value === 'string') {
+                try {
+                    value = JSON.parse(value);
+                } catch (e) {
+                    return String(value);
+                }
+            }
+            if (Array.isArray(value)) {
+                return formatTimeBlocks(value);
+            }
+            return String(value);
         }
         
         if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
@@ -520,11 +630,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     function getFieldDisplayName(fieldName, tableName) {
         const fieldNames = {
             'name': 'Name',
-            'team_id': 'Team-ID',
+            'team_id': 'Team',
             'role': 'Rolle',
             'color_hex': 'Farbe',
             'helper_id': 'Helfer',
-            'activity_id': 'Aktivität-ID',
+            'activity_id': 'Aktivität',
             'start_time': 'Startzeit',
             'end_time': 'Endzeit',
             'day_type': 'Tag-Typ',
@@ -536,7 +646,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             'sort_order': 'Sortierung',
             'setting_key': 'Einstellungs-Schlüssel',
             'setting_value': 'Einstellungs-Wert',
-            'is_override': 'Überschreibung'
+            'is_override': 'Überschreibung',
+            'allowed_time_blocks': 'Erlaubte Zeitblöcke'
         };
         return fieldNames[fieldName] || fieldName;
     }
@@ -559,7 +670,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Initial load
-    await Promise.all([loadHelpers(), loadAuditLogs()]);
+    await Promise.all([loadHelpers(), loadTeams(), loadActivities(), loadSettings(), loadAuditLogs()]);
 });
 </script>
 </body>

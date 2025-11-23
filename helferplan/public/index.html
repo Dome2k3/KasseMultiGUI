@@ -279,6 +279,25 @@
         </div>
     </div>
 
+    <!-- Benutzerverwaltung Section -->
+    <div class="section-group">
+        <div class="section-header" onclick="toggleSection('users')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSection('users');}" role="button" tabindex="0" aria-expanded="true" aria-controls="content-users">
+            <h2>Benutzerverwaltung (Editoren & Admins)</h2>
+            <span class="toggle-icon" id="toggle-users" aria-hidden="true">▼</span>
+        </div>
+        
+        <div class="section-content" id="content-users">
+            <div class="subsection">
+                <p style="color: #666; margin-bottom: 12px;">
+                    Hier sehen Sie alle Benutzer mit Bearbeitungs- oder Admin-Rechten.
+                </p>
+                <div id="users-list">
+                    <p style="text-align: center; color: #999;">Lade Benutzer...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Tätigkeiten Section -->
     <div class="section-group">
         <div class="section-header" onclick="toggleSection('taetigkeiten')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSection('taetigkeiten');}" role="button" tabindex="0" aria-expanded="true" aria-controls="content-taetigkeiten">
