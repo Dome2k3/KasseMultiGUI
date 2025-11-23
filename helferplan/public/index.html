@@ -239,6 +239,22 @@
                     <button type="submit">Anlegen</button>
                 </form>
 
+                <h4 style="margin-top: 16px; font-size: 14px;">Team bearbeiten</h4>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+                    <div>
+                        <select id="edit-team-select" style="padding: 8px;">
+                            <option value="">Team auswählen</option>
+                        </select>
+                    </div>
+                    <div>
+                        <input type="text" id="edit-team-name-input" placeholder="Neuer Name" style="padding: 8px;">
+                    </div>
+                    <div>
+                        <input type="color" id="edit-team-color-input" value="#e66465" style="padding: 4px; height: 38px;">
+                    </div>
+                    <button id="edit-team-button" style="padding: 8px 16px;">Speichern</button>
+                </div>
+
                 <h4 style="margin-top: 16px; font-size: 14px;">Team löschen</h4>
                 <div>
                     <select id="delete-team-select">

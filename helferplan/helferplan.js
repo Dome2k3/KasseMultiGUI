@@ -525,6 +525,42 @@ app.post('/api/teams', attachUser, requireEditor, async (req, res) => {
     }
 });
 
+// Team aktualisieren
+app.put('/api/teams/:id', attachUser, requireEditor, async (req, res) => {
+    try {
+        const teamId = Number(req.params.id);
+        const {name, color_hex} = req.body;
+        if (!name || !color_hex) return res.status(400).json({error: 'Name und Farbwert sind erforderlich.'});
+        
+        // Get before state for audit log
+        const [beforeRows] = await pool.query("SELECT id, name, color_hex FROM helferplan_teams WHERE id = ?;", [teamId]);
+        if (!beforeRows || beforeRows.length === 0) {
+            return res.status(404).json({error: 'Team nicht gefunden.'});
+        }
+        const before = beforeRows[0];
+        
+        // Update team
+        await pool.query("UPDATE helferplan_teams SET name = ?, color_hex = ? WHERE id = ?;", [name, color_hex, teamId]);
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'UPDATE',
+            tableName: 'helferplan_teams',
+            rowId: teamId,
+            before: before,
+            after: { id: teamId, name, color_hex },
+            req
+        });
+        
+        res.json({id: teamId, name, color_hex});
+    } catch (err) {
+        console.error('DB-Fehler PUT /api/teams/:id', err);
+        res.status(500).json({error: 'DB-Fehler beim Aktualisieren des Teams'});
+    }
+});
+
 // Helfer abrufen
 app.get('/api/helpers', async (req, res) => {
     try {
