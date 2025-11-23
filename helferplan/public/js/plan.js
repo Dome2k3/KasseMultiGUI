@@ -35,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const HOUR_PX = 40;      // width per hour column
     const LEFT_COL_PX = 200; // left name column width
     const DEFAULT_ROLE = 'Alle'; // default role requirement value
+    const DAY_TRANSITION_FR_SA = 12; // Friday to Saturday transition at hour 12
+    const DAY_TRANSITION_SA_SO = 36; // Saturday to Sunday transition at hour 36
 
     // State
     let allHelpers = [];
@@ -395,8 +397,8 @@ document.addEventListener('DOMContentLoaded', () => {
             hour.className = 'hour-slot';
             hour.textContent = `${(12 + i) % 24}:00`;
             
-            // Add visual separator for day transitions (Fr→Sa at i=12, Sa→So at i=36)
-            if (i === 12 || i === 36) {
+            // Add visual separator for day transitions
+            if (i === DAY_TRANSITION_FR_SA || i === DAY_TRANSITION_SA_SO) {
                 hour.style.borderLeft = '2px solid #000';
                 hour.style.marginLeft = '4px';
             }
@@ -460,8 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.warn('Aktivität ohne ID erkannt:', activity);
                     }
                     
-                    // Add visual separator for day transitions (Fr→Sa at i=12, Sa→So at i=36)
-                    if (i === 12 || i === 36) {
+                    // Add visual separator for day transitions
+                    if (i === DAY_TRANSITION_FR_SA || i === DAY_TRANSITION_SA_SO) {
                         slot.style.borderLeft = '2px solid #000';
                         slot.style.marginLeft = '4px';
                     }
