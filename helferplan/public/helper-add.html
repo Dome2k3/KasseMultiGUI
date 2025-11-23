@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helfer hinzufügen - Helferplan</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .add-helper-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .add-helper-container h1 {
+            color: #005A9F;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #005A9F;
+            box-shadow: 0 0 0 2px rgba(0, 90, 159, 0.1);
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex: 1;
+        }
+        
+        .btn-primary {
+            background: #005A9F;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #004080;
+        }
+        
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: #666;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #444;
+        }
+        
+        .message {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+        
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #81c784;
+        }
+        
+        .auth-warning {
+            background: #fff3e0;
+            color: #e65100;
+            padding: 16px;
+            border-radius: 4px;
+            border-left: 4px solid #ff9800;
+            margin-bottom: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="index.html">Admin: Stammdaten</a>
+    <a href="plan.html">Turnier-Planung</a>
+    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="aufbau-abbau.html">Auf-/Abbau</a>
+    <a href="kuchen.html">Kuchen</a>
+    <a href="statistik.html">Statistik</a>
+    <a href="changelog.html">Änderungen</a>
+    <a href="helper-add.html" class="active">Helfer hinzufügen</a>
+</nav>
+
+<main>
+    <div class="add-helper-container">
+        <h1>Neuen Helfer hinzufügen</h1>
+        
+        <div id="auth-check" class="loading">
+            Prüfe Berechtigung...
+        </div>
+        
+        <div id="add-helper-form-container" style="display: none;">
+            <div id="message" class="message"></div>
+            
+            <form id="add-helper-form">
+                <div class="form-group">
+                    <label for="helper-name">Name des Helfers *</label>
+                    <input 
+                        type="text" 
+                        id="helper-name" 
+                        name="name" 
+                        placeholder="Vorname Nachname" 
+                        required
+                        maxlength="255"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="helper-team">Team *</label>
+                    <select id="helper-team" name="team_id" required>
+                        <option value="">Team auswählen...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="helper-role">Rolle *</label>
+                    <select id="helper-role" name="role" required>
+                        <option value="">Rolle auswählen...</option>
+                        <option value="Minderjaehrig">Minderjährig</option>
+                        <option value="Erwachsen">Erwachsen</option>
+                        <option value="Orga">Orga</option>
+                    </select>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="reset-btn">Zurücksetzen</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Helfer anlegen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</main>
+
+<script src="config.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    // API URL setup
+    const API_URL = (() => {
+        const meta = document.querySelector('meta[name="api-url-helferplan"]');
+        if (meta && meta.content) return meta.content.replace(/\/$/, '');
+        if (window.__API_URL_HELFERPLAN) return String(window.__API_URL_HELFERPLAN).replace(/\/$/, '');
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return `${window.location.protocol}//${window.location.hostname}:3003/api`;
+        }
+        return `${window.location.origin}/api`;
+    })();
+    
+    const authCheck = document.getElementById('auth-check');
+    const formContainer = document.getElementById('add-helper-form-container');
+    const form = document.getElementById('add-helper-form');
+    const messageDiv = document.getElementById('message');
+    const helperTeamSelect = document.getElementById('helper-team');
+    const submitBtn = document.getElementById('submit-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    
+    // Check authentication
+    async function checkAuth() {
+        try {
+            const response = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
+            const data = await response.json();
+            
+            if (!data.authenticated) {
+                authCheck.innerHTML = `
+                    <div class="auth-warning">
+                        <strong>Anmeldung erforderlich</strong>
+                        <p style="margin: 8px 0 0 0;">Sie müssen sich anmelden, um Helfer hinzuzufügen.</p>
+                        <p style="margin: 8px 0 0 0;">
+                            <a href="index.html" style="color: #005A9F; font-weight: 600;">Zur Admin-Seite</a> oder
+                            <a href="plan.html" style="color: #005A9F; font-weight: 600;">Zur Planungs-Seite</a>
+                        </p>
+                    </div>
+                `;
+                return false;
+            }
+            
+            if (!data.user.is_editor && !data.user.is_admin) {
+                authCheck.innerHTML = `
+                    <div class="auth-warning">
+                        <strong>Keine Berechtigung</strong>
+                        <p style="margin: 8px 0 0 0;">Sie benötigen Bearbeitungsrechte, um Helfer hinzuzufügen.</p>
+                    </div>
+                `;
+                return false;
+            }
+            
+            // User is authenticated and has editor/admin rights
+            authCheck.style.display = 'none';
+            formContainer.style.display = 'block';
+            return true;
+        } catch (err) {
+            console.error('Auth check failed:', err);
+            authCheck.innerHTML = `
+                <div class="auth-warning">
+                    <strong>Verbindungsfehler</strong>
+                    <p style="margin: 8px 0 0 0;">Konnte Authentifizierung nicht überprüfen.</p>
+                </div>
+            `;
+            return false;
+        }
+    }
+    
+    // Load teams
+    async function loadTeams() {
+        try {
+            const response = await fetch(`${API_URL}/teams`, { credentials: 'include' });
+            const teams = await response.json();
+            
+            teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.id;
+                option.textContent = team.name;
+                helperTeamSelect.appendChild(option);
+            });
+        } catch (err) {
+            console.error('Failed to load teams:', err);
+            showMessage('Fehler beim Laden der Teams.', 'error');
+        }
+    }
+    
+    // Show message
+    function showMessage(text, type = 'success') {
+        messageDiv.textContent = text;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
+        
+        // Auto-hide success messages after 5 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+    }
+    
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const name = document.getElementById('helper-name').value.trim();
+        const teamId = document.getElementById('helper-team').value;
+        const role = document.getElementById('helper-role').value;
+        
+        if (!name || !teamId || !role) {
+            showMessage('Bitte füllen Sie alle Pflichtfelder aus.', 'error');
+            return;
+        }
+        
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Wird angelegt...';
+        
+        try {
+            const response = await fetch(`${API_URL}/helpers`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    name,
+                    team_id: parseInt(teamId),
+                    role
+                })
+            });
+            
+            if (response.ok) {
+                showMessage(`Helfer "${name}" wurde erfolgreich angelegt.`, 'success');
+                form.reset();
+            } else {
+                const errorData = await response.json();
+                showMessage(errorData.error || 'Fehler beim Anlegen des Helfers.', 'error');
+            }
+        } catch (err) {
+            console.error('Failed to create helper:', err);
+            showMessage('Verbindungsfehler beim Anlegen des Helfers.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Helfer anlegen';
+        }
+    });
+    
+    // Handle reset button
+    resetBtn.addEventListener('click', () => {
+        form.reset();
+        messageDiv.style.display = 'none';
+    });
+    
+    // Initialize
+    const isAuthenticated = await checkAuth();
+    if (isAuthenticated) {
+        await loadTeams();
+    }
+});
+</script>
+</body>
+</html>

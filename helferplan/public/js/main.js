@@ -635,11 +635,81 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Load and render users list
+    async function fetchAndRenderUsers() {
+        const usersList = document.getElementById('users-list');
+        if (!usersList) return;
+        
+        try {
+            const response = await fetch(`${API_URL}/users`, { credentials: 'include' });
+            
+            if (response.status === 403) {
+                usersList.innerHTML = '<p style="text-align: center; color: #999;">Nur für Administratoren verfügbar.</p>';
+                return;
+            }
+            
+            if (!response.ok) {
+                throw new Error('Fehler beim Laden der Benutzer');
+            }
+            
+            const users = await response.json();
+            
+            if (users.length === 0) {
+                usersList.innerHTML = '<p style="text-align: center; color: #999;">Keine Benutzer gefunden.</p>';
+                return;
+            }
+            
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr style="background: #f5f5f5; border-bottom: 2px solid #005A9F;">';
+            html += '<th style="text-align: left; padding: 8px;">Name</th>';
+            html += '<th style="text-align: left; padding: 8px;">E-Mail</th>';
+            html += '<th style="text-align: center; padding: 8px;">Editor</th>';
+            html += '<th style="text-align: center; padding: 8px;">Admin</th>';
+            html += '<th style="text-align: center; padding: 8px;">Zuletzt gesehen</th>';
+            html += '</tr></thead><tbody>';
+            
+            users.forEach(user => {
+                const lastSeen = new Date(user.last_seen).toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                html += '<tr style="border-bottom: 1px solid #e0e0e0;">';
+                html += `<td style="padding: 8px;">${escapeHtml(user.display_name)}</td>`;
+                html += `<td style="padding: 8px;">${escapeHtml(user.email)}</td>`;
+                html += `<td style="text-align: center; padding: 8px;">${user.is_editor ? '✓' : '—'}</td>`;
+                html += `<td style="text-align: center; padding: 8px;">${user.is_admin ? '✓' : '—'}</td>`;
+                html += `<td style="text-align: center; padding: 8px; font-size: 12px; color: #666;">${lastSeen}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            usersList.innerHTML = html;
+        } catch (err) {
+            console.error('Fehler beim Laden der Benutzer:', err);
+            usersList.innerHTML = '<p style="text-align: center; color: #b00020;">Fehler beim Laden der Benutzer.</p>';
+        }
+    }
+    
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     async function initialLoad() {
         await fetchAndRenderTeams();
         await fetchAndRenderHelpers();
         await fetchAndRenderGroups();
         await fetchAndRenderActivities();
+        await fetchAndRenderUsers();
         await loadSettings();
         
         // Populate export team filter

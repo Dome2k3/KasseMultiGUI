@@ -588,6 +588,22 @@ app.delete('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
         
+        // Check if helper has any shifts assigned (combined query for efficiency)
+        const [shiftCounts] = await pool.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM helferplan_tournament_shifts WHERE helper_id = ?) as tournament_count,
+                (SELECT COUNT(*) FROM helferplan_setup_cleanup_shifts WHERE helper_id = ?) as setup_cleanup_count
+        `, [id, id]);
+        
+        const tournamentShiftCount = shiftCounts[0].tournament_count || 0;
+        const setupCleanupShiftCount = shiftCounts[0].setup_cleanup_count || 0;
+        
+        if (tournamentShiftCount > 0 || setupCleanupShiftCount > 0) {
+            return res.status(400).json({ 
+                error: 'Helfer kann nicht gelöscht werden: Er ist noch in Schichten eingetragen.' 
+            });
+        }
+        
         // Get helper data before deletion for audit log
         const [helpers] = await pool.query("SELECT * FROM helferplan_helpers WHERE id = ?;", [id]);
         const helper = helpers.length > 0 ? helpers[0] : null;
@@ -1579,6 +1595,34 @@ app.get('/api/statistics', async (req, res) => {
     } catch (err) {
         console.error('DB-Fehler GET /api/statistics', err);
         res.status(500).json({error: 'DB-Fehler beim Abrufen der Statistiken'});
+    }
+});
+
+// GET: List all users with editor or admin privileges
+app.get('/api/users', attachUser, requireAdmin, async (req, res) => {
+    try {
+        const users = await safeQuery(`
+            SELECT 
+                id,
+                email,
+                display_name,
+                is_editor,
+                is_admin,
+                created_at,
+                last_seen
+            FROM helferplan_users
+            WHERE is_editor = 1 OR is_admin = 1
+            ORDER BY display_name ASC
+        `);
+        
+        res.json(users.map(user => ({
+            ...user,
+            created_at: mySQLDatetimeToISOString(user.created_at),
+            last_seen: mySQLDatetimeToISOString(user.last_seen)
+        })));
+    } catch (err) {
+        console.error('DB-Fehler GET /api/users', err);
+        res.status(500).json({error: 'DB-Fehler beim Abrufen der Benutzer'});
     }
 });
 
