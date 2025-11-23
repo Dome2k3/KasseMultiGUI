@@ -23,6 +23,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Elemente für Teams
     const teamList = document.getElementById('team-list');
     const addTeamForm = document.getElementById('add-team-form');
+    const editTeamSelect = document.getElementById('edit-team-select');
+    const editTeamNameInput = document.getElementById('edit-team-name-input');
+    const editTeamColorInput = document.getElementById('edit-team-color-input');
+    const editTeamButton = document.getElementById('edit-team-button');
     const deleteTeamSelect = document.getElementById('delete-team-select');
     const deleteTeamButton = document.getElementById('delete-team-button');
 
@@ -119,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
             allTeamsData = await response.json();
             teamList.innerHTML = '';
             helperTeamSelect.innerHTML = '<option value="" disabled selected>Team auswählen</option>';
+            editTeamSelect.innerHTML = '<option value="">Team auswählen</option>';
             deleteTeamSelect.innerHTML = '<option value="">Team auswählen</option>';
             helperFilterTeam.innerHTML = '<option value="">Alle</option>';
             allTeamsData.forEach(team => {
@@ -158,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 option.textContent = team.name;
                 helperTeamSelect.appendChild(option);
 
+                const editOption = option.cloneNode(true);
+                editTeamSelect.appendChild(editOption);
+
                 const delOption = option.cloneNode(true);
                 deleteTeamSelect.appendChild(delOption);
 
@@ -182,6 +190,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     deleteTeamButton.addEventListener('click', () => deleteTeam(deleteTeamSelect.value));
+
+    // Update edit inputs when a team is selected
+    editTeamSelect.addEventListener('change', () => {
+        const teamId = editTeamSelect.value;
+        if (!teamId) {
+            editTeamNameInput.value = '';
+            editTeamColorInput.value = '#e66465';
+            return;
+        }
+        const team = allTeamsData.find(t => String(t.id) === String(teamId));
+        if (team) {
+            editTeamNameInput.value = team.name;
+            editTeamColorInput.value = team.color_hex;
+        }
+    });
+
+    async function editTeam(id) {
+        if (!id) return alert('Kein Team ausgewählt.');
+        const name = editTeamNameInput.value.trim();
+        const color_hex = editTeamColorInput.value;
+        if (!name) return alert('Bitte geben Sie einen Namen ein.');
+        try {
+            const res = await fetch(`${API_URL}/teams/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ name, color_hex })
+            });
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.error || 'Aktualisieren fehlgeschlagen');
+            }
+            await fetchAndRenderTeams();
+            await fetchAndRenderHelpers(); // team changes can affect helper list
+            editTeamSelect.value = '';
+            editTeamNameInput.value = '';
+            editTeamColorInput.value = '#e66465';
+            alert('Team erfolgreich aktualisiert!');
+        } catch (err) {
+            console.error('Fehler beim Aktualisieren Team:', err);
+            alert('Aktualisieren fehlgeschlagen: ' + err.message);
+        }
+    }
+
+    editTeamButton.addEventListener('click', () => editTeam(editTeamSelect.value));
 
     async function fetchAndRenderHelpers() {
         try {

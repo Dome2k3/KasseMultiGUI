@@ -394,6 +394,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const hour = document.createElement('div');
             hour.className = 'hour-slot';
             hour.textContent = `${(12 + i) % 24}:00`;
+            
+            // Add visual separator for day transitions (Fr→Sa at i=12, Sa→So at i=36)
+            if (i === 12 || i === 36) {
+                hour.style.borderLeft = '2px solid #000';
+                hour.style.marginLeft = '4px';
+            }
+            
             hoursWrapper.appendChild(hour);
         }
         timelineHeader.appendChild(hoursWrapper);
@@ -451,6 +458,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Validierung: Prüfe ob activity.id gesetzt ist
                     if (!activity.id) {
                         console.warn('Aktivität ohne ID erkannt:', activity);
+                    }
+                    
+                    // Add visual separator for day transitions (Fr→Sa at i=12, Sa→So at i=36)
+                    if (i === 12 || i === 36) {
+                        slot.style.borderLeft = '2px solid #000';
+                        slot.style.marginLeft = '4px';
                     }
 
                     // Check if this slot is locked
