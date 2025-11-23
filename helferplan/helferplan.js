@@ -588,18 +588,15 @@ app.delete('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
     try {
         const id = req.params.id;
         
-        // Check if helper has any shifts assigned
-        const [tournamentShifts] = await pool.query(
-            "SELECT COUNT(*) as count FROM helferplan_tournament_shifts WHERE helper_id = ?;", 
-            [id]
-        );
-        const tournamentShiftCount = tournamentShifts[0].count || 0;
+        // Check if helper has any shifts assigned (combined query for efficiency)
+        const [shiftCounts] = await pool.query(`
+            SELECT 
+                (SELECT COUNT(*) FROM helferplan_tournament_shifts WHERE helper_id = ?) as tournament_count,
+                (SELECT COUNT(*) FROM helferplan_setup_cleanup_shifts WHERE helper_id = ?) as setup_cleanup_count
+        `, [id, id]);
         
-        const [setupCleanupShifts] = await pool.query(
-            "SELECT COUNT(*) as count FROM helferplan_setup_cleanup_shifts WHERE helper_id = ?;", 
-            [id]
-        );
-        const setupCleanupShiftCount = setupCleanupShifts[0].count || 0;
+        const tournamentShiftCount = shiftCounts[0].tournament_count || 0;
+        const setupCleanupShiftCount = shiftCounts[0].setup_cleanup_count || 0;
         
         if (tournamentShiftCount > 0 || setupCleanupShiftCount > 0) {
             return res.status(400).json({ 
