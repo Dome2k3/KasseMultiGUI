@@ -1706,6 +1706,130 @@ app.get('/api/audit', async (req, res) => {
     }
 });
 
+// --- Tournament Data Reset Endpoints ---
+
+// GET: Get current reset password (admin only - for display in admin area)
+app.get('/api/reset-password', attachUser, requireAdmin, async (req, res) => {
+    try {
+        const [rows] = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'reset_password'");
+        const password = rows.length > 0 ? rows[0].setting_value : '';
+        res.json({ password });
+    } catch (err) {
+        console.error('DB-Fehler GET /api/reset-password', err);
+        res.status(500).json({ error: 'DB-Fehler beim Abrufen des Passworts' });
+    }
+});
+
+// POST: Set reset password (admin only)
+app.post('/api/reset-password', attachUser, requireAdmin, async (req, res) => {
+    try {
+        const { password } = req.body;
+        if (!password || password.length < 4) {
+            return res.status(400).json({ error: 'Passwort muss mindestens 4 Zeichen haben.' });
+        }
+        
+        await pool.query(
+            "INSERT INTO helferplan_settings (setting_key, setting_value) VALUES ('reset_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
+            [password]
+        );
+        
+        // Audit log
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'UPDATE',
+            tableName: 'helferplan_settings',
+            before: null,
+            after: { reset_password: '***' },
+            req,
+            note: 'Reset password updated'
+        });
+        
+        res.json({ success: true, message: 'Passwort gespeichert' });
+    } catch (err) {
+        console.error('DB-Fehler POST /api/reset-password', err);
+        res.status(500).json({ error: 'DB-Fehler beim Speichern des Passworts' });
+    }
+});
+
+// POST: Reset tournament data (requires password)
+app.post('/api/reset-tournament-data', attachUser, requireEditor, async (req, res) => {
+    try {
+        const { password } = req.body;
+        
+        if (!password) {
+            return res.status(400).json({ error: 'Passwort erforderlich' });
+        }
+        
+        // Check if password matches
+        const [rows] = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'reset_password'");
+        const storedPassword = rows.length > 0 ? rows[0].setting_value : null;
+        
+        if (!storedPassword) {
+            return res.status(400).json({ error: 'Kein Reset-Passwort konfiguriert. Bitte kontaktieren Sie einen Administrator.' });
+        }
+        
+        if (password !== storedPassword) {
+            return res.status(401).json({ error: 'Falsches Passwort' });
+        }
+        
+        // Get counts before deletion for audit log
+        const [tournamentCount] = await pool.query("SELECT COUNT(*) as count FROM helferplan_tournament_shifts");
+        const [setupCount] = await pool.query("SELECT COUNT(*) as count FROM helferplan_setup_cleanup_shifts");
+        const [cakesCount] = await pool.query("SELECT COUNT(*) as count FROM helferplan_cakes");
+        
+        const beforeData = {
+            tournament_shifts: tournamentCount[0].count,
+            setup_cleanup_shifts: setupCount[0].count,
+            cakes: cakesCount[0].count
+        };
+        
+        // Start transaction for atomic deletion
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+            
+            // Delete all tournament shifts
+            await conn.query("DELETE FROM helferplan_tournament_shifts");
+            
+            // Delete all setup/cleanup shifts (but keep the helper_id NULL entries if any slot structure needs to remain)
+            // Actually, we just clear helper_id to NULL to keep the slot structure
+            await conn.query("UPDATE helferplan_setup_cleanup_shifts SET helper_id = NULL");
+            
+            // Delete all cake entries
+            await conn.query("DELETE FROM helferplan_cakes");
+            
+            await conn.commit();
+            
+            // Audit log
+            await logAudit({
+                userId: req.currentUser.id,
+                actorName: req.currentUser.display_name,
+                action: 'DELETE',
+                tableName: 'tournament_data_reset',
+                before: beforeData,
+                after: { tournament_shifts: 0, setup_cleanup_shifts: 'cleared', cakes: 0 },
+                req,
+                note: 'Tournament data reset performed'
+            });
+            
+            res.json({ 
+                success: true, 
+                message: 'Turnierdaten wurden erfolgreich zurückgesetzt',
+                deleted: beforeData
+            });
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
+    } catch (err) {
+        console.error('DB-Fehler POST /api/reset-tournament-data', err);
+        res.status(500).json({ error: 'DB-Fehler beim Zurücksetzen der Turnierdaten' });
+    }
+});
+
 // --- 6. Server starten ---
 app.listen(port, () => {
     console.log(`Helferplan-Backend laeuft auf http://localhost:${port}`);
