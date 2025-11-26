@@ -32,6 +32,7 @@ const categoryStyles = {
     'Süßes': { color: '#e91e63', icon: '🍬' },
     'Kaffee': { color: '#795548', icon: '☕' },
     'Bier': { color: '#f39c12', icon: '🍺' },
+    'Weizen': { color: '#f39c12', icon: '🍺' },
     'Wein': { color: '#8e44ad', icon: '🍷' },
     'Alkohol': { color: '#c0392b', icon: '🍹' },
     'Frühstück': { color: '#27ae60', icon: '🥐' },
@@ -43,6 +44,8 @@ const categoryStyles = {
     'Fast Food': { color: '#ff5722', icon: '🍔' },
     'Fleisch': { color: '#b71c1c', icon: '🥩' },
     'zHelfer': { color: '#607d8b', icon: '👤' },
+    'Softdrinks': { color: '#ff6b6b', icon: '🥤' },
+    'Apfelschorle': { color: '#7cb342', icon: '🍾' },
     'Sonstiges': { color: '#7f8c8d', icon: '📦' }
 };
 
