@@ -47,13 +47,21 @@
     }
 
     /* Activity group headers sticky when scrolling horizontally */
+    /* Activity group headers - text stays visible when scrolling */
     .activity-group-header { 
       padding:8px 0 4px 0; 
       font-weight:700; 
       grid-column:1 / -1; 
-      background: #fff; 
-      position: sticky; 
-      left: 0; 
+      background: linear-gradient(to right, #fff 200px, transparent 200px);
+      position: relative;
+    }
+    
+    .activity-group-header-text {
+      position: sticky;
+      left: 0;
+      background: #fff;
+      display: inline-block;
+      padding-right: 20px;
       z-index: 6;
     }
     #grid-container { overflow: visible; }
@@ -453,7 +461,11 @@
       for (const groupName in groups) {
         const groupHeader = document.createElement('div');
         groupHeader.className = 'activity-group-header';
-        groupHeader.textContent = groupName;
+        // Wrap group text in sticky span so it stays visible when scrolling
+        const groupText = document.createElement('span');
+        groupText.className = 'activity-group-header-text';
+        groupText.textContent = groupName;
+        groupHeader.appendChild(groupText);
         gridContainer.appendChild(groupHeader);
 
         groups[groupName].forEach(activity => {

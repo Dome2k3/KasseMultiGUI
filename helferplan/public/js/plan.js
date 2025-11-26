@@ -434,7 +434,11 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const groupName in groups) {
             const groupHeader = document.createElement('div');
             groupHeader.className = 'activity-group-header';
-            groupHeader.textContent = groupName;
+            // Wrap group text in sticky span so it stays visible when scrolling
+            const groupText = document.createElement('span');
+            groupText.className = 'activity-group-header-text';
+            groupText.textContent = groupName;
+            groupHeader.appendChild(groupText);
             gridContainer.appendChild(groupHeader);
 
             groups[groupName].forEach(activity => {

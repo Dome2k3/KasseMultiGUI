@@ -591,6 +591,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     saveSettingsButton.addEventListener('click', async () => {
+        // Show warning about changing event dates
+        if (!confirm('Hinweis: Wenn Sie die Event-Daten ändern (z.B. Datum des Turniers), können bereits eingetragene Schichten nicht mehr korrekt angezeigt werden.\n\nFalls Sie ein neues Turnier planen möchten, nutzen Sie bitte zuerst die Funktion "Turnierdaten löschen" im Bereich "Event-Daten & Einstellungen" weiter unten.\n\nMöchten Sie trotzdem fortfahren?')) {
+            return;
+        }
+        
         try {
             const payload = {
                 event_friday: settingFriday.value || '',
@@ -611,6 +616,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save Auf-/Abbau settings
     saveAufbauSettingsButton.addEventListener('click', async () => {
+        // Show warning about changing setup/teardown dates
+        if (!confirm('Hinweis: Wenn Sie die Auf-/Abbau-Daten ändern, können bereits eingetragene Schichten nicht mehr korrekt angezeigt werden.\n\nFalls Sie ein neues Turnier planen möchten, nutzen Sie bitte zuerst die Funktion "Turnierdaten löschen" im Bereich "Event-Daten & Einstellungen" weiter unten.\n\nMöchten Sie trotzdem fortfahren?')) {
+            return;
+        }
+        
         try {
             // Convert hour numbers to HH:00 format
             const formatHour = (val) => {
@@ -1211,5 +1221,278 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.save(`Kuchen-${teamName}.pdf`);
     }
 
+    // --- Authentication Functions ---
+    let currentUser = null;
+    
+    async function checkCurrentUser() {
+        try {
+            const res = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.authenticated && data.user) {
+                    currentUser = data.user;
+                    updateAuthUI();
+                    return true;
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to check current user:', err);
+        }
+        currentUser = null;
+        updateAuthUI();
+        return false;
+    }
+
+    function updateAuthUI() {
+        const authStatus = document.getElementById('auth-status');
+        const writeModeBtn = document.getElementById('write-mode-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const resetPasswordSection = document.getElementById('reset-password-section');
+        
+        if (!authStatus || !writeModeBtn) return;
+        
+        if (currentUser && currentUser.is_admin) {
+            authStatus.textContent = `Admin: ${currentUser.display_name}`;
+            authStatus.style.display = 'inline-block';
+            authStatus.style.color = '#28a745';
+            authStatus.style.fontWeight = 'bold';
+            writeModeBtn.style.display = 'none';
+            if (logoutBtn) logoutBtn.style.display = 'inline-block';
+            if (resetPasswordSection) resetPasswordSection.style.display = 'block';
+            loadResetPassword();
+        } else if (currentUser && currentUser.is_editor) {
+            authStatus.textContent = `Bearbeite als: ${currentUser.display_name}`;
+            authStatus.style.display = 'inline-block';
+            authStatus.style.color = '#28a745';
+            authStatus.style.fontWeight = 'bold';
+            writeModeBtn.style.display = 'none';
+            if (logoutBtn) logoutBtn.style.display = 'inline-block';
+            if (resetPasswordSection) resetPasswordSection.style.display = 'none';
+        } else if (currentUser) {
+            authStatus.textContent = `Angemeldet: ${currentUser.display_name} (nur Lesezugriff)`;
+            authStatus.style.display = 'inline-block';
+            authStatus.style.color = '#ffc107';
+            writeModeBtn.style.display = 'inline-block';
+            writeModeBtn.textContent = 'Schreibrechte beantragen';
+            if (logoutBtn) logoutBtn.style.display = 'inline-block';
+            if (resetPasswordSection) resetPasswordSection.style.display = 'none';
+        } else {
+            authStatus.style.display = 'none';
+            writeModeBtn.style.display = 'inline-block';
+            writeModeBtn.textContent = 'Anmelden';
+            if (logoutBtn) logoutBtn.style.display = 'none';
+            if (resetPasswordSection) resetPasswordSection.style.display = 'none';
+        }
+    }
+
+    function showAuthModal() {
+        const authModal = document.getElementById('auth-modal');
+        if (!authModal) return;
+        document.getElementById('auth-name').value = currentUser ? currentUser.display_name : '';
+        document.getElementById('auth-email').value = currentUser ? currentUser.email : '';
+        document.getElementById('auth-error').textContent = '';
+        authModal.style.display = 'flex';
+    }
+
+    async function handleAuthSubmit() {
+        const name = document.getElementById('auth-name').value.trim();
+        const email = document.getElementById('auth-email').value.trim();
+        const errorDiv = document.getElementById('auth-error');
+        
+        if (!name || !email) {
+            errorDiv.textContent = 'Bitte Name und E-Mail eingeben.';
+            return;
+        }
+        
+        try {
+            const res = await fetch(`${API_URL}/auth/identify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ name, email })
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                currentUser = data.user;
+                updateAuthUI();
+                document.getElementById('auth-modal').style.display = 'none';
+                
+                if (!currentUser.is_editor) {
+                    alert('Sie wurden erfolgreich angemeldet, haben aber noch keine Schreibrechte. Bitte kontaktieren Sie einen Administrator.');
+                }
+            } else {
+                const error = await res.json().catch(() => ({ error: 'Unbekannter Fehler' }));
+                errorDiv.textContent = error.error || 'Anmeldung fehlgeschlagen.';
+            }
+        } catch (err) {
+            console.error('Auth error:', err);
+            errorDiv.textContent = 'Verbindungsfehler. Bitte versuchen Sie es erneut.';
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await fetch(`${API_URL}/auth/session`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+        } catch (err) {
+            console.warn('Logout request failed:', err);
+        }
+        currentUser = null;
+        updateAuthUI();
+    }
+
+    function setupAuthListeners() {
+        const writeModeBtn = document.getElementById('write-mode-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const authModal = document.getElementById('auth-modal');
+        const authSubmitBtn = document.getElementById('auth-submit');
+        const authCancelBtn = document.getElementById('auth-cancel');
+        
+        if (writeModeBtn) writeModeBtn.addEventListener('click', showAuthModal);
+        if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+        if (authSubmitBtn) authSubmitBtn.addEventListener('click', handleAuthSubmit);
+        if (authCancelBtn) authCancelBtn.addEventListener('click', () => { authModal.style.display = 'none'; });
+        if (authModal) authModal.addEventListener('click', (e) => { if (e.target === authModal) authModal.style.display = 'none'; });
+    }
+
+    // --- Reset Password Management (Admin only) ---
+    async function loadResetPassword() {
+        try {
+            const res = await fetch(`${API_URL}/reset-password`, { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                const input = document.getElementById('reset-password-input');
+                if (input) input.value = data.password || '';
+            }
+        } catch (err) {
+            console.warn('Failed to load reset password:', err);
+        }
+    }
+
+    async function saveResetPassword() {
+        const input = document.getElementById('reset-password-input');
+        const messageDiv = document.getElementById('reset-password-message');
+        const password = input ? input.value.trim() : '';
+        
+        if (!password || password.length < 4) {
+            if (messageDiv) {
+                messageDiv.textContent = 'Passwort muss mindestens 4 Zeichen haben.';
+                messageDiv.style.color = '#d32f2f';
+            }
+            return;
+        }
+        
+        try {
+            const res = await fetch(`${API_URL}/reset-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ password })
+            });
+            
+            if (res.ok) {
+                if (messageDiv) {
+                    messageDiv.textContent = 'Passwort erfolgreich gespeichert!';
+                    messageDiv.style.color = '#28a745';
+                }
+            } else {
+                const error = await res.json().catch(() => ({ error: 'Unbekannter Fehler' }));
+                if (messageDiv) {
+                    messageDiv.textContent = error.error || 'Speichern fehlgeschlagen.';
+                    messageDiv.style.color = '#d32f2f';
+                }
+            }
+        } catch (err) {
+            console.error('Save reset password error:', err);
+            if (messageDiv) {
+                messageDiv.textContent = 'Verbindungsfehler beim Speichern.';
+                messageDiv.style.color = '#d32f2f';
+            }
+        }
+    }
+
+    // --- Tournament Data Reset ---
+    async function resetTournamentData() {
+        const passwordInput = document.getElementById('reset-password-confirm');
+        const messageDiv = document.getElementById('reset-data-message');
+        const password = passwordInput ? passwordInput.value.trim() : '';
+        
+        if (!password) {
+            if (messageDiv) {
+                messageDiv.textContent = 'Bitte geben Sie das Lösch-Passwort ein.';
+                messageDiv.style.color = '#d32f2f';
+            }
+            return;
+        }
+        
+        // Confirm action
+        if (!confirm('ACHTUNG: Sie sind dabei, ALLE Turnierdaten (Helferschichten, Auf-/Abbau-Zuweisungen, Kuchen) zu löschen!\n\nDiese Aktion kann NICHT rückgängig gemacht werden.\n\nSind Sie sicher, dass Sie fortfahren möchten?')) {
+            return;
+        }
+        
+        try {
+            const res = await fetch(`${API_URL}/reset-tournament-data`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ password })
+            });
+            
+            const data = await res.json();
+            
+            if (res.ok) {
+                if (messageDiv) {
+                    messageDiv.innerHTML = `<strong style="color: #28a745;">✓ Turnierdaten erfolgreich gelöscht!</strong><br>` +
+                        `Gelöscht: ${data.deleted.tournament_shifts} Turnier-Schichten, ${data.deleted.cakes} Kuchen-Einträge, Auf-/Abbau-Zuweisungen zurückgesetzt.`;
+                    messageDiv.style.color = '#28a745';
+                }
+                passwordInput.value = '';
+            } else {
+                if (messageDiv) {
+                    messageDiv.textContent = data.error || 'Fehler beim Löschen der Daten.';
+                    messageDiv.style.color = '#d32f2f';
+                }
+            }
+        } catch (err) {
+            console.error('Reset tournament data error:', err);
+            if (messageDiv) {
+                messageDiv.textContent = 'Verbindungsfehler beim Löschen.';
+                messageDiv.style.color = '#d32f2f';
+            }
+        }
+    }
+
+    function setupResetListeners() {
+        const saveResetPasswordBtn = document.getElementById('save-reset-password-btn');
+        const resetTournamentDataBtn = document.getElementById('reset-tournament-data-btn');
+        
+        if (saveResetPasswordBtn) {
+            saveResetPasswordBtn.addEventListener('click', saveResetPassword);
+        }
+        
+        if (resetTournamentDataBtn) {
+            resetTournamentDataBtn.addEventListener('click', resetTournamentData);
+        }
+    }
+
+    // Show warning when saving event settings
+    function showEventSettingsWarning() {
+        return confirm(
+            'Hinweis: Wenn Sie die Event-Daten ändern (z.B. Datum des Turniers), können bereits eingetragene Schichten nicht mehr korrekt angezeigt werden.\n\n' +
+            'Falls Sie ein neues Turnier planen möchten, nutzen Sie bitte zuerst die Funktion "Turnierdaten löschen" im Bereich "Event-Daten & Einstellungen".\n\n' +
+            'Möchten Sie trotzdem fortfahren?'
+        );
+    }
+
     initialLoad();
+    
+    // Setup auth and reset listeners after DOM is ready
+    setupAuthListeners();
+    setupResetListeners();
+    
+    // Check current user on page load
+    checkCurrentUser();
 });

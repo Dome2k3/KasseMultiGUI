@@ -101,16 +101,23 @@
             font-size: 11px; /* Smaller font */
         }
 
-        /* Activity group headers sticky when scrolling horizontally */
+        /* Activity group headers - text stays visible when scrolling */
         .activity-group-header { 
             padding:8px 0 4px 0; 
             font-weight:700; 
             grid-column:1 / -1; 
-            background: #fff; 
-            position: sticky; 
-            left: 0; 
-            z-index: 6;
+            background: linear-gradient(to right, #fff 200px, transparent 200px);
+            position: relative;
             font-size: 12px; /* Smaller font */
+        }
+        
+        .activity-group-header-text {
+            position: sticky;
+            left: 0;
+            background: #fff;
+            display: inline-block;
+            padding-right: 20px;
+            z-index: 6;
         }
         #grid-container { overflow: visible; }
     </style>

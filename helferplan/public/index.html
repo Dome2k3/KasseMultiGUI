@@ -215,7 +215,14 @@
     
 </nav>
 <main>
-    <h1>Admin-Dashboard: Stammdaten</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h1 style="margin: 0;">Admin-Dashboard: Stammdaten</h1>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="auth-status" style="display: none;"></span>
+            <button id="write-mode-btn" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Anmelden</button>
+            <button id="logout-btn" style="display: none; padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Abmelden</button>
+        </div>
+    </div>
 
     <!-- NEU: Event-Titel Anzeige (automatisch befüllt aus den Datumseinstellungen weiter unten) -->
     <div id="event-title-line">Bergsträßer Volleyball Turnier</div>
@@ -312,6 +319,23 @@
                 <div id="users-list">
                     <p style="text-align: center; color: #999;">Lade Benutzer...</p>
                 </div>
+            </div>
+            
+            <!-- Reset Password Management (Admin only) -->
+            <div class="subsection" id="reset-password-section" style="margin-top: 16px; border: 2px solid #d32f2f;">
+                <h3 style="color: #d32f2f;">🔐 Lösch-Passwort verwalten (nur Admins)</h3>
+                <p style="color: #666; margin-bottom: 12px; font-size: 13px;">
+                    Dieses Passwort wird benötigt, um die Turnierdaten (Schichten, Kuchen) zu löschen.
+                    Nur Administratoren können dieses Passwort einsehen und ändern.
+                </p>
+                <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div>
+                        <label for="reset-password-input" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Aktuelles/Neues Passwort:</label>
+                        <input type="text" id="reset-password-input" placeholder="Passwort eingeben" style="padding: 8px; min-width: 200px;">
+                    </div>
+                    <button id="save-reset-password-btn" class="danger">Passwort speichern</button>
+                </div>
+                <div id="reset-password-message" style="margin-top: 8px; font-size: 13px;"></div>
             </div>
         </div>
     </div>
@@ -441,6 +465,24 @@
             </div>
             <button id="save-cakes-settings-button">Kuchen-Anzahl speichern</button>
         </div>
+        
+        <!-- Turnierdaten löschen -->
+        <div class="subsection" style="border: 2px solid #d32f2f; background: #fff5f5;">
+            <h3 style="color: #d32f2f;">🗑️ Turnierdaten löschen (für neues Turnier)</h3>
+            <p style="color: #666; margin-bottom: 12px; font-size: 13px;">
+                <strong>Achtung:</strong> Diese Aktion löscht alle Helferschichten (Turnier-Plan), Auf-/Abbau-Zuweisungen und Kuchen-Einträge.
+                Die Stammdaten (Helfer, Teams, Gruppen, Tätigkeiten) bleiben erhalten.<br>
+                <em>Verwenden Sie diese Funktion, um das nächste Turnier zu planen.</em>
+            </p>
+            <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                <div>
+                    <label for="reset-password-confirm" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Lösch-Passwort eingeben:</label>
+                    <input type="password" id="reset-password-confirm" placeholder="Passwort" style="padding: 8px; min-width: 200px;">
+                </div>
+                <button id="reset-tournament-data-btn" class="danger">⚠️ Alle Turnierdaten löschen</button>
+            </div>
+            <div id="reset-data-message" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
         </div>
     </div>
 
@@ -500,6 +542,29 @@ function toggleSection(sectionId) {
     }
 }
 </script>
+
+<!-- Authentication Modal -->
+<div id="auth-modal" style="display:none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 8px; max-width: 500px; width: 90%;">
+        <h2>Anmeldung</h2>
+        <p>Bitte geben Sie Ihren Namen und Ihre E-Mail-Adresse ein, um sich zu identifizieren.</p>
+        <form id="auth-form" onsubmit="return false;">
+            <label for="auth-name">Name:</label>
+            <input type="text" id="auth-name" required style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;">
+            
+            <label for="auth-email">E-Mail:</label>
+            <input type="email" id="auth-email" required style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;">
+            
+            <div id="auth-error" style="color: red; margin-bottom: 10px; min-height: 20px;"></div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" id="auth-submit" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Anmelden</button>
+                <button type="button" id="auth-cancel" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Lade runtime config (muss vor den App-Skripten geladen werden) -->
 <script src="/helferplan/public/config.js"></script>
 <script src="/helferplan/public/js/utils.js"></script>

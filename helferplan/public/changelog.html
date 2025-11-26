@@ -557,6 +557,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     function formatValue(value, fieldName) {
         if (value === null || value === undefined) return '<em>leer</em>';
         
+        // Translate setting_key values to readable German names
+        if (fieldName === 'setting_key' && value) {
+            return translateSettingKey(value);
+        }
+        
         // Format start_time and end_time to readable German format
         if ((fieldName === 'start_time' || fieldName === 'end_time') && value) {
             try {
@@ -619,6 +624,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
         if (typeof value === 'object') return JSON.stringify(value);
         return String(value);
+    }
+    
+    // Translate setting keys to human-readable German names
+    function translateSettingKey(key) {
+        const translations = {
+            'setup_day_1': 'Aufbau Tag 1 (Datum)',
+            'setup_day_1_start': 'Aufbau Tag 1 (Startzeit)',
+            'setup_day_1_end': 'Aufbau Tag 1 (Endzeit)',
+            'setup_day_1_min': 'Aufbau Tag 1 (Min. Erwachsene)',
+            'setup_day_2': 'Aufbau Tag 2 (Datum)',
+            'setup_day_2_start': 'Aufbau Tag 2 (Startzeit)',
+            'setup_day_2_end': 'Aufbau Tag 2 (Endzeit)',
+            'setup_day_2_min': 'Aufbau Tag 2 (Min. Erwachsene)',
+            'setup_day_3': 'Aufbau Tag 3 (Datum)',
+            'setup_day_3_start': 'Aufbau Tag 3 (Startzeit)',
+            'setup_day_3_end': 'Aufbau Tag 3 (Endzeit)',
+            'setup_day_3_min': 'Aufbau Tag 3 (Min. Erwachsene)',
+            'teardown_day_1': 'Abbau Tag (Datum)',
+            'teardown_day_1_start': 'Abbau Tag (Startzeit)',
+            'teardown_day_1_end': 'Abbau Tag (Endzeit)',
+            'teardown_day_1_min': 'Abbau Tag (Min. Erwachsene)',
+            'event_friday': 'Turnier Freitag (Datum)',
+            'event_saturday': 'Turnier Samstag (Datum)',
+            'event_sunday': 'Turnier Sonntag (Datum)',
+            'cakes_friday': 'Kuchen Freitag (Anzahl)',
+            'cakes_saturday': 'Kuchen Samstag (Anzahl)',
+            'cakes_sunday': 'Kuchen Sonntag (Anzahl)',
+            'reset_password': 'Lösch-Passwort'
+        };
+        return translations[key] || key;
     }
     
     function getActionName(action) {
