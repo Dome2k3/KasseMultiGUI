@@ -38,6 +38,11 @@ const categoryStyles = {
     'Wurst': { color: '#d35400', icon: '🌭' },
     'Pommes': { color: '#f1c40f', icon: '🍟' },
     'Pfand': { color: '#1abc9c', icon: '♻️' },
+    'Flammkuchen': { color: '#ff6b35', icon: '🍕' },
+    'Vegetarisch': { color: '#4caf50', icon: '🥗' },
+    'Fast Food': { color: '#ff5722', icon: '🍔' },
+    'Fleisch': { color: '#b71c1c', icon: '🥩' },
+    'zHelfer': { color: '#607d8b', icon: '👤' },
     'Sonstiges': { color: '#7f8c8d', icon: '📦' }
 };
 
@@ -89,7 +94,7 @@ function displayItems() {
 
         quantities.forEach(q => {
             const btn = document.createElement('button');
-            btn.innerHTML = `${style.icon} ${q}x Pfand`;
+            btn.innerHTML = `${q}x Pfand`;
             btn.style.backgroundColor = style.color;
             btn.onclick = () => addMultipleItems('Pfandrück', pfandPrice * -1, q);
             grid.appendChild(btn);
@@ -135,7 +140,7 @@ function displayItems() {
                 }
 
                 const btn = document.createElement('button');
-                btn.innerHTML = `${style.icon} ${item.name}`;
+                btn.innerHTML = item.name;
                 btn.style.backgroundColor = style.color;
                 btn.onclick = () => addItem(item.name, price);
                 grid.appendChild(btn);
