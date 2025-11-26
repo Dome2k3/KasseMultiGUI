@@ -118,6 +118,31 @@ h1 {
     justify-content: space-between;
     align-items: center;
 }
+#receipt-list li span {
+    flex: 1;
+}
+.delete-item-btn {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-left: 8px;
+    padding: 0;
+    line-height: 1;
+    transition: background 0.2s, transform 0.1s;
+}
+.delete-item-btn:hover {
+    background: #c82333;
+    transform: scale(1.1);
+}
 #total {
     font-weight: bold;
     font-size: 1.09rem;
@@ -206,6 +231,35 @@ h1 {
 }
 .button-grid button:active {
     background-color: #003366;
+}
+
+/* Warengruppen (Kategorie-Container) */
+.warengruppe {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: box-shadow 0.2s;
+}
+.warengruppe:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+.warengruppe h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.warengruppe .button-grid {
+    margin-top: 8px;
+}
+.warengruppe .button-grid button:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 /* Responsiv für iPad & Co */
