@@ -27,10 +27,10 @@ h1 {
 #container {
     display: flex;
     gap: 32px;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
     min-height: 80vh;
-    padding-bottom: 32px;
+    padding: 0 16px 32px 16px;
 }
 
 .left-panel, .right-panel {
@@ -40,15 +40,15 @@ h1 {
 }
 
 .left-panel {
-    flex: 1;
+    flex: 0 0 320px;
     min-width: 280px;
     max-width: 370px;
 }
 
 .right-panel {
-    flex: 2;
+    flex: 1;
     min-width: 0;
-    /* overflow optional for smaller screens */
+    overflow-x: hidden;
 }
 
 /* Card-Style */
@@ -118,6 +118,31 @@ h1 {
     justify-content: space-between;
     align-items: center;
 }
+#receipt-list li span {
+    flex: 1;
+}
+.delete-item-btn {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-left: 8px;
+    padding: 0;
+    line-height: 1;
+    transition: background 0.2s, transform 0.1s;
+}
+.delete-item-btn:hover {
+    background: #c82333;
+    transform: scale(1.1);
+}
 #total {
     font-weight: bold;
     font-size: 1.09rem;
@@ -161,24 +186,29 @@ h1 {
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
+    overflow-x: hidden;
 }
 
-/* Grid für Buttons (18 Produkte, z.B. 3 Spalten, 6 Reihen) */
+/* Container für Warengruppen */
+#artikel-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+/* Grid für Buttons */
 .button-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: 10px;
     width: 100%;
-    align-items: center;
-    justify-content: center;
 }
 
 .button-grid button {
     width: 100%;
-    min-width: 100px;   /* vorher 80px, jetzt minimal breiter */
-    max-width: 190px;   /* optional, wenn du sehr breite Buttons willst */
+    min-width: 80px;
     height: 46px;
-    font-size: 0.93rem; /* vorher 0.98rem, jetzt etwas kleiner */
+    font-size: 0.9rem;
     background-color: var(--accent);
     color: #fff;
     border: none;
@@ -190,13 +220,12 @@ h1 {
     display: flex;
     justify-content: center;
     align-items: center;
-    white-space: normal;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: center;
-    padding: 0 4px;  /* etwas weniger Rand für mehr Platz im Button */
+    padding: 0 8px;
     line-height: 1.1;
-    word-break: break-word; /* trennt lange Wörter */
 }
 
 
@@ -208,23 +237,95 @@ h1 {
     background-color: #003366;
 }
 
-/* Responsiv für iPad & Co */
+/* Warengruppen (Kategorie-Container) */
+.warengruppe {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: box-shadow 0.2s;
+    flex: 1 1 calc(33.333% - 12px);
+    min-width: 200px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.warengruppe:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+.warengruppe h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.warengruppe .button-grid {
+    margin-top: 8px;
+}
+.warengruppe .button-grid button:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Responsiv für iPad Pro Landscape & MacBook */
+@media (min-width: 1024px) and (max-width: 1366px) {
+    #container {
+        gap: 24px;
+        padding: 0 12px 24px 12px;
+    }
+    .left-panel {
+        flex: 0 0 300px;
+        min-width: 260px;
+        max-width: 320px;
+    }
+    #artikel-buttons {
+        gap: 12px;
+    }
+    .warengruppe {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 180px;
+    }
+    .button-grid {
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+        gap: 8px;
+    }
+    .button-grid button {
+        height: 42px;
+        font-size: 0.85rem;
+        padding: 0 6px;
+    }
+}
+
+/* Responsiv für iPad & Tablets */
 @media (max-width: 1024px) {
     #container {
         flex-direction: column;
         gap: 20px;
         max-width: 98vw;
-        padding-bottom: 8px;
+        padding: 0 8px 8px 8px;
     }
     .left-panel, .right-panel {
         max-width: 100%;
         gap: 12px;
     }
+    .left-panel {
+        flex: none;
+        min-width: auto;
+    }
     #button-panel {
         padding: 12px 6px;
     }
+    #artikel-buttons {
+        gap: 12px;
+    }
+    .warengruppe {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 150px;
+    }
     .button-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
 }
 
@@ -232,26 +333,33 @@ h1 {
     #container {
         flex-direction: column;
         gap: 12px;
-        padding-bottom: 6px;
+        padding: 0 4px 6px 4px;
     }
     .left-panel, .right-panel {
         max-width: 100%;
         gap: 8px;
     }
     #button-panel {
-        padding: 8px 2px;
+        padding: 8px 4px;
     }
     .card {
-        padding: 7px 2px;
+        padding: 10px 8px;
         gap: 8px;
     }
+    #artikel-buttons {
+        gap: 10px;
+    }
+    .warengruppe {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
     .button-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
         gap: 7px;
     }
     .button-grid button {
         min-width: 70px;
         height: 40px;
-        font-size: 0.92rem;
+        font-size: 0.85rem;
     }
 }

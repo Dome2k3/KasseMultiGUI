@@ -24,6 +24,39 @@ function addMultipleItems(itemName, itemPrice, qty) {
     }
 }
 
+// Kategorie-Farben und Icons Mapping
+const categoryStyles = {
+    'Essen': { color: '#e67e22', icon: '🍽️' },
+    'Getränke': { color: '#3498db', icon: '🥤' },
+    'Snacks': { color: '#9b59b6', icon: '🍿' },
+    'Süßes': { color: '#e91e63', icon: '🍬' },
+    'Kaffee': { color: '#795548', icon: '☕' },
+    'Bier': { color: '#f39c12', icon: '🍺' },
+    'Wein': { color: '#8e44ad', icon: '🍷' },
+    'Alkohol': { color: '#c0392b', icon: '🍹' },
+    'Frühstück': { color: '#27ae60', icon: '🥐' },
+    'Wurst': { color: '#d35400', icon: '🌭' },
+    'Pommes': { color: '#f1c40f', icon: '🍟' },
+    'Pfand': { color: '#1abc9c', icon: '♻️' },
+    'Flammkuchen': { color: '#ff6b35', icon: '🍕' },
+    'Vegetarisch': { color: '#4caf50', icon: '🥗' },
+    'Fast Food': { color: '#ff5722', icon: '🍔' },
+    'Fleisch': { color: '#b71c1c', icon: '🥩' },
+    'zHelfer': { color: '#607d8b', icon: '👤' },
+    'Sonstiges': { color: '#7f8c8d', icon: '📦' }
+};
+
+// Funktion um Kategorie-Style zu bekommen (mit Fallback)
+function getCategoryStyle(category) {
+    const lowerCat = category.toLowerCase();
+    for (const [key, style] of Object.entries(categoryStyles)) {
+        if (lowerCat.includes(key.toLowerCase())) {
+            return style;
+        }
+    }
+    return categoryStyles['Sonstiges'];
+}
+
 // Funktion zum Anzeigen der Artikel als Buttons (GUI-aware)
 function displayItems() {
     const artikelButtonsDiv = document.getElementById('artikel-buttons');
@@ -47,9 +80,13 @@ function displayItems() {
         const quantities = [1, 2, 5];
         const gruppeDiv = document.createElement("div");
         gruppeDiv.className = "warengruppe";
+        
+        const style = getCategoryStyle('Pfand');
+        gruppeDiv.style.borderLeft = `4px solid ${style.color}`;
+        gruppeDiv.style.backgroundColor = `${style.color}10`;
 
         const title = document.createElement("h3");
-        title.textContent = "Pfand";
+        title.innerHTML = `${style.icon} Pfand`;
         gruppeDiv.appendChild(title);
 
         const grid = document.createElement("div");
@@ -57,7 +94,8 @@ function displayItems() {
 
         quantities.forEach(q => {
             const btn = document.createElement('button');
-            btn.textContent = `${q}x Pfand - €${(pfandPrice * q).toFixed(2)}`;
+            btn.innerHTML = `${q}x Pfand`;
+            btn.style.backgroundColor = style.color;
             btn.onclick = () => addMultipleItems('Pfandrück', pfandPrice * -1, q);
             grid.appendChild(btn);
         });
@@ -77,12 +115,16 @@ function displayItems() {
 
     const categories = [...new Set(filtered.map(item => item.kategorie || 'Sonstiges'))];
 
-    categories.forEach(category => {
+    categories.forEach((category, index) => {
         const gruppeDiv = document.createElement("div");
         gruppeDiv.className = "warengruppe";
+        
+        const style = getCategoryStyle(category);
+        gruppeDiv.style.borderLeft = `4px solid ${style.color}`;
+        gruppeDiv.style.backgroundColor = `${style.color}10`;
 
         const title = document.createElement("h3");
-        title.textContent = category;
+        title.innerHTML = `${style.icon} ${category}`;
         gruppeDiv.appendChild(title);
 
         const grid = document.createElement("div");
@@ -98,7 +140,8 @@ function displayItems() {
                 }
 
                 const btn = document.createElement('button');
-                btn.textContent = `${item.name} - ${price.toFixed(2)} €`;
+                btn.innerHTML = item.name;
+                btn.style.backgroundColor = style.color;
                 btn.onclick = () => addItem(item.name, price);
                 grid.appendChild(btn);
             });
@@ -130,13 +173,34 @@ function addItem(itemName, itemPrice) {
     // Anzeige des hinzugefügten Artikels und des Gesamtbetrags aktualisieren
     const receiptList = document.getElementById('receipt-list');
     const newItem = document.createElement('li');
-    newItem.textContent = `${itemName} - €${itemPrice.toFixed(2)}`;
+    
+    // Item text content
+    const itemText = document.createElement('span');
+    itemText.textContent = `${itemName} - €${itemPrice.toFixed(2)}`;
+    newItem.appendChild(itemText);
+    
+    // Delete button (x)
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '×';
+    deleteBtn.className = 'delete-item-btn';
+    deleteBtn.onclick = function() {
+        removeReceiptItem(newItem, itemPrice);
+    };
+    newItem.appendChild(deleteBtn);
+    
     receiptList.appendChild(newItem);
 
     total += itemPrice;
     document.getElementById('total').textContent = `Summe: ${total.toFixed(2)} €`;
 
     itemCount; // Artikelzähler erhöhen
+}
+
+// Funktion zum Entfernen eines einzelnen Artikels vom Bon
+function removeReceiptItem(listItem, itemPrice) {
+    listItem.remove();
+    total -= itemPrice;
+    document.getElementById('total').textContent = `Summe: ${total.toFixed(2)} €`;
 }
 
 function removePfandItems() {
