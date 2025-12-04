@@ -1339,7 +1339,7 @@ app.get('/api/public/turniere/:turnierId/bracket', async (req, res) => {
 // SERVER START
 // ==========================================
 
-const PORT = process.env.TURNIER_PORT || 3003;
+const PORT = process.env.TURNIER_PORT || 3004;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Turnier-Server läuft auf Port ${PORT}`);
 });

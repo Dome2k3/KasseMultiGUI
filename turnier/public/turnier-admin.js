@@ -1,7 +1,7 @@
 // turnier-admin.js - Tournament Admin Frontend Logic
 
 // API Base URL - will be set from config.js or default
-const API_BASE = window.API_URL_TURNIER || 'http://localhost:3003';
+const API_BASE = window.API_URL_TURNIER || 'http://localhost:3004';
 
 // State
 let currentTurnierId = null;
