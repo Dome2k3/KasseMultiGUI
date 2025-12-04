@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnier-Verwaltung</title>
+    <link rel="stylesheet" href="turnier-style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🏐 Turnier-Verwaltung</h1>
+            <nav class="nav-buttons">
+                <button onclick="window.location.href='../admin.html'" class="btn btn-secondary">← Admin Dashboard</button>
+                <button onclick="window.location.href='bracket.html'" class="btn btn-info">📊 Turnierbaum (Public)</button>
+                <button onclick="window.location.href='schiedsrichter.html'" class="btn btn-info">📱 Schiedsrichter-Ansicht</button>
+            </nav>
+        </header>
+
+        <!-- Tournament Selection -->
+        <section class="card" id="turnier-auswahl">
+            <h2>Turnier auswählen</h2>
+            <div class="turnier-select-row">
+                <select id="turnier-select" onchange="loadTurnier()">
+                    <option value="">-- Turnier wählen --</option>
+                </select>
+                <button class="btn btn-primary" onclick="showNewTurnierModal()">+ Neues Turnier</button>
+            </div>
+        </section>
+
+        <!-- Tournament Details (hidden until selected) -->
+        <div id="turnier-details" style="display: none;">
+            <!-- Config Section -->
+            <section class="card">
+                <h2>📋 Turnier-Konfiguration</h2>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label>Turniername</label>
+                        <input type="text" id="config-name" placeholder="z.B. BVT 37">
+                    </div>
+                    <div class="config-item">
+                        <label>Datum</label>
+                        <input type="date" id="config-datum">
+                    </div>
+                    <div class="config-item">
+                        <label>Anzahl Teams</label>
+                        <input type="number" id="config-teams" min="4" max="128" value="32">
+                    </div>
+                    <div class="config-item">
+                        <label>Anzahl Felder</label>
+                        <input type="number" id="config-felder" min="1" max="20" value="4">
+                    </div>
+                    <div class="config-item">
+                        <label>Spielzeit (Min)</label>
+                        <input type="number" id="config-spielzeit" min="5" max="60" value="15">
+                    </div>
+                    <div class="config-item">
+                        <label>Pause (Min)</label>
+                        <input type="number" id="config-pause" min="0" max="30" value="5">
+                    </div>
+                    <div class="config-item">
+                        <label>Startzeit</label>
+                        <input type="time" id="config-startzeit" value="09:00">
+                    </div>
+                    <div class="config-item">
+                        <label>Endzeit</label>
+                        <input type="time" id="config-endzeit" value="18:00">
+                    </div>
+                    <div class="config-item">
+                        <label>Modus</label>
+                        <select id="config-modus">
+                            <option value="seeded">Gesetzt (Lostöpfe)</option>
+                            <option value="random">Zufällig</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label>E-Mail Benachrichtigung</label>
+                        <input type="checkbox" id="config-email" checked>
+                    </div>
+                </div>
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="saveConfig()">💾 Speichern</button>
+                </div>
+            </section>
+
+            <!-- Teams Section -->
+            <section class="card">
+                <h2>👥 Teams</h2>
+                <div class="team-stats">
+                    <span>Gesamt: <strong id="team-count">0</strong></span>
+                    <span>Angemeldet: <strong id="team-angemeldet">0</strong></span>
+                    <span>Bestätigt: <strong id="team-bestaetigt">0</strong></span>
+                </div>
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="showAddTeamModal()">+ Team hinzufügen</button>
+                    <button class="btn btn-secondary" onclick="showImportTeamsModal()">📥 Teams importieren</button>
+                </div>
+                <div class="filter-row">
+                    <input type="text" id="team-search" placeholder="Team suchen..." oninput="filterTeams()">
+                    <select id="team-filter-klasse" onchange="filterTeams()">
+                        <option value="">Alle Klassen</option>
+                        <option value="A">Klasse A</option>
+                        <option value="B">Klasse B</option>
+                        <option value="C">Klasse C</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="teams-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Team</th>
+                                <th>Ansprechpartner</th>
+                                <th>E-Mail</th>
+                                <th>Verein</th>
+                                <th>Klasse</th>
+                                <th>Setzpos.</th>
+                                <th>Status</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Games Control Section -->
+            <section class="card">
+                <h2>🎮 Turnier-Steuerung</h2>
+                <div class="control-buttons">
+                    <button class="btn btn-success btn-large" onclick="startTurnier()">▶️ Turnier starten</button>
+                    <button class="btn btn-primary" onclick="autoAssignFields()">📍 Felder zuweisen</button>
+                    <button class="btn btn-primary" onclick="calculateRanking()">📊 Platzierung berechnen</button>
+                    <button class="btn btn-primary" onclick="calculateFinalRanking()">🏆 Endplatzierung</button>
+                    <button class="btn btn-danger" onclick="resetTurnier()">🔄 Reset</button>
+                </div>
+            </section>
+
+            <!-- Games Overview Section -->
+            <section class="card">
+                <h2>🎯 Spiele</h2>
+                <div class="filter-row">
+                    <select id="spiele-filter-phase" onchange="loadSpiele()">
+                        <option value="">Alle Phasen</option>
+                    </select>
+                    <select id="spiele-filter-status" onchange="loadSpiele()">
+                        <option value="">Alle Status</option>
+                        <option value="geplant">Geplant</option>
+                        <option value="bereit">Bereit</option>
+                        <option value="laeuft">Läuft</option>
+                        <option value="beendet">Beendet</option>
+                        <option value="wartend_bestaetigung">Warten auf Bestätigung</option>
+                    </select>
+                    <input type="text" id="spiele-search" placeholder="Team suchen..." oninput="filterSpiele()">
+                </div>
+                <div class="table-container">
+                    <table id="spiele-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Phase</th>
+                                <th>Runde</th>
+                                <th>Team 1</th>
+                                <th>vs</th>
+                                <th>Team 2</th>
+                                <th>Feld</th>
+                                <th>Zeit</th>
+                                <th>Ergebnis</th>
+                                <th>Status</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Pending Results Section -->
+            <section class="card">
+                <h2>📝 Gemeldete Ergebnisse</h2>
+                <div id="meldungen-container">
+                    <p>Keine offenen Meldungen</p>
+                </div>
+            </section>
+
+            <!-- Ranking Section -->
+            <section class="card">
+                <h2>🏆 Platzierung</h2>
+                <div class="filter-row">
+                    <select id="platzierung-runde" onchange="loadPlatzierung()">
+                        <option value="">Runde wählen</option>
+                        <option value="1">Nach Runde 1</option>
+                        <option value="2">Nach Runde 2</option>
+                        <option value="3">Nach Runde 3</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="loadEndplatzierung()">Endplatzierung anzeigen</button>
+                </div>
+                <div class="table-container">
+                    <table id="platzierung-table">
+                        <thead>
+                            <tr>
+                                <th>Platz</th>
+                                <th>Team</th>
+                                <th>Verein</th>
+                                <th>Siege</th>
+                                <th>Niederlagen</th>
+                                <th>Punkte +</th>
+                                <th>Punkte -</th>
+                                <th>Differenz</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- New Tournament Modal -->
+    <div class="modal-overlay" id="new-turnier-modal">
+        <div class="modal">
+            <h3>Neues Turnier erstellen</h3>
+            <div class="form-group">
+                <label>Turniername</label>
+                <input type="text" id="new-turnier-name" placeholder="z.B. BVT 37">
+            </div>
+            <div class="form-group">
+                <label>Datum</label>
+                <input type="date" id="new-turnier-datum">
+            </div>
+            <div class="form-group">
+                <label>Anzahl Teams</label>
+                <input type="number" id="new-turnier-teams" value="32" min="4" max="128">
+            </div>
+            <div class="form-group">
+                <label>Anzahl Felder</label>
+                <input type="number" id="new-turnier-felder" value="4" min="1" max="20">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="createTurnier()">Erstellen</button>
+                <button class="btn btn-secondary" onclick="closeModal('new-turnier-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Team Modal -->
+    <div class="modal-overlay" id="add-team-modal">
+        <div class="modal">
+            <h3>Team hinzufügen</h3>
+            <div class="form-group">
+                <label>Teamname *</label>
+                <input type="text" id="team-name" required>
+            </div>
+            <div class="form-group">
+                <label>Ansprechpartner</label>
+                <input type="text" id="team-ansprechpartner">
+            </div>
+            <div class="form-group">
+                <label>E-Mail</label>
+                <input type="email" id="team-email">
+            </div>
+            <div class="form-group">
+                <label>Telefon</label>
+                <input type="tel" id="team-telefon">
+            </div>
+            <div class="form-group">
+                <label>Verein</label>
+                <input type="text" id="team-verein">
+            </div>
+            <div class="form-group">
+                <label>Klasse</label>
+                <select id="team-klasse">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Setzposition</label>
+                <input type="number" id="team-setzposition" value="0" min="0">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="addTeam()">Hinzufügen</button>
+                <button class="btn btn-secondary" onclick="closeModal('add-team-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Teams Modal -->
+    <div class="modal-overlay" id="import-teams-modal">
+        <div class="modal modal-large">
+            <h3>Teams importieren</h3>
+            <p>Füge die Teams im CSV-Format ein (eine Zeile pro Team):</p>
+            <p class="hint">Format: Teamname;Ansprechpartner;Email;Telefon;Verein;Klasse;Setzposition</p>
+            <textarea id="import-teams-data" rows="10" placeholder="Team 1;Max Mustermann;max@email.de;0123456;TV Musterstadt;A;1
+Team 2;Anna Schmidt;anna@email.de;0234567;SV Beispiel;A;2"></textarea>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="importTeams()">Importieren</button>
+                <button class="btn btn-secondary" onclick="closeModal('import-teams-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Result Modal -->
+    <div class="modal-overlay" id="edit-result-modal">
+        <div class="modal">
+            <h3>Ergebnis bearbeiten</h3>
+            <input type="hidden" id="edit-spiel-id">
+            <div class="result-teams">
+                <span id="edit-team1-name">Team 1</span>
+                <span>vs</span>
+                <span id="edit-team2-name">Team 2</span>
+            </div>
+            <div class="result-inputs">
+                <div class="form-group">
+                    <label>Punkte Team 1</label>
+                    <input type="number" id="edit-ergebnis-team1" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Punkte Team 2</label>
+                    <input type="number" id="edit-ergebnis-team2" min="0" value="0">
+                </div>
+            </div>
+            <h4>Sätze (optional)</h4>
+            <div class="satz-inputs">
+                <div class="satz-row">
+                    <span>Satz 1:</span>
+                    <input type="number" id="edit-satz1-team1" min="0" class="satz-input">
+                    <span>:</span>
+                    <input type="number" id="edit-satz1-team2" min="0" class="satz-input">
+                </div>
+                <div class="satz-row">
+                    <span>Satz 2:</span>
+                    <input type="number" id="edit-satz2-team1" min="0" class="satz-input">
+                    <span>:</span>
+                    <input type="number" id="edit-satz2-team2" min="0" class="satz-input">
+                </div>
+                <div class="satz-row">
+                    <span>Satz 3:</span>
+                    <input type="number" id="edit-satz3-team1" min="0" class="satz-input">
+                    <span>:</span>
+                    <input type="number" id="edit-satz3-team2" min="0" class="satz-input">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Bemerkung</label>
+                <input type="text" id="edit-bemerkung" placeholder="Optional">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="saveResult()">Speichern</button>
+                <button class="btn btn-secondary" onclick="closeModal('edit-result-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../config.js"></script>
+    <script src="turnier-admin.js"></script>
+</body>
+</html>

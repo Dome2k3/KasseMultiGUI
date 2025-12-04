@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnierbaum</title>
+    <link rel="stylesheet" href="turnier-style.css">
+    <style>
+        /* Additional styles for bracket view */
+        .bracket-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .bracket-header h1 {
+            font-size: 2rem;
+            color: var(--white);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .bracket-header .turnier-datum {
+            font-size: 1.2rem;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .team-filter {
+            max-width: 500px;
+            margin: 0 auto 20px auto;
+        }
+
+        .team-filter input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 1.1rem;
+            border-radius: 30px;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .phase-tabs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .phase-tab {
+            padding: 10px 20px;
+            background: var(--white);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .phase-tab:hover,
+        .phase-tab.active {
+            background: var(--primary);
+            color: var(--white);
+        }
+
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .game-card {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .game-card.finished {
+            border-left: 4px solid var(--success);
+        }
+
+        .game-card.running {
+            border-left: 4px solid var(--warning);
+            animation: pulse 2s infinite;
+        }
+
+        .game-card.upcoming {
+            border-left: 4px solid var(--primary);
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 2px 15px rgba(243, 156, 18, 0.2); }
+            50% { box-shadow: 0 2px 25px rgba(243, 156, 18, 0.4); }
+        }
+
+        .game-number {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--light);
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            color: var(--secondary);
+        }
+
+        .game-time {
+            font-size: 0.9rem;
+            color: var(--secondary);
+            margin-bottom: 10px;
+        }
+
+        .game-field {
+            font-size: 0.85rem;
+            color: var(--info);
+            margin-bottom: 10px;
+        }
+
+        .game-teams {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .game-team {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: var(--light);
+            border-radius: 8px;
+        }
+
+        .game-team.winner {
+            background: #e8f5e9;
+            font-weight: 600;
+        }
+
+        .game-team.loser {
+            background: #ffebee;
+            color: var(--secondary);
+        }
+
+        .team-name {
+            flex: 1;
+        }
+
+        .team-score {
+            font-weight: 600;
+            font-size: 1.2rem;
+            min-width: 30px;
+            text-align: center;
+        }
+
+        .vs-divider {
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--secondary);
+            margin: 5px 0;
+        }
+
+        .standings-card {
+            margin-top: 20px;
+        }
+
+        .standings-table {
+            width: 100%;
+        }
+
+        .standings-table th {
+            text-align: center;
+        }
+
+        .standings-table td {
+            text-align: center;
+        }
+
+        .standings-table td:first-child,
+        .standings-table td:nth-child(2) {
+            text-align: left;
+        }
+
+        .rank-1 { background: linear-gradient(90deg, #ffd700 0%, transparent 100%); }
+        .rank-2 { background: linear-gradient(90deg, #c0c0c0 0%, transparent 100%); }
+        .rank-3 { background: linear-gradient(90deg, #cd7f32 0%, transparent 100%); }
+
+        .highlight-team {
+            background: rgba(52, 152, 219, 0.2) !important;
+            animation: highlightPulse 1s ease;
+        }
+
+        @keyframes highlightPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+
+        .refresh-btn:hover {
+            background: var(--primary-dark);
+            transform: scale(1.1);
+        }
+
+        .no-games {
+            text-align: center;
+            padding: 40px;
+            color: var(--secondary);
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 600px) {
+            .games-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .phase-tabs {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                justify-content: flex-start;
+                padding-bottom: 10px;
+            }
+
+            .phase-tab {
+                white-space: nowrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="bracket-header">
+            <h1 id="turnier-name">🏐 Turnierbaum</h1>
+            <p class="turnier-datum" id="turnier-datum"></p>
+        </header>
+
+        <!-- Tournament Selection -->
+        <div class="card" style="margin-bottom: 20px;">
+            <select id="turnier-select" onchange="loadBracket()" style="width: 100%; padding: 15px; font-size: 1.1rem;">
+                <option value="">-- Turnier wählen --</option>
+            </select>
+        </div>
+
+        <!-- Team Filter -->
+        <div class="team-filter">
+            <input type="text" id="team-search" placeholder="🔍 Team suchen..." oninput="filterGames()">
+        </div>
+
+        <!-- Phase Tabs -->
+        <div class="phase-tabs" id="phase-tabs"></div>
+
+        <!-- Games Display -->
+        <div class="card">
+            <h2>🎯 Spiele</h2>
+            <div class="games-grid" id="games-container">
+                <p class="no-games">Wähle ein Turnier aus, um die Spiele zu sehen.</p>
+            </div>
+        </div>
+
+        <!-- Standings -->
+        <div class="card standings-card">
+            <h2>🏆 Aktuelle Platzierung</h2>
+            <div class="table-container">
+                <table class="standings-table" id="standings-table">
+                    <thead>
+                        <tr>
+                            <th>Platz</th>
+                            <th>Team</th>
+                            <th>Siege</th>
+                            <th>Ndl.</th>
+                            <th>Pkt +</th>
+                            <th>Pkt -</th>
+                            <th>Diff</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <button class="refresh-btn" onclick="refreshData()" title="Aktualisieren">🔄</button>
+
+    <script src="../config.js"></script>
+    <script>
+        const API_BASE = window.API_URL_TURNIER || 'http://localhost:3003';
+
+        let currentTurnierId = null;
+        let allGames = [];
+        let phasen = [];
+        let currentPhase = '';
+        let autoRefreshInterval = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTurniere();
+            // Auto-refresh every 30 seconds
+            autoRefreshInterval = setInterval(refreshData, 30000);
+        });
+
+        async function loadTurniere() {
+            try {
+                const res = await fetch(`${API_BASE}/api/turniere`);
+                const turniere = await res.json();
+
+                const select = document.getElementById('turnier-select');
+                select.innerHTML = '<option value="">-- Turnier wählen --</option>';
+
+                turniere.filter(t => t.aktiv).forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = `${t.turnier_name} (${formatDate(t.turnier_datum)})`;
+                    select.appendChild(opt);
+                });
+
+                // Auto-select first active tournament
+                if (turniere.length > 0) {
+                    select.value = turniere[0].id;
+                    loadBracket();
+                }
+            } catch (err) {
+                console.error('Error loading tournaments:', err);
+            }
+        }
+
+        async function loadBracket() {
+            currentTurnierId = document.getElementById('turnier-select').value;
+            if (!currentTurnierId) {
+                document.getElementById('games-container').innerHTML = '<p class="no-games">Wähle ein Turnier aus.</p>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/public/turniere/${currentTurnierId}/bracket`);
+                const data = await res.json();
+
+                document.getElementById('turnier-name').textContent = `🏐 ${data.turnier.turnier_name}`;
+                document.getElementById('turnier-datum').textContent = formatDate(data.turnier.turnier_datum);
+
+                phasen = data.phasen;
+                allGames = data.spiele;
+
+                renderPhaseTabs();
+                renderGames();
+                loadStandings();
+            } catch (err) {
+                console.error('Error loading bracket:', err);
+            }
+        }
+
+        function renderPhaseTabs() {
+            const container = document.getElementById('phase-tabs');
+            container.innerHTML = '';
+
+            const allTab = document.createElement('div');
+            allTab.className = `phase-tab ${currentPhase === '' ? 'active' : ''}`;
+            allTab.textContent = 'Alle';
+            allTab.onclick = () => { currentPhase = ''; renderPhaseTabs(); renderGames(); };
+            container.appendChild(allTab);
+
+            phasen.forEach(p => {
+                const tab = document.createElement('div');
+                tab.className = `phase-tab ${currentPhase === String(p.id) ? 'active' : ''}`;
+                tab.textContent = p.phase_name;
+                tab.onclick = () => { currentPhase = String(p.id); renderPhaseTabs(); renderGames(); };
+                container.appendChild(tab);
+            });
+        }
+
+        function renderGames() {
+            const container = document.getElementById('games-container');
+            const search = document.getElementById('team-search').value.toLowerCase();
+
+            let filtered = allGames;
+
+            if (currentPhase) {
+                filtered = filtered.filter(g => String(g.phase_id) === currentPhase);
+            }
+
+            if (search) {
+                filtered = filtered.filter(g =>
+                    (g.team1_name || '').toLowerCase().includes(search) ||
+                    (g.team2_name || '').toLowerCase().includes(search)
+                );
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<p class="no-games">Keine Spiele gefunden.</p>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(game => {
+                const statusClass = game.status === 'beendet' ? 'finished' :
+                                   game.status === 'laeuft' ? 'running' : 'upcoming';
+
+                const team1Class = game.gewinner_name === game.team1_name ? 'winner' :
+                                  (game.gewinner_name && game.gewinner_name !== game.team1_name ? 'loser' : '');
+                const team2Class = game.gewinner_name === game.team2_name ? 'winner' :
+                                  (game.gewinner_name && game.gewinner_name !== game.team2_name ? 'loser' : '');
+
+                const highlightTeam1 = search && (game.team1_name || '').toLowerCase().includes(search);
+                const highlightTeam2 = search && (game.team2_name || '').toLowerCase().includes(search);
+
+                return `
+                    <div class="game-card ${statusClass}">
+                        <span class="game-number">#${game.spiel_nummer}</span>
+                        <div class="game-time">⏰ ${formatDateTime(game.geplante_zeit)}</div>
+                        <div class="game-field">📍 ${escapeHtml(game.feld_name || 'TBD')}</div>
+                        <div class="game-teams">
+                            <div class="game-team ${team1Class} ${highlightTeam1 ? 'highlight-team' : ''}">
+                                <span class="team-name">${escapeHtml(game.team1_name || 'TBD')}</span>
+                                <span class="team-score">${game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-'}</span>
+                            </div>
+                            <div class="vs-divider">vs</div>
+                            <div class="game-team ${team2Class} ${highlightTeam2 ? 'highlight-team' : ''}">
+                                <span class="team-name">${escapeHtml(game.team2_name || 'TBD')}</span>
+                                <span class="team-score">${game.ergebnis_team2 !== null ? game.ergebnis_team2 : '-'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadStandings() {
+            if (!currentTurnierId) return;
+
+            try {
+                // Try to get latest ranking (round 3 first, then endplatzierung)
+                let res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/platzierung?nach_runde=3`);
+                let standings = await res.json();
+
+                if (standings.length === 0) {
+                    res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/endplatzierung`);
+                    standings = await res.json();
+                }
+
+                renderStandings(standings);
+            } catch (err) {
+                console.error('Error loading standings:', err);
+            }
+        }
+
+        function renderStandings(standings) {
+            const tbody = document.querySelector('#standings-table tbody');
+            const search = document.getElementById('team-search').value.toLowerCase();
+
+            if (standings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Noch keine Platzierung verfügbar</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = standings.map((row, idx) => {
+                const platz = row.endplatzierung || row.platzierung;
+                const rankClass = platz === 1 ? 'rank-1' : platz === 2 ? 'rank-2' : platz === 3 ? 'rank-3' : '';
+                const highlight = search && (row.team_name || '').toLowerCase().includes(search) ? 'highlight-team' : '';
+
+                return `
+                    <tr class="${rankClass} ${highlight}">
+                        <td><strong>${platz}</strong></td>
+                        <td>${escapeHtml(row.team_name)}</td>
+                        <td>${row.siege}</td>
+                        <td>${row.niederlagen}</td>
+                        <td>${row.punkte_dafuer}</td>
+                        <td>${row.punkte_dagegen}</td>
+                        <td>${row.punkte_dafuer - row.punkte_dagegen}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterGames() {
+            renderGames();
+            loadStandings();
+        }
+
+        async function refreshData() {
+            if (currentTurnierId) {
+                await loadBracket();
+            }
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+        }
+
+        function formatDateTime(dateStr) {
+            if (!dateStr) return 'TBD';
+            const date = new Date(dateStr);
+            return date.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
