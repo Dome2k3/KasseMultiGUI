@@ -6,11 +6,33 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+
+// Rate limiting configuration
+const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 500, // Limit each IP to 500 requests per windowMs
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Stricter rate limit for sensitive operations (result submissions, confirmations)
+const strictLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 50, // Limit each IP to 50 requests per windowMs
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Apply general rate limiting to all routes
+app.use('/api/', generalLimiter);
 
 // Database Pool
 const db = mysql.createPool({
@@ -24,9 +46,31 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// Helper: Generate random confirmation code
+// Helper: Generate random confirmation code (6 bytes = 12 hex chars for better security)
 function generateConfirmationCode() {
-    return crypto.randomBytes(4).toString('hex').toUpperCase();
+    return crypto.randomBytes(6).toString('hex').toUpperCase();
+}
+
+// Helper: Determine winner and loser from scores
+// Returns { gewinnerId, verliererId } or null values if tie
+function determineWinnerLoser(score1, score2, team1Id, team2Id) {
+    if (score1 > score2) {
+        return { gewinnerId: team1Id, verliererId: team2Id };
+    } else if (score2 > score1) {
+        return { gewinnerId: team2Id, verliererId: team1Id };
+    }
+    // Tie - no clear winner (game may need tiebreaker)
+    return { gewinnerId: null, verliererId: null };
+}
+
+// Helper: Get winner's score from a game result
+function getWinnerScore(score1, score2) {
+    return Math.max(score1, score2);
+}
+
+// Helper: Get loser's score from a game result
+function getLoserScore(score1, score2) {
+    return Math.min(score1, score2);
 }
 
 // Helper: Audit logging
@@ -589,8 +633,8 @@ function shuffleArray(array) {
 // RESULT SUBMISSION (FOR REFEREES)
 // ==========================================
 
-// Submit result (referee or team)
-app.post('/api/turniere/:turnierId/spiele/:spielId/ergebnis', async (req, res) => {
+// Submit result (referee or team) - with strict rate limiting
+app.post('/api/turniere/:turnierId/spiele/:spielId/ergebnis', strictLimiter, async (req, res) => {
     try {
         const { spielId, turnierId } = req.params;
         const {
@@ -641,8 +685,8 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/ergebnis', async (req, res) =
     }
 });
 
-// Confirm result (loser team confirmation)
-app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', async (req, res) => {
+// Confirm result (loser team confirmation) - with strict rate limiting
+app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, async (req, res) => {
     try {
         const { spielId, turnierId } = req.params;
         const { bestaetigungs_code } = req.body;
@@ -671,9 +715,18 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', async (req, res
 
         const meldung = meldungen[0];
 
-        // Determine winner
-        const gewinnerId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team1_id : game.team2_id;
-        const verliererId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team2_id : game.team1_id;
+        // Determine winner using helper function (handles ties properly)
+        const { gewinnerId, verliererId } = determineWinnerLoser(
+            meldung.ergebnis_team1, 
+            meldung.ergebnis_team2, 
+            game.team1_id, 
+            game.team2_id
+        );
+
+        // If it's a tie, reject the result (volleyball doesn't have ties)
+        if (gewinnerId === null) {
+            return res.status(400).json({ error: 'Tie games are not allowed - please provide a valid result' });
+        }
 
         // Update game with confirmed result
         await db.query(
@@ -755,9 +808,18 @@ app.post('/api/turniere/:turnierId/meldungen/:meldungId/genehmigen', async (req,
         }
         const game = games[0];
 
-        // Determine winner
-        const gewinnerId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team1_id : game.team2_id;
-        const verliererId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team2_id : game.team1_id;
+        // Determine winner using helper function
+        const { gewinnerId, verliererId } = determineWinnerLoser(
+            meldung.ergebnis_team1,
+            meldung.ergebnis_team2,
+            game.team1_id,
+            game.team2_id
+        );
+
+        // If it's a tie, reject the result
+        if (gewinnerId === null) {
+            return res.status(400).json({ error: 'Tie games are not allowed' });
+        }
 
         // Update game
         await db.query(
@@ -814,9 +876,18 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
 
         const game = oldGame[0];
 
-        // Determine winner
-        const gewinnerId = ergebnis_team1 > ergebnis_team2 ? game.team1_id : game.team2_id;
-        const verliererId = ergebnis_team1 > ergebnis_team2 ? game.team2_id : game.team1_id;
+        // Determine winner using helper function
+        const { gewinnerId, verliererId } = determineWinnerLoser(
+            ergebnis_team1,
+            ergebnis_team2,
+            game.team1_id,
+            game.team2_id
+        );
+
+        // If it's a tie, reject the result
+        if (gewinnerId === null) {
+            return res.status(400).json({ error: 'Tie games are not allowed' });
+        }
 
         await db.query(
             `UPDATE turnier_spiele SET 
@@ -948,15 +1019,20 @@ app.post('/api/turniere/:turnierId/platzierung-berechnen', async (req, res) => {
 
         for (const spiel of spiele) {
             if (spiel.gewinner_id && spiel.verlierer_id) {
+                const score1 = spiel.ergebnis_team1 || 0;
+                const score2 = spiel.ergebnis_team2 || 0;
+                const winnerScore = getWinnerScore(score1, score2);
+                const loserScore = getLoserScore(score1, score2);
+
                 if (stats[spiel.gewinner_id]) {
                     stats[spiel.gewinner_id].siege++;
-                    stats[spiel.gewinner_id].punkte_dafuer += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
-                    stats[spiel.gewinner_id].punkte_dagegen += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+                    stats[spiel.gewinner_id].punkte_dafuer += winnerScore;
+                    stats[spiel.gewinner_id].punkte_dagegen += loserScore;
                 }
                 if (stats[spiel.verlierer_id]) {
                     stats[spiel.verlierer_id].niederlagen++;
-                    stats[spiel.verlierer_id].punkte_dafuer += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
-                    stats[spiel.verlierer_id].punkte_dagegen += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+                    stats[spiel.verlierer_id].punkte_dafuer += loserScore;
+                    stats[spiel.verlierer_id].punkte_dagegen += winnerScore;
                 }
             }
         }
@@ -1050,15 +1126,20 @@ app.post('/api/turniere/:turnierId/endplatzierung-berechnen', async (req, res) =
         }
 
         for (const spiel of spiele) {
+            const score1 = spiel.ergebnis_team1 || 0;
+            const score2 = spiel.ergebnis_team2 || 0;
+            const winnerScore = getWinnerScore(score1, score2);
+            const loserScore = getLoserScore(score1, score2);
+
             if (spiel.gewinner_id && stats[spiel.gewinner_id]) {
                 stats[spiel.gewinner_id].siege++;
-                stats[spiel.gewinner_id].punkte_dafuer += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
-                stats[spiel.gewinner_id].punkte_dagegen += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+                stats[spiel.gewinner_id].punkte_dafuer += winnerScore;
+                stats[spiel.gewinner_id].punkte_dagegen += loserScore;
             }
             if (spiel.verlierer_id && stats[spiel.verlierer_id]) {
                 stats[spiel.verlierer_id].niederlagen++;
-                stats[spiel.verlierer_id].punkte_dafuer += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
-                stats[spiel.verlierer_id].punkte_dagegen += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+                stats[spiel.verlierer_id].punkte_dafuer += loserScore;
+                stats[spiel.verlierer_id].punkte_dagegen += winnerScore;
             }
         }
 
