@@ -1,0 +1,1264 @@
+// turnier.js - Tournament Management Server
+require('dotenv').config({ path: '/var/www/html/kasse/Umgebung.env' });
+
+const express = require('express');
+const mysql = require('mysql2/promise');
+const cors = require('cors');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+// Database Pool
+const db = mysql.createPool({
+    host: process.env.MYSQL_HOST,
+    port: process.env.MYSQL_PORT || 3306,
+    user: process.env.MYSQL_USER,
+    password: process.env.MYSQL_PASSWORD,
+    database: process.env.MYSQL_DATABASE,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+// Helper: Generate random confirmation code
+function generateConfirmationCode() {
+    return crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+// Helper: Audit logging
+async function logAudit(turnierIdVal, aktion, tabelle, datensatzIdVal, alteWerte, neueWerte, benutzer = 'system', ipAdresse = null) {
+    try {
+        await db.query(
+            'INSERT INTO turnier_audit_log (turnier_id, benutzer, aktion, tabelle, datensatz_id, alte_werte, neue_werte, ip_adresse) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [turnierIdVal, benutzer, aktion, tabelle, datensatzIdVal, JSON.stringify(alteWerte), JSON.stringify(neueWerte), ipAdresse]
+        );
+    } catch (err) {
+        console.error('Audit log error:', err);
+    }
+}
+
+// ==========================================
+// TURNIER CONFIG ENDPOINTS
+// ==========================================
+
+// Get all tournaments
+app.get('/api/turniere', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM turnier_config ORDER BY turnier_datum DESC');
+        res.json(rows);
+    } catch (err) {
+        console.error('GET /api/turniere error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Get single tournament
+app.get('/api/turniere/:id', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM turnier_config WHERE id = ?', [req.params.id]);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+        res.json(rows[0]);
+    } catch (err) {
+        console.error('GET /api/turniere/:id error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Create tournament
+app.post('/api/turniere', async (req, res) => {
+    try {
+        const {
+            turnier_name,
+            turnier_datum,
+            anzahl_teams = 32,
+            anzahl_felder = 4,
+            anzahl_klassen = 3,
+            klassen_namen = ['A', 'B', 'C'],
+            spielzeit_minuten = 15,
+            pause_minuten = 5,
+            startzeit = '09:00:00',
+            endzeit = '18:00:00',
+            modus = 'seeded',
+            email_benachrichtigung = true
+        } = req.body;
+
+        if (!turnier_name || !turnier_datum) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const bestaetigungs_code = generateConfirmationCode();
+
+        const [result] = await db.query(
+            `INSERT INTO turnier_config 
+            (turnier_name, turnier_datum, anzahl_teams, anzahl_felder, anzahl_klassen, 
+             klassen_namen, spielzeit_minuten, pause_minuten, startzeit, endzeit, 
+             modus, bestaetigungs_code, email_benachrichtigung) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [turnier_name, turnier_datum, anzahl_teams, anzahl_felder, anzahl_klassen,
+             JSON.stringify(klassen_namen), spielzeit_minuten, pause_minuten, startzeit, endzeit,
+             modus, bestaetigungs_code, email_benachrichtigung]
+        );
+
+        const turnierId = result.insertId;
+
+        // Create fields automatically
+        for (let i = 1; i <= anzahl_felder; i++) {
+            await db.query(
+                'INSERT INTO turnier_felder (turnier_id, feld_nummer, feld_name) VALUES (?, ?, ?)',
+                [turnierId, i, `Feld ${i}`]
+            );
+        }
+
+        // Create default phases
+        await createDefaultPhasen(turnierId, anzahl_teams);
+
+        await logAudit(turnierId, 'CREATE', 'turnier_config', turnierId, null, req.body);
+
+        res.json({ success: true, id: turnierId, bestaetigungs_code });
+    } catch (err) {
+        console.error('POST /api/turniere error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Update tournament
+app.put('/api/turniere/:id', async (req, res) => {
+    try {
+        const turnierId = req.params.id;
+        const updateFields = [];
+        const values = [];
+
+        const allowedFields = [
+            'turnier_name', 'turnier_datum', 'anzahl_teams', 'anzahl_felder',
+            'anzahl_klassen', 'klassen_namen', 'spielzeit_minuten', 'pause_minuten',
+            'startzeit', 'endzeit', 'modus', 'email_benachrichtigung', 'aktiv',
+            'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_sender'
+        ];
+
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                updateFields.push(`${field} = ?`);
+                values.push(field === 'klassen_namen' ? JSON.stringify(req.body[field]) : req.body[field]);
+            }
+        }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        values.push(turnierId);
+        await db.query(`UPDATE turnier_config SET ${updateFields.join(', ')} WHERE id = ?`, values);
+
+        await logAudit(turnierId, 'UPDATE', 'turnier_config', turnierId, null, req.body);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT /api/turniere/:id error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Delete tournament
+app.delete('/api/turniere/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM turnier_config WHERE id = ?', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('DELETE /api/turniere/:id error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// TEAMS ENDPOINTS
+// ==========================================
+
+// Get teams for tournament
+app.get('/api/turniere/:turnierId/teams', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT * FROM turnier_teams WHERE turnier_id = ? ORDER BY klasse, setzposition, team_name',
+            [req.params.turnierId]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('GET teams error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Add team to tournament
+app.post('/api/turniere/:turnierId/teams', async (req, res) => {
+    try {
+        const {
+            team_name, ansprechpartner, email, telefon, verein,
+            klasse = 'A', setzposition = 0, teilnehmerzahl = 2
+        } = req.body;
+
+        if (!team_name) {
+            return res.status(400).json({ error: 'Team name required' });
+        }
+
+        const [result] = await db.query(
+            `INSERT INTO turnier_teams 
+            (turnier_id, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, teilnehmerzahl) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.params.turnierId, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, teilnehmerzahl]
+        );
+
+        await logAudit(req.params.turnierId, 'CREATE', 'turnier_teams', result.insertId, null, req.body);
+
+        res.json({ success: true, id: result.insertId });
+    } catch (err) {
+        console.error('POST teams error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Update team
+app.put('/api/turniere/:turnierId/teams/:teamId', async (req, res) => {
+    try {
+        const updateFields = [];
+        const values = [];
+
+        const allowedFields = ['team_name', 'ansprechpartner', 'email', 'telefon', 'verein', 'klasse', 'setzposition', 'status', 'teilnehmerzahl'];
+
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                updateFields.push(`${field} = ?`);
+                values.push(req.body[field]);
+            }
+        }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        values.push(req.params.teamId, req.params.turnierId);
+        await db.query(`UPDATE turnier_teams SET ${updateFields.join(', ')} WHERE id = ? AND turnier_id = ?`, values);
+
+        await logAudit(req.params.turnierId, 'UPDATE', 'turnier_teams', req.params.teamId, null, req.body);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT teams error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Delete team
+app.delete('/api/turniere/:turnierId/teams/:teamId', async (req, res) => {
+    try {
+        await db.query('DELETE FROM turnier_teams WHERE id = ? AND turnier_id = ?', [req.params.teamId, req.params.turnierId]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('DELETE teams error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Import teams (bulk)
+app.post('/api/turniere/:turnierId/teams/import', async (req, res) => {
+    try {
+        const { teams } = req.body;
+        if (!Array.isArray(teams)) {
+            return res.status(400).json({ error: 'Teams array required' });
+        }
+
+        let imported = 0;
+        for (const team of teams) {
+            await db.query(
+                `INSERT INTO turnier_teams 
+                (turnier_id, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [req.params.turnierId, team.team_name, team.ansprechpartner, team.email, team.telefon, team.verein, team.klasse || 'A', team.setzposition || 0]
+            );
+            imported++;
+        }
+
+        res.json({ success: true, imported });
+    } catch (err) {
+        console.error('Import teams error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// PHASEN ENDPOINTS
+// ==========================================
+
+// Get phases for tournament
+app.get('/api/turniere/:turnierId/phasen', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? ORDER BY reihenfolge',
+            [req.params.turnierId]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('GET phasen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Helper: Create default phases for a tournament
+async function createDefaultPhasen(turnierId, anzahlTeams) {
+    const phasen = [
+        { name: 'Plan A', typ: 'hauptrunde', reihenfolge: 1, beschreibung: 'Hauptrunde - alle Teams' },
+        { name: 'Plan A1', typ: 'gewinner', reihenfolge: 2, beschreibung: 'Gewinner aus Plan A' },
+        { name: 'Plan A2', typ: 'verlierer', reihenfolge: 3, beschreibung: 'Verlierer aus Plan A' },
+        { name: 'Plan B1', typ: 'gewinner', reihenfolge: 4, beschreibung: 'Gewinner-Pfad B' },
+        { name: 'Plan B2', typ: 'verlierer', reihenfolge: 5, beschreibung: 'Verlierer-Pfad B' },
+        { name: 'Plan C1', typ: 'gewinner', reihenfolge: 6, beschreibung: 'Gewinner-Pfad C' },
+        { name: 'Plan C2', typ: 'verlierer', reihenfolge: 7, beschreibung: 'Verlierer-Pfad C' },
+        { name: 'Finale', typ: 'finale', reihenfolge: 8, beschreibung: 'Finalspiele' }
+    ];
+
+    for (const phase of phasen) {
+        await db.query(
+            'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
+            [turnierId, phase.name, phase.typ, phase.reihenfolge, phase.beschreibung]
+        );
+    }
+}
+
+// ==========================================
+// FELDER ENDPOINTS
+// ==========================================
+
+// Get fields for tournament
+app.get('/api/turniere/:turnierId/felder', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? ORDER BY feld_nummer',
+            [req.params.turnierId]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('GET felder error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Update field
+app.put('/api/turniere/:turnierId/felder/:feldId', async (req, res) => {
+    try {
+        const { feld_name, aktiv, blockiert_von, blockiert_bis } = req.body;
+        await db.query(
+            'UPDATE turnier_felder SET feld_name = ?, aktiv = ?, blockiert_von = ?, blockiert_bis = ? WHERE id = ? AND turnier_id = ?',
+            [feld_name, aktiv, blockiert_von, blockiert_bis, req.params.feldId, req.params.turnierId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT felder error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// SPIELE ENDPOINTS
+// ==========================================
+
+// Get all games for tournament
+app.get('/api/turniere/:turnierId/spiele', async (req, res) => {
+    try {
+        const { phase_id, runde, status, team_id } = req.query;
+        
+        let query = `
+            SELECT s.*, 
+                   t1.team_name as team1_name, t1.verein as team1_verein,
+                   t2.team_name as team2_name, t2.verein as team2_verein,
+                   gew.team_name as gewinner_name,
+                   f.feld_nummer, f.feld_name,
+                   p.phase_name, p.phase_typ
+            FROM turnier_spiele s
+            LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+            LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+            LEFT JOIN turnier_teams gew ON s.gewinner_id = gew.id
+            LEFT JOIN turnier_felder f ON s.feld_id = f.id
+            LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            WHERE s.turnier_id = ?
+        `;
+        
+        const params = [req.params.turnierId];
+
+        if (phase_id) {
+            query += ' AND s.phase_id = ?';
+            params.push(phase_id);
+        }
+        if (runde) {
+            query += ' AND s.runde = ?';
+            params.push(runde);
+        }
+        if (status) {
+            query += ' AND s.status = ?';
+            params.push(status);
+        }
+        if (team_id) {
+            query += ' AND (s.team1_id = ? OR s.team2_id = ?)';
+            params.push(team_id, team_id);
+        }
+
+        query += ' ORDER BY s.geplante_zeit, s.spiel_nummer';
+
+        const [rows] = await db.query(query, params);
+        res.json(rows);
+    } catch (err) {
+        console.error('GET spiele error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Get single game
+app.get('/api/turniere/:turnierId/spiele/:spielId', async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT s.*, 
+                   t1.team_name as team1_name, t1.email as team1_email, t1.verein as team1_verein,
+                   t2.team_name as team2_name, t2.email as team2_email, t2.verein as team2_verein,
+                   f.feld_nummer, f.feld_name,
+                   p.phase_name
+            FROM turnier_spiele s
+            LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+            LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+            LEFT JOIN turnier_felder f ON s.feld_id = f.id
+            LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            WHERE s.id = ? AND s.turnier_id = ?
+        `, [req.params.spielId, req.params.turnierId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+        res.json(rows[0]);
+    } catch (err) {
+        console.error('GET spiel error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// TOURNAMENT START / GAME GENERATION
+// ==========================================
+
+// Start tournament - generate all games for round 1
+app.post('/api/turniere/:turnierId/starten', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        // Get tournament config
+        const [configRows] = await db.query('SELECT * FROM turnier_config WHERE id = ?', [turnierId]);
+        if (configRows.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+        const config = configRows[0];
+
+        // Get teams
+        const [teams] = await db.query(
+            'SELECT * FROM turnier_teams WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt") ORDER BY klasse, setzposition, RAND()',
+            [turnierId]
+        );
+
+        if (teams.length < 2) {
+            return res.status(400).json({ error: 'Not enough teams' });
+        }
+
+        // Get main phase (Plan A)
+        const [phases] = await db.query('SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Plan A"', [turnierId]);
+        if (phases.length === 0) {
+            return res.status(400).json({ error: 'Phase Plan A not found' });
+        }
+        const planAId = phases[0].id;
+
+        // Get fields
+        const [felder] = await db.query('SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer', [turnierId]);
+
+        // Shuffle teams based on mode
+        let orderedTeams;
+        if (config.modus === 'seeded') {
+            // Seeded: distribute by seed position (pot system)
+            orderedTeams = seedTeams(teams);
+        } else {
+            // Random shuffle
+            orderedTeams = shuffleArray([...teams]);
+        }
+
+        // Generate pairings for round 1
+        const spiele = [];
+        let spielNummer = 1;
+        let currentTime = new Date(`${config.turnier_datum}T${config.startzeit}`);
+
+        for (let i = 0; i < orderedTeams.length; i += 2) {
+            const team1 = orderedTeams[i];
+            const team2 = orderedTeams[i + 1] || null;
+
+            const feldIndex = (spielNummer - 1) % felder.length;
+            const feld = felder[feldIndex];
+
+            const bestCode = generateConfirmationCode();
+
+            spiele.push({
+                turnier_id: turnierId,
+                phase_id: planAId,
+                runde: 1,
+                spiel_nummer: spielNummer,
+                team1_id: team1.id,
+                team2_id: team2 ? team2.id : null,
+                feld_id: feld.id,
+                geplante_zeit: new Date(currentTime),
+                status: team2 ? 'geplant' : 'beendet', // If no opponent, auto-win
+                gewinner_id: team2 ? null : team1.id,
+                bestaetigungs_code: bestCode
+            });
+
+            spielNummer++;
+
+            // Move time forward after all fields are used in this time slot
+            if (spielNummer % felder.length === 1) {
+                currentTime = new Date(currentTime.getTime() + (config.spielzeit_minuten + config.pause_minuten) * 60000);
+            }
+        }
+
+        // Insert games into database
+        for (const spiel of spiele) {
+            await db.query(
+                `INSERT INTO turnier_spiele 
+                (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, gewinner_id, bestaetigungs_code) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [spiel.turnier_id, spiel.phase_id, spiel.runde, spiel.spiel_nummer, spiel.team1_id, spiel.team2_id, spiel.feld_id, spiel.geplante_zeit, spiel.status, spiel.gewinner_id, spiel.bestaetigungs_code]
+            );
+        }
+
+        await logAudit(turnierId, 'START_TURNIER', 'turnier_spiele', null, null, { games_created: spiele.length });
+
+        res.json({ success: true, spiele_erstellt: spiele.length });
+    } catch (err) {
+        console.error('POST starten error:', err);
+        res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+});
+
+// Helper: Seed teams using pot system
+function seedTeams(teams) {
+    // Sort by seed position, then distribute for balanced bracket
+    const sorted = [...teams].sort((a, b) => a.setzposition - b.setzposition);
+    const n = sorted.length;
+    const result = new Array(n);
+    
+    // Simple bracket seeding
+    for (let i = 0; i < n; i++) {
+        result[i] = sorted[i];
+    }
+    
+    // Rearrange for bracket fairness (top seeds separated)
+    return bracketSeed(result);
+}
+
+function bracketSeed(teams) {
+    const n = teams.length;
+    if (n <= 2) return teams;
+    
+    // Simple implementation: alternate distribution
+    const result = [];
+    const mid = Math.ceil(n / 2);
+    const top = teams.slice(0, mid);
+    const bottom = teams.slice(mid);
+    
+    for (let i = 0; i < mid; i++) {
+        if (top[i]) result.push(top[i]);
+        if (bottom[i]) result.push(bottom[i]);
+    }
+    
+    return result;
+}
+
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+// ==========================================
+// RESULT SUBMISSION (FOR REFEREES)
+// ==========================================
+
+// Submit result (referee or team)
+app.post('/api/turniere/:turnierId/spiele/:spielId/ergebnis', async (req, res) => {
+    try {
+        const { spielId, turnierId } = req.params;
+        const {
+            ergebnis_team1,
+            ergebnis_team2,
+            satz1_team1, satz1_team2,
+            satz2_team1, satz2_team2,
+            satz3_team1, satz3_team2,
+            gemeldet_von = 'schiedsrichter',
+            melder_name,
+            melder_email,
+            bestaetigungs_code
+        } = req.body;
+
+        // Validate input
+        if (ergebnis_team1 === undefined || ergebnis_team2 === undefined) {
+            return res.status(400).json({ error: 'Score required' });
+        }
+
+        // Get game
+        const [games] = await db.query('SELECT * FROM turnier_spiele WHERE id = ? AND turnier_id = ?', [spielId, turnierId]);
+        if (games.length === 0) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+        const game = games[0];
+
+        // Store result report
+        await db.query(
+            `INSERT INTO turnier_ergebnis_meldungen 
+            (spiel_id, gemeldet_von, melder_name, melder_email, ergebnis_team1, ergebnis_team2, 
+             satz1_team1, satz1_team2, satz2_team1, satz2_team2, satz3_team1, satz3_team2, 
+             bestaetigungs_code_eingabe, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'gemeldet')`,
+            [spielId, gemeldet_von, melder_name, melder_email, ergebnis_team1, ergebnis_team2,
+             satz1_team1, satz1_team2, satz2_team1, satz2_team2, satz3_team1, satz3_team2, bestaetigungs_code]
+        );
+
+        // Update game status to waiting for confirmation
+        await db.query(
+            'UPDATE turnier_spiele SET status = "wartend_bestaetigung" WHERE id = ?',
+            [spielId]
+        );
+
+        res.json({ success: true, message: 'Ergebnis gemeldet - wartet auf Bestätigung' });
+    } catch (err) {
+        console.error('POST ergebnis error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Confirm result (loser team confirmation)
+app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', async (req, res) => {
+    try {
+        const { spielId, turnierId } = req.params;
+        const { bestaetigungs_code } = req.body;
+
+        // Get game
+        const [games] = await db.query('SELECT * FROM turnier_spiele WHERE id = ? AND turnier_id = ?', [spielId, turnierId]);
+        if (games.length === 0) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+        const game = games[0];
+
+        // Check confirmation code
+        if (game.bestaetigungs_code && bestaetigungs_code !== game.bestaetigungs_code) {
+            return res.status(403).json({ error: 'Invalid confirmation code' });
+        }
+
+        // Get latest reported result
+        const [meldungen] = await db.query(
+            'SELECT * FROM turnier_ergebnis_meldungen WHERE spiel_id = ? AND status = "gemeldet" ORDER BY created_at DESC LIMIT 1',
+            [spielId]
+        );
+
+        if (meldungen.length === 0) {
+            return res.status(400).json({ error: 'No result to confirm' });
+        }
+
+        const meldung = meldungen[0];
+
+        // Determine winner
+        const gewinnerId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team1_id : game.team2_id;
+        const verliererId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team2_id : game.team1_id;
+
+        // Update game with confirmed result
+        await db.query(
+            `UPDATE turnier_spiele SET 
+             ergebnis_team1 = ?, ergebnis_team2 = ?,
+             satz1_team1 = ?, satz1_team2 = ?,
+             satz2_team1 = ?, satz2_team2 = ?,
+             satz3_team1 = ?, satz3_team2 = ?,
+             gewinner_id = ?, verlierer_id = ?,
+             status = 'beendet',
+             bestaetigt_von_verlierer = 1,
+             bestaetigt_zeit = NOW()
+             WHERE id = ?`,
+            [meldung.ergebnis_team1, meldung.ergebnis_team2,
+             meldung.satz1_team1, meldung.satz1_team2,
+             meldung.satz2_team1, meldung.satz2_team2,
+             meldung.satz3_team1, meldung.satz3_team2,
+             gewinnerId, verliererId, spielId]
+        );
+
+        // Update result report status
+        await db.query('UPDATE turnier_ergebnis_meldungen SET status = "bestaetigt" WHERE id = ?', [meldung.id]);
+
+        await logAudit(turnierId, 'CONFIRM_RESULT', 'turnier_spiele', spielId, null, { gewinner_id: gewinnerId });
+
+        res.json({ success: true, gewinner_id: gewinnerId });
+    } catch (err) {
+        console.error('POST bestaetigen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// ADMIN RESULT MANAGEMENT
+// ==========================================
+
+// Get pending results
+app.get('/api/turniere/:turnierId/meldungen', async (req, res) => {
+    try {
+        const { status = 'gemeldet' } = req.query;
+        const [rows] = await db.query(`
+            SELECT m.*, 
+                   s.spiel_nummer, s.runde, s.team1_id, s.team2_id, s.bestaetigungs_code,
+                   t1.team_name as team1_name,
+                   t2.team_name as team2_name,
+                   p.phase_name
+            FROM turnier_ergebnis_meldungen m
+            JOIN turnier_spiele s ON m.spiel_id = s.id
+            LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+            LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+            LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            WHERE s.turnier_id = ? AND m.status = ?
+            ORDER BY m.created_at DESC
+        `, [req.params.turnierId, status]);
+        res.json(rows);
+    } catch (err) {
+        console.error('GET meldungen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Admin: Approve result directly
+app.post('/api/turniere/:turnierId/meldungen/:meldungId/genehmigen', async (req, res) => {
+    try {
+        const { meldungId, turnierId } = req.params;
+        const { geprueft_von } = req.body;
+
+        // Get meldung
+        const [meldungen] = await db.query('SELECT * FROM turnier_ergebnis_meldungen WHERE id = ?', [meldungId]);
+        if (meldungen.length === 0) {
+            return res.status(404).json({ error: 'Report not found' });
+        }
+        const meldung = meldungen[0];
+
+        // Get game
+        const [games] = await db.query('SELECT * FROM turnier_spiele WHERE id = ?', [meldung.spiel_id]);
+        if (games.length === 0) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+        const game = games[0];
+
+        // Determine winner
+        const gewinnerId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team1_id : game.team2_id;
+        const verliererId = meldung.ergebnis_team1 > meldung.ergebnis_team2 ? game.team2_id : game.team1_id;
+
+        // Update game
+        await db.query(
+            `UPDATE turnier_spiele SET 
+             ergebnis_team1 = ?, ergebnis_team2 = ?,
+             satz1_team1 = ?, satz1_team2 = ?,
+             satz2_team1 = ?, satz2_team2 = ?,
+             satz3_team1 = ?, satz3_team2 = ?,
+             gewinner_id = ?, verlierer_id = ?,
+             status = 'beendet',
+             bestaetigt_von_verlierer = 0,
+             bestaetigt_zeit = NOW()
+             WHERE id = ?`,
+            [meldung.ergebnis_team1, meldung.ergebnis_team2,
+             meldung.satz1_team1, meldung.satz1_team2,
+             meldung.satz2_team1, meldung.satz2_team2,
+             meldung.satz3_team1, meldung.satz3_team2,
+             gewinnerId, verliererId, meldung.spiel_id]
+        );
+
+        // Update meldung
+        await db.query(
+            'UPDATE turnier_ergebnis_meldungen SET status = "bestaetigt", geprueft_von = ?, geprueft_zeit = NOW() WHERE id = ?',
+            [geprueft_von, meldungId]
+        );
+
+        await logAudit(turnierId, 'ADMIN_APPROVE', 'turnier_ergebnis_meldungen', meldungId, null, { geprueft_von });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('POST genehmigen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Admin: Update result directly
+app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, res) => {
+    try {
+        const { spielId, turnierId } = req.params;
+        const {
+            ergebnis_team1, ergebnis_team2,
+            satz1_team1, satz1_team2,
+            satz2_team1, satz2_team2,
+            satz3_team1, satz3_team2,
+            bemerkung,
+            bearbeitet_von
+        } = req.body;
+
+        // Get old values
+        const [oldGame] = await db.query('SELECT * FROM turnier_spiele WHERE id = ? AND turnier_id = ?', [spielId, turnierId]);
+        if (oldGame.length === 0) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+
+        const game = oldGame[0];
+
+        // Determine winner
+        const gewinnerId = ergebnis_team1 > ergebnis_team2 ? game.team1_id : game.team2_id;
+        const verliererId = ergebnis_team1 > ergebnis_team2 ? game.team2_id : game.team1_id;
+
+        await db.query(
+            `UPDATE turnier_spiele SET 
+             ergebnis_team1 = ?, ergebnis_team2 = ?,
+             satz1_team1 = ?, satz1_team2 = ?,
+             satz2_team1 = ?, satz2_team2 = ?,
+             satz3_team1 = ?, satz3_team2 = ?,
+             gewinner_id = ?, verlierer_id = ?,
+             status = 'beendet',
+             bemerkung = ?
+             WHERE id = ?`,
+            [ergebnis_team1, ergebnis_team2,
+             satz1_team1, satz1_team2,
+             satz2_team1, satz2_team2,
+             satz3_team1, satz3_team2,
+             gewinnerId, verliererId,
+             bemerkung, spielId]
+        );
+
+        await logAudit(turnierId, 'ADMIN_UPDATE_RESULT', 'turnier_spiele', spielId, game, req.body, bearbeitet_von);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT admin-ergebnis error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// FIELD ASSIGNMENT
+// ==========================================
+
+// Auto-assign fields
+app.post('/api/turniere/:turnierId/felder-zuweisen', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        // Get config
+        const [configRows] = await db.query('SELECT * FROM turnier_config WHERE id = ?', [turnierId]);
+        if (configRows.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+        const config = configRows[0];
+
+        // Get active fields
+        const [felder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+
+        // Get unassigned games
+        const [spiele] = await db.query(
+            'SELECT * FROM turnier_spiele WHERE turnier_id = ? AND feld_id IS NULL AND status = "geplant" ORDER BY runde, spiel_nummer',
+            [turnierId]
+        );
+
+        if (spiele.length === 0) {
+            return res.json({ success: true, message: 'No games to assign', assigned: 0 });
+        }
+
+        let assigned = 0;
+        let currentTime = new Date(`${config.turnier_datum}T${config.startzeit}`);
+        let feldIndex = 0;
+
+        for (const spiel of spiele) {
+            const feld = felder[feldIndex % felder.length];
+
+            await db.query(
+                'UPDATE turnier_spiele SET feld_id = ?, geplante_zeit = ? WHERE id = ?',
+                [feld.id, currentTime, spiel.id]
+            );
+
+            feldIndex++;
+            assigned++;
+
+            // Move time after all fields used
+            if (feldIndex % felder.length === 0) {
+                currentTime = new Date(currentTime.getTime() + (config.spielzeit_minuten + config.pause_minuten) * 60000);
+            }
+        }
+
+        res.json({ success: true, assigned });
+    } catch (err) {
+        console.error('POST felder-zuweisen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// RANKING CALCULATION
+// ==========================================
+
+// Calculate ranking after X rounds
+app.post('/api/turniere/:turnierId/platzierung-berechnen', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+        const { nach_runde } = req.body;
+
+        if (!nach_runde) {
+            return res.status(400).json({ error: 'nach_runde required' });
+        }
+
+        // Get all finished games up to this round
+        const [spiele] = await db.query(
+            `SELECT * FROM turnier_spiele 
+             WHERE turnier_id = ? AND runde <= ? AND status = 'beendet'`,
+            [turnierId, nach_runde]
+        );
+
+        // Get all teams
+        const [teams] = await db.query(
+            'SELECT id FROM turnier_teams WHERE turnier_id = ?',
+            [turnierId]
+        );
+
+        // Calculate stats for each team
+        const stats = {};
+        for (const team of teams) {
+            stats[team.id] = {
+                team_id: team.id,
+                siege: 0,
+                niederlagen: 0,
+                punkte_dafuer: 0,
+                punkte_dagegen: 0,
+                saetze_gewonnen: 0,
+                saetze_verloren: 0
+            };
+        }
+
+        for (const spiel of spiele) {
+            if (spiel.gewinner_id && spiel.verlierer_id) {
+                if (stats[spiel.gewinner_id]) {
+                    stats[spiel.gewinner_id].siege++;
+                    stats[spiel.gewinner_id].punkte_dafuer += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
+                    stats[spiel.gewinner_id].punkte_dagegen += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+                }
+                if (stats[spiel.verlierer_id]) {
+                    stats[spiel.verlierer_id].niederlagen++;
+                    stats[spiel.verlierer_id].punkte_dafuer += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
+                    stats[spiel.verlierer_id].punkte_dagegen += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+                }
+            }
+        }
+
+        // Sort teams by wins, then point difference
+        const sorted = Object.values(stats).sort((a, b) => {
+            if (b.siege !== a.siege) return b.siege - a.siege;
+            const diffA = a.punkte_dafuer - a.punkte_dagegen;
+            const diffB = b.punkte_dafuer - b.punkte_dagegen;
+            return diffB - diffA;
+        });
+
+        // Delete old ranking for this round
+        await db.query(
+            'DELETE FROM turnier_zwischenstand WHERE turnier_id = ? AND nach_runde = ?',
+            [turnierId, nach_runde]
+        );
+
+        // Insert new ranking
+        for (let i = 0; i < sorted.length; i++) {
+            const s = sorted[i];
+            await db.query(
+                `INSERT INTO turnier_zwischenstand 
+                (turnier_id, team_id, nach_runde, platzierung, siege, niederlagen, punkte_dafuer, punkte_dagegen, punkt_differenz, saetze_gewonnen, saetze_verloren, satz_differenz) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [turnierId, s.team_id, nach_runde, i + 1, s.siege, s.niederlagen, s.punkte_dafuer, s.punkte_dagegen, s.punkte_dafuer - s.punkte_dagegen, s.saetze_gewonnen, s.saetze_verloren, s.saetze_gewonnen - s.saetze_verloren]
+            );
+        }
+
+        res.json({ success: true, teams_ranked: sorted.length });
+    } catch (err) {
+        console.error('POST platzierung-berechnen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Get ranking
+app.get('/api/turniere/:turnierId/platzierung', async (req, res) => {
+    try {
+        const { nach_runde } = req.query;
+        let query = `
+            SELECT z.*, t.team_name, t.verein 
+            FROM turnier_zwischenstand z
+            JOIN turnier_teams t ON z.team_id = t.id
+            WHERE z.turnier_id = ?
+        `;
+        const params = [req.params.turnierId];
+
+        if (nach_runde) {
+            query += ' AND z.nach_runde = ?';
+            params.push(nach_runde);
+        }
+
+        query += ' ORDER BY z.nach_runde DESC, z.platzierung';
+
+        const [rows] = await db.query(query, params);
+        res.json(rows);
+    } catch (err) {
+        console.error('GET platzierung error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Calculate final ranking
+app.post('/api/turniere/:turnierId/endplatzierung-berechnen', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        // Get all finished games
+        const [spiele] = await db.query(
+            "SELECT * FROM turnier_spiele WHERE turnier_id = ? AND status = 'beendet'",
+            [turnierId]
+        );
+
+        // Get all teams
+        const [teams] = await db.query(
+            'SELECT id FROM turnier_teams WHERE turnier_id = ?',
+            [turnierId]
+        );
+
+        // Calculate final stats
+        const stats = {};
+        for (const team of teams) {
+            stats[team.id] = {
+                team_id: team.id,
+                siege: 0,
+                niederlagen: 0,
+                punkte_dafuer: 0,
+                punkte_dagegen: 0
+            };
+        }
+
+        for (const spiel of spiele) {
+            if (spiel.gewinner_id && stats[spiel.gewinner_id]) {
+                stats[spiel.gewinner_id].siege++;
+                stats[spiel.gewinner_id].punkte_dafuer += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
+                stats[spiel.gewinner_id].punkte_dagegen += (spiel.ergebnis_team1 > spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+            }
+            if (spiel.verlierer_id && stats[spiel.verlierer_id]) {
+                stats[spiel.verlierer_id].niederlagen++;
+                stats[spiel.verlierer_id].punkte_dafuer += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team1 : spiel.ergebnis_team2) || 0;
+                stats[spiel.verlierer_id].punkte_dagegen += (spiel.ergebnis_team1 < spiel.ergebnis_team2 ? spiel.ergebnis_team2 : spiel.ergebnis_team1) || 0;
+            }
+        }
+
+        // Sort
+        const sorted = Object.values(stats).sort((a, b) => {
+            if (b.siege !== a.siege) return b.siege - a.siege;
+            return (b.punkte_dafuer - b.punkte_dagegen) - (a.punkte_dafuer - a.punkte_dagegen);
+        });
+
+        // Delete old
+        await db.query('DELETE FROM turnier_endplatzierung WHERE turnier_id = ?', [turnierId]);
+
+        // Insert new
+        for (let i = 0; i < sorted.length; i++) {
+            const s = sorted[i];
+            await db.query(
+                'INSERT INTO turnier_endplatzierung (turnier_id, team_id, endplatzierung, siege, niederlagen, punkte_dafuer, punkte_dagegen) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [turnierId, s.team_id, i + 1, s.siege, s.niederlagen, s.punkte_dafuer, s.punkte_dagegen]
+            );
+        }
+
+        res.json({ success: true, teams_ranked: sorted.length });
+    } catch (err) {
+        console.error('POST endplatzierung-berechnen error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Get final ranking
+app.get('/api/turniere/:turnierId/endplatzierung', async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT e.*, t.team_name, t.verein 
+            FROM turnier_endplatzierung e
+            JOIN turnier_teams t ON e.team_id = t.id
+            WHERE e.turnier_id = ?
+            ORDER BY e.endplatzierung
+        `, [req.params.turnierId]);
+        res.json(rows);
+    } catch (err) {
+        console.error('GET endplatzierung error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// RESET TOURNAMENT
+// ==========================================
+
+app.post('/api/turniere/:turnierId/reset', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        await db.query('DELETE FROM turnier_endplatzierung WHERE turnier_id = ?', [turnierId]);
+        await db.query('DELETE FROM turnier_zwischenstand WHERE turnier_id = ?', [turnierId]);
+        await db.query('DELETE FROM turnier_ergebnis_meldungen WHERE spiel_id IN (SELECT id FROM turnier_spiele WHERE turnier_id = ?)', [turnierId]);
+        await db.query('DELETE FROM turnier_spiele WHERE turnier_id = ?', [turnierId]);
+
+        await logAudit(turnierId, 'RESET', 'turnier', null, null, { reset: true });
+
+        res.json({ success: true, message: 'Tournament reset' });
+    } catch (err) {
+        console.error('POST reset error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// EMAIL NOTIFICATIONS
+// ==========================================
+
+// Send game notification email
+app.post('/api/turniere/:turnierId/email/spielankuendigung', async (req, res) => {
+    try {
+        const { spiel_id } = req.body;
+
+        // Get tournament config for SMTP
+        const [configRows] = await db.query('SELECT * FROM turnier_config WHERE id = ?', [req.params.turnierId]);
+        if (configRows.length === 0 || !configRows[0].email_benachrichtigung) {
+            return res.status(400).json({ error: 'Email not configured or disabled' });
+        }
+        const config = configRows[0];
+
+        // Get game details
+        const [games] = await db.query(`
+            SELECT s.*, 
+                   t1.team_name as team1_name, t1.email as team1_email,
+                   t2.team_name as team2_name, t2.email as team2_email,
+                   f.feld_name
+            FROM turnier_spiele s
+            LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+            LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+            LEFT JOIN turnier_felder f ON s.feld_id = f.id
+            WHERE s.id = ?
+        `, [spiel_id]);
+
+        if (games.length === 0) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+
+        const game = games[0];
+
+        // Create transporter
+        const transporter = nodemailer.createTransport({
+            host: config.smtp_host || process.env.SMTP_HOST,
+            port: config.smtp_port || parseInt(process.env.SMTP_PORT || '587'),
+            secure: false,
+            auth: {
+                user: config.smtp_user || process.env.SMTP_USER,
+                pass: config.smtp_pass || process.env.SMTP_PASS
+            }
+        });
+
+        const spielzeit = game.geplante_zeit ? new Date(game.geplante_zeit).toLocaleString('de-DE') : 'TBA';
+
+        const emails = [game.team1_email, game.team2_email].filter(e => e);
+
+        for (const email of emails) {
+            const mailHtml = `
+                <h2>🏐 Spielankündigung - ${config.turnier_name}</h2>
+                <p>Euer nächstes Spiel steht an!</p>
+                <table border="1" cellpadding="8" style="border-collapse: collapse;">
+                    <tr><td><strong>Spiel Nr.</strong></td><td>${game.spiel_nummer}</td></tr>
+                    <tr><td><strong>Team 1</strong></td><td>${game.team1_name}</td></tr>
+                    <tr><td><strong>Team 2</strong></td><td>${game.team2_name}</td></tr>
+                    <tr><td><strong>Feld</strong></td><td>${game.feld_name}</td></tr>
+                    <tr><td><strong>Zeit</strong></td><td>${spielzeit}</td></tr>
+                </table>
+                <p>Viel Erfolg!</p>
+            `;
+
+            await transporter.sendMail({
+                from: config.smtp_sender || process.env.SMTP_SENDER,
+                to: email,
+                subject: `🏐 Spielankündigung: ${game.team1_name} vs ${game.team2_name}`,
+                html: mailHtml
+            });
+
+            // Log email
+            await db.query(
+                'INSERT INTO turnier_email_log (turnier_id, spiel_id, email_typ, empfaenger_email, betreff, nachricht, erfolgreich) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [req.params.turnierId, spiel_id, 'spielankuendigung', email, `Spielankündigung: Spiel ${game.spiel_nummer}`, mailHtml, true]
+            );
+        }
+
+        res.json({ success: true, emails_sent: emails.length });
+    } catch (err) {
+        console.error('POST email error:', err);
+        res.status(500).json({ error: 'Email error: ' + err.message });
+    }
+});
+
+// ==========================================
+// PUBLIC BRACKET VIEW (for teams to see their schedule)
+// ==========================================
+
+// Get tournament bracket view
+app.get('/api/public/turniere/:turnierId/bracket', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        const [config] = await db.query('SELECT turnier_name, turnier_datum FROM turnier_config WHERE id = ? AND aktiv = 1', [turnierId]);
+        if (config.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+
+        const [phasen] = await db.query('SELECT * FROM turnier_phasen WHERE turnier_id = ? ORDER BY reihenfolge', [turnierId]);
+
+        const [spiele] = await db.query(`
+            SELECT s.id, s.phase_id, s.runde, s.spiel_nummer, s.geplante_zeit, s.status,
+                   s.ergebnis_team1, s.ergebnis_team2,
+                   t1.team_name as team1_name,
+                   t2.team_name as team2_name,
+                   gew.team_name as gewinner_name,
+                   f.feld_name
+            FROM turnier_spiele s
+            LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+            LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+            LEFT JOIN turnier_teams gew ON s.gewinner_id = gew.id
+            LEFT JOIN turnier_felder f ON s.feld_id = f.id
+            WHERE s.turnier_id = ?
+            ORDER BY s.runde, s.spiel_nummer
+        `, [turnierId]);
+
+        res.json({
+            turnier: config[0],
+            phasen,
+            spiele
+        });
+    } catch (err) {
+        console.error('GET bracket error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ==========================================
+// SERVER START
+// ==========================================
+
+const PORT = process.env.TURNIER_PORT || 3003;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Turnier-Server läuft auf Port ${PORT}`);
+});
