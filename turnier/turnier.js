@@ -118,6 +118,17 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
     }
 }
 
+// Helper: Get next letter in the alphabet
+function getNextPhaseLetter(currentLetter) {
+    return String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+}
+
+// Helper: Parse phase name to extract letter (e.g., "Plan A1" -> "A", "Plan B2" -> "B")
+function parsePhaseNameLetter(phaseName) {
+    const match = phaseName.match(/Plan ([A-Z])\d?/);
+    return match ? match[1] : null;
+}
+
 // Helper: Generate or update next round games for winner and loser
 // This is called after a game is completed to progress the tournament bracket
 async function progressTournamentBracket(turnierId, completedGame, gewinnerId, verliererId) {
@@ -146,18 +157,17 @@ async function progressTournamentBracket(turnierId, completedGame, gewinnerId, v
             loserPhase = phasen.find(p => p.phase_name === 'Plan A2');
         } else if (currentPhase.phase_typ === 'gewinner') {
             // From winner bracket, determine next winner phase
-            const phaseLetter = currentPhase.phase_name.match(/Plan ([A-Z])/)?.[1];
-            const phaseNumber = currentPhase.phase_name.match(/([A-Z])(\d)/)?.[2];
-            if (phaseLetter && phaseNumber) {
-                const nextLetter = String.fromCharCode(phaseLetter.charCodeAt(0) + 1);
+            const phaseLetter = parsePhaseNameLetter(currentPhase.phase_name);
+            if (phaseLetter) {
+                const nextLetter = getNextPhaseLetter(phaseLetter);
                 winnerPhase = phasen.find(p => p.phase_name === `Plan ${nextLetter}1`);
                 loserPhase = phasen.find(p => p.phase_name === `Plan ${nextLetter}2`);
             }
         } else if (currentPhase.phase_typ === 'verlierer') {
             // From loser bracket, winners stay in loser bracket progression
-            const phaseLetter = currentPhase.phase_name.match(/Plan ([A-Z])/)?.[1];
+            const phaseLetter = parsePhaseNameLetter(currentPhase.phase_name);
             if (phaseLetter) {
-                const nextLetter = String.fromCharCode(phaseLetter.charCodeAt(0) + 1);
+                const nextLetter = getNextPhaseLetter(phaseLetter);
                 // Loser bracket winners go to next loser bracket round
                 winnerPhase = phasen.find(p => p.phase_name === `Plan ${nextLetter}2`);
                 // Losers in loser bracket are eliminated (no further progression)
@@ -174,8 +184,10 @@ async function progressTournamentBracket(turnierId, completedGame, gewinnerId, v
 
         // Process winner: find or create next round game
         if (winnerPhase && gewinnerId) {
-            await assignTeamToNextRoundGame(turnierId, winnerPhase.id, currentRunde + 1, gewinnerId, nextSpielNummer, 'gewinner');
-            nextSpielNummer++;
+            const winnerGameCreated = await assignTeamToNextRoundGame(turnierId, winnerPhase.id, currentRunde + 1, gewinnerId, nextSpielNummer, 'gewinner');
+            if (winnerGameCreated) {
+                nextSpielNummer++;
+            }
         }
 
         // Process loser: find or create next round game in loser bracket
@@ -190,6 +202,7 @@ async function progressTournamentBracket(turnierId, completedGame, gewinnerId, v
 }
 
 // Helper: Assign a team to an existing waiting game or create a new one
+// Returns true if a new game was created, false if team was assigned to existing game
 async function assignTeamToNextRoundGame(turnierId, phaseId, runde, teamId, nextSpielNummer, bracketType) {
     try {
         // Look for an existing game in this phase and round that needs a team
@@ -217,6 +230,7 @@ async function assignTeamToNextRoundGame(turnierId, phaseId, runde, teamId, next
                 );
                 console.log(`Assigned team ${teamId} to team2 slot of game #${game.spiel_nummer}`);
             }
+            return false; // No new game was created
         } else {
             // Create a new waiting game for this phase and round
             const bestCode = generateConfirmationCode();
@@ -227,9 +241,11 @@ async function assignTeamToNextRoundGame(turnierId, phaseId, runde, teamId, next
                 [turnierId, phaseId, runde, nextSpielNummer, teamId, bestCode]
             );
             console.log(`Created new ${bracketType} bracket game #${nextSpielNummer} with team ${teamId}`);
+            return true; // New game was created
         }
     } catch (err) {
         console.error('Error assigning team to next round game:', err);
+        return false;
     }
 }
 
