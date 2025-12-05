@@ -775,29 +775,34 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
         const game = games[0];
 
         // Get latest reported result to determine who is the loser
-        const [meldungenTemp] = await db.query(
+        const [reportedResults] = await db.query(
             'SELECT * FROM turnier_ergebnis_meldungen WHERE spiel_id = ? AND status = "gemeldet" ORDER BY created_at DESC LIMIT 1',
             [spielId]
         );
 
-        if (meldungenTemp.length === 0) {
+        if (reportedResults.length === 0) {
             return res.status(400).json({ error: 'No result to confirm' });
         }
 
-        const tempMeldung = meldungenTemp[0];
+        const reportedResult = reportedResults[0];
 
-        // Determine the loser team based on reported scores
-        const { verliererId: tempVerliererId } = determineWinnerLoser(
-            tempMeldung.ergebnis_team1,
-            tempMeldung.ergebnis_team2,
+        // Determine the winner and loser team based on reported scores
+        const { gewinnerId, verliererId } = determineWinnerLoser(
+            reportedResult.ergebnis_team1,
+            reportedResult.ergebnis_team2,
             game.team1_id,
             game.team2_id
         );
 
+        // If it's a tie, reject the result (volleyball doesn't have ties)
+        if (gewinnerId === null) {
+            return res.status(400).json({ error: 'Tie games are not allowed - please provide a valid result' });
+        }
+
         // Get the loser team's confirmation code
         let validCode = game.bestaetigungs_code; // fallback to game code
-        if (tempVerliererId) {
-            const [loserTeam] = await db.query('SELECT bestaetigungs_code FROM turnier_teams WHERE id = ?', [tempVerliererId]);
+        if (verliererId) {
+            const [loserTeam] = await db.query('SELECT bestaetigungs_code FROM turnier_teams WHERE id = ?', [verliererId]);
             if (loserTeam.length > 0 && loserTeam[0].bestaetigungs_code) {
                 validCode = loserTeam[0].bestaetigungs_code;
             }
@@ -811,21 +816,8 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
             return res.status(403).json({ error: 'Invalid confirmation code' });
         }
 
-        // Use the already-fetched meldung
-        const meldung = tempMeldung;
-
-        // Use the already-calculated winner/loser
-        const { gewinnerId, verliererId } = determineWinnerLoser(
-            meldung.ergebnis_team1, 
-            meldung.ergebnis_team2, 
-            game.team1_id, 
-            game.team2_id
-        );
-
-        // If it's a tie, reject the result (volleyball doesn't have ties)
-        if (gewinnerId === null) {
-            return res.status(400).json({ error: 'Tie games are not allowed - please provide a valid result' });
-        }
+        // Use the reported result for updating the game
+        const meldung = reportedResult;
 
         // Update game with confirmed result
         await db.query(

@@ -25,11 +25,13 @@ function switchAdminTab(tabName) {
     // Update current tab state
     currentAdminTab = tabName;
     
-    // Update tab buttons
+    // Update tab buttons - use data attribute for reliable selection
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+        }
     });
-    document.querySelector(`.tab-btn[onclick="switchAdminTab('${tabName}')"]`).classList.add('active');
     
     // Update tab content
     document.querySelectorAll('.tab-content').forEach(content => {
