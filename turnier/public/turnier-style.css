@@ -25,7 +25,7 @@
 
 body {
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e74c3c 0%, #ffffff 100%);
     min-height: 100vh;
     padding: 20px;
     color: var(--dark);
@@ -447,7 +447,7 @@ textarea {
 }
 
 .satz-input {
-    width: 60px !important;
+    width: 80px !important;
     text-align: center;
 }
 

@@ -120,12 +120,13 @@ app.post('/api/turniere', async (req, res) => {
         const {
             turnier_name,
             turnier_datum,
+            turnier_datum_ende = null,
             anzahl_teams = 32,
             anzahl_felder = 4,
-            anzahl_klassen = 3,
-            klassen_namen = ['A', 'B', 'C'],
-            spielzeit_minuten = 15,
-            pause_minuten = 5,
+            anzahl_klassen = 5,
+            klassen_namen = ['A', 'B', 'C', 'D', 'E'],
+            spielzeit_minuten = 0,
+            pause_minuten = 0,
             startzeit = '09:00:00',
             endzeit = '18:00:00',
             modus = 'seeded',
@@ -140,11 +141,11 @@ app.post('/api/turniere', async (req, res) => {
 
         const [result] = await db.query(
             `INSERT INTO turnier_config 
-            (turnier_name, turnier_datum, anzahl_teams, anzahl_felder, anzahl_klassen, 
+            (turnier_name, turnier_datum, turnier_datum_ende, anzahl_teams, anzahl_felder, anzahl_klassen, 
              klassen_namen, spielzeit_minuten, pause_minuten, startzeit, endzeit, 
              modus, bestaetigungs_code, email_benachrichtigung) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [turnier_name, turnier_datum, anzahl_teams, anzahl_felder, anzahl_klassen,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [turnier_name, turnier_datum, turnier_datum_ende, anzahl_teams, anzahl_felder, anzahl_klassen,
              JSON.stringify(klassen_namen), spielzeit_minuten, pause_minuten, startzeit, endzeit,
              modus, bestaetigungs_code, email_benachrichtigung]
         );
@@ -179,7 +180,7 @@ app.put('/api/turniere/:id', async (req, res) => {
         const values = [];
 
         const allowedFields = [
-            'turnier_name', 'turnier_datum', 'anzahl_teams', 'anzahl_felder',
+            'turnier_name', 'turnier_datum', 'turnier_datum_ende', 'anzahl_teams', 'anzahl_felder',
             'anzahl_klassen', 'klassen_namen', 'spielzeit_minuten', 'pause_minuten',
             'startzeit', 'endzeit', 'modus', 'email_benachrichtigung', 'aktiv',
             'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_sender'
@@ -242,23 +243,26 @@ app.post('/api/turniere/:turnierId/teams', async (req, res) => {
     try {
         const {
             team_name, ansprechpartner, email, telefon, verein,
-            klasse = 'A', setzposition = 0, teilnehmerzahl = 2
+            klasse = 'A', setzposition = 0, teilnehmerzahl = 2, passwort = ''
         } = req.body;
 
         if (!team_name) {
             return res.status(400).json({ error: 'Team name required' });
         }
 
+        // Generate confirmation code for the team
+        const bestaetigungs_code = generateConfirmationCode();
+
         const [result] = await db.query(
             `INSERT INTO turnier_teams 
-            (turnier_id, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, teilnehmerzahl) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.params.turnierId, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, teilnehmerzahl]
+            (turnier_id, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, teilnehmerzahl, passwort, bestaetigungs_code) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.params.turnierId, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, teilnehmerzahl, passwort, bestaetigungs_code]
         );
 
         await logAudit(req.params.turnierId, 'CREATE', 'turnier_teams', result.insertId, null, req.body);
 
-        res.json({ success: true, id: result.insertId });
+        res.json({ success: true, id: result.insertId, bestaetigungs_code });
     } catch (err) {
         console.error('POST teams error:', err);
         res.status(500).json({ error: 'Database error' });
@@ -271,7 +275,7 @@ app.put('/api/turniere/:turnierId/teams/:teamId', async (req, res) => {
         const updateFields = [];
         const values = [];
 
-        const allowedFields = ['team_name', 'ansprechpartner', 'email', 'telefon', 'verein', 'klasse', 'setzposition', 'status', 'teilnehmerzahl'];
+        const allowedFields = ['team_name', 'ansprechpartner', 'email', 'telefon', 'verein', 'klasse', 'setzposition', 'status', 'teilnehmerzahl', 'passwort', 'bestaetigungs_code'];
 
         for (const field of allowedFields) {
             if (req.body[field] !== undefined) {
@@ -317,11 +321,12 @@ app.post('/api/turniere/:turnierId/teams/import', async (req, res) => {
 
         let imported = 0;
         for (const team of teams) {
+            const bestaetigungs_code = generateConfirmationCode();
             await db.query(
                 `INSERT INTO turnier_teams 
-                (turnier_id, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [req.params.turnierId, team.team_name, team.ansprechpartner, team.email, team.telefon, team.verein, team.klasse || 'A', team.setzposition || 0]
+                (turnier_id, team_name, ansprechpartner, email, telefon, verein, klasse, setzposition, passwort, bestaetigungs_code) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [req.params.turnierId, team.team_name, team.ansprechpartner, team.email, team.telefon, team.verein, team.klasse || 'A', team.setzposition || 0, team.passwort || '', bestaetigungs_code]
             );
             imported++;
         }
@@ -361,7 +366,11 @@ async function createDefaultPhasen(turnierId, anzahlTeams) {
         { name: 'Plan B2', typ: 'verlierer', reihenfolge: 5, beschreibung: 'Verlierer-Pfad B' },
         { name: 'Plan C1', typ: 'gewinner', reihenfolge: 6, beschreibung: 'Gewinner-Pfad C' },
         { name: 'Plan C2', typ: 'verlierer', reihenfolge: 7, beschreibung: 'Verlierer-Pfad C' },
-        { name: 'Finale', typ: 'finale', reihenfolge: 8, beschreibung: 'Finalspiele' }
+        { name: 'Plan D1', typ: 'gewinner', reihenfolge: 8, beschreibung: 'Gewinner-Pfad D' },
+        { name: 'Plan D2', typ: 'verlierer', reihenfolge: 9, beschreibung: 'Verlierer-Pfad D' },
+        { name: 'Plan E1', typ: 'gewinner', reihenfolge: 10, beschreibung: 'Gewinner-Pfad E' },
+        { name: 'Plan E2', typ: 'verlierer', reihenfolge: 11, beschreibung: 'Verlierer-Pfad E' },
+        { name: 'Finale', typ: 'finale', reihenfolge: 12, beschreibung: 'Finalspiele' }
     ];
 
     for (const phase of phasen) {

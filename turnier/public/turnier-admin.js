@@ -130,10 +130,11 @@ async function loadTurnier() {
         // Fill config fields
         document.getElementById('config-name').value = turnier.turnier_name || '';
         document.getElementById('config-datum').value = turnier.turnier_datum ? turnier.turnier_datum.split('T')[0] : '';
+        document.getElementById('config-datum-ende').value = turnier.turnier_datum_ende ? turnier.turnier_datum_ende.split('T')[0] : '';
         document.getElementById('config-teams').value = turnier.anzahl_teams || 32;
         document.getElementById('config-felder').value = turnier.anzahl_felder || 4;
-        document.getElementById('config-spielzeit').value = turnier.spielzeit_minuten || 15;
-        document.getElementById('config-pause').value = turnier.pause_minuten || 5;
+        document.getElementById('config-spielzeit').value = turnier.spielzeit_minuten || 0;
+        document.getElementById('config-pause').value = turnier.pause_minuten || 0;
         document.getElementById('config-startzeit').value = turnier.startzeit || '09:00';
         document.getElementById('config-endzeit').value = turnier.endzeit || '18:00';
         document.getElementById('config-modus').value = turnier.modus || 'seeded';
@@ -210,10 +211,11 @@ async function saveConfig() {
     const config = {
         turnier_name: document.getElementById('config-name').value.trim(),
         turnier_datum: document.getElementById('config-datum').value,
+        turnier_datum_ende: document.getElementById('config-datum-ende').value || null,
         anzahl_teams: parseInt(document.getElementById('config-teams').value, 10),
         anzahl_felder: parseInt(document.getElementById('config-felder').value, 10),
-        spielzeit_minuten: parseInt(document.getElementById('config-spielzeit').value, 10),
-        pause_minuten: parseInt(document.getElementById('config-pause').value, 10),
+        spielzeit_minuten: parseInt(document.getElementById('config-spielzeit').value, 10) || 0,
+        pause_minuten: parseInt(document.getElementById('config-pause').value, 10) || 0,
         startzeit: document.getElementById('config-startzeit').value,
         endzeit: document.getElementById('config-endzeit').value,
         modus: document.getElementById('config-modus').value,
@@ -287,6 +289,11 @@ function renderTeamsTable() {
 
     filtered.forEach((team, idx) => {
         const tr = document.createElement('tr');
+        const isAbgemeldet = team.status === 'abgemeldet';
+        const toggleBtnClass = isAbgemeldet ? 'btn-success' : 'btn-warning';
+        const toggleBtnIcon = isAbgemeldet ? '✅' : '🚫';
+        const toggleBtnTitle = isAbgemeldet ? 'Wieder anmelden' : 'Abmelden';
+        
         tr.innerHTML = `
             <td>${idx + 1}</td>
             <td>${escapeHtml(team.team_name)}</td>
@@ -298,6 +305,7 @@ function renderTeamsTable() {
             <td><span class="status-badge status-${team.status || 'angemeldet'}">${team.status || 'angemeldet'}</span></td>
             <td class="action-btns">
                 <button class="btn btn-small btn-primary" onclick="editTeam(${team.id})">✏️</button>
+                <button class="btn btn-small ${toggleBtnClass}" onclick="toggleTeamStatus(${team.id}, '${team.status || 'angemeldet'}')" title="${toggleBtnTitle}">${toggleBtnIcon}</button>
                 <button class="btn btn-small btn-danger" onclick="deleteTeam(${team.id})">🗑️</button>
             </td>
         `;
@@ -317,6 +325,7 @@ function showAddTeamModal() {
     document.getElementById('team-verein').value = '';
     document.getElementById('team-klasse').value = 'A';
     document.getElementById('team-setzposition').value = '0';
+    document.getElementById('team-passwort').value = '';
     openModal('add-team-modal');
 }
 
@@ -336,7 +345,8 @@ async function addTeam() {
         telefon: document.getElementById('team-telefon').value.trim(),
         verein: document.getElementById('team-verein').value.trim(),
         klasse: document.getElementById('team-klasse').value,
-        setzposition: parseInt(document.getElementById('team-setzposition').value, 10) || 0
+        setzposition: parseInt(document.getElementById('team-setzposition').value, 10) || 0,
+        passwort: document.getElementById('team-passwort').value.trim()
     };
 
     try {
@@ -410,7 +420,8 @@ async function importTeams() {
                 telefon: parts[3] || '',
                 verein: parts[4] || '',
                 klasse: parts[5] || 'A',
-                setzposition: parseInt(parts[6], 10) || 0
+                setzposition: parseInt(parts[6], 10) || 0,
+                passwort: parts[7] || ''
             });
         }
     }
@@ -895,6 +906,7 @@ async function editTeam(teamId) {
     document.getElementById('team-verein').value = team.verein || '';
     document.getElementById('team-klasse').value = team.klasse || 'A';
     document.getElementById('team-setzposition').value = team.setzposition || 0;
+    document.getElementById('team-passwort').value = team.passwort || '';
 
     // Override add function temporarily
     window.addTeamOriginal = addTeam;
@@ -906,7 +918,8 @@ async function editTeam(teamId) {
             telefon: document.getElementById('team-telefon').value.trim(),
             verein: document.getElementById('team-verein').value.trim(),
             klasse: document.getElementById('team-klasse').value,
-            setzposition: parseInt(document.getElementById('team-setzposition').value, 10) || 0
+            setzposition: parseInt(document.getElementById('team-setzposition').value, 10) || 0,
+            passwort: document.getElementById('team-passwort').value.trim()
         };
 
         try {
@@ -935,4 +948,105 @@ async function editTeam(teamId) {
     };
 
     openModal('add-team-modal');
+}
+
+// ==========================================
+// EMAIL PREVIEW
+// ==========================================
+
+function showEmailPreviewModal() {
+    updateEmailPreview();
+    openModal('email-preview-modal');
+}
+
+function updateEmailPreview() {
+    const emailType = document.getElementById('email-preview-type').value;
+    const turnierName = document.getElementById('config-name').value || 'Turnier';
+    const turnierDatum = document.getElementById('config-datum').value || 'TBA';
+    
+    let subject = '';
+    let content = '';
+    
+    switch (emailType) {
+        case 'spielankuendigung':
+            subject = `🏐 Spielankündigung: Team A vs Team B`;
+            content = `
+                <h2>🏐 Spielankündigung - ${escapeHtml(turnierName)}</h2>
+                <p>Euer nächstes Spiel steht an!</p>
+                <table border="1" cellpadding="8" style="border-collapse: collapse; width: 100%;">
+                    <tr><td><strong>Spiel Nr.</strong></td><td>1</td></tr>
+                    <tr><td><strong>Team 1</strong></td><td>Team A</td></tr>
+                    <tr><td><strong>Team 2</strong></td><td>Team B</td></tr>
+                    <tr><td><strong>Feld</strong></td><td>Feld 1</td></tr>
+                    <tr><td><strong>Zeit</strong></td><td>${turnierDatum} 10:00 Uhr</td></tr>
+                </table>
+                <p>Viel Erfolg!</p>
+            `;
+            break;
+        case 'ergebnis':
+            subject = `🏐 Spielergebnis: Team A vs Team B`;
+            content = `
+                <h2>🏐 Spielergebnis - ${escapeHtml(turnierName)}</h2>
+                <p>Das Spiel ist beendet!</p>
+                <table border="1" cellpadding="8" style="border-collapse: collapse; width: 100%;">
+                    <tr><td><strong>Spiel Nr.</strong></td><td>1</td></tr>
+                    <tr><td><strong>Team 1</strong></td><td>Team A</td></tr>
+                    <tr><td><strong>Team 2</strong></td><td>Team B</td></tr>
+                    <tr><td><strong>Ergebnis</strong></td><td>21 : 18</td></tr>
+                    <tr><td><strong>Gewinner</strong></td><td>Team A 🏆</td></tr>
+                </table>
+            `;
+            break;
+        case 'platzierung':
+            subject = `🏆 Turnier-Platzierung - ${turnierName}`;
+            content = `
+                <h2>🏆 Turnier-Platzierung - ${escapeHtml(turnierName)}</h2>
+                <p>Herzlichen Glückwunsch zu eurer Platzierung!</p>
+                <table border="1" cellpadding="8" style="border-collapse: collapse; width: 100%;">
+                    <tr><td><strong>Team</strong></td><td>Team A</td></tr>
+                    <tr><td><strong>Platzierung</strong></td><td>1. Platz 🥇</td></tr>
+                    <tr><td><strong>Siege</strong></td><td>5</td></tr>
+                    <tr><td><strong>Niederlagen</strong></td><td>1</td></tr>
+                    <tr><td><strong>Punkte</strong></td><td>+45</td></tr>
+                </table>
+                <p>Vielen Dank für eure Teilnahme!</p>
+            `;
+            break;
+    }
+    
+    document.getElementById('email-preview-subject').value = subject;
+    document.getElementById('email-preview-content').innerHTML = content;
+}
+
+// ==========================================
+// TEAM DEREGISTRATION (ABMELDEN)
+// ==========================================
+
+async function toggleTeamStatus(teamId, currentStatus) {
+    if (!currentTurnierId) return;
+
+    const newStatus = currentStatus === 'abgemeldet' ? 'angemeldet' : 'abgemeldet';
+    const action = newStatus === 'abgemeldet' ? 'abmelden' : 'wieder anmelden';
+    
+    if (!confirm(`Team wirklich ${action}?`)) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/teams/${teamId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            showToast(`Team ${newStatus === 'abgemeldet' ? 'abgemeldet' : 'wieder angemeldet'}`, 'success');
+            await loadTeams();
+        } else {
+            showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error toggling team status:', err);
+        showToast('Fehler beim Ändern des Status', 'error');
+    }
 }
