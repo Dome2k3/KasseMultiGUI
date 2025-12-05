@@ -88,16 +88,17 @@ async function logAudit(turnierIdVal, aktion, tabelle, datensatzIdVal, alteWerte
 // Helper: Assign next waiting game to a freed field
 async function assignNextWaitingGame(turnierId, freedFieldId) {
     try {
-        // Find the next waiting game (in order of spiel_nummer)
+        // Find the next waiting game that has both teams assigned (in order of spiel_nummer)
         const [waitingGames] = await db.query(
             `SELECT * FROM turnier_spiele 
              WHERE turnier_id = ? AND status = 'wartend' AND feld_id IS NULL 
+             AND team1_id IS NOT NULL AND team2_id IS NOT NULL
              ORDER BY spiel_nummer ASC LIMIT 1`,
             [turnierId]
         );
 
         if (waitingGames.length === 0) {
-            return null; // No waiting games
+            return null; // No waiting games with both teams
         }
 
         const nextGame = waitingGames[0];
@@ -114,6 +115,137 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
     } catch (err) {
         console.error('Error assigning next waiting game:', err);
         return null;
+    }
+}
+
+// Helper: Get next letter in the alphabet
+function getNextPhaseLetter(currentLetter) {
+    return String.fromCharCode(currentLetter.charCodeAt(0) + 1);
+}
+
+// Helper: Parse phase name to extract letter (e.g., "Plan A1" -> "A", "Plan B2" -> "B")
+function parsePhaseNameLetter(phaseName) {
+    const match = phaseName.match(/Plan ([A-Z])\d?/);
+    return match ? match[1] : null;
+}
+
+// Helper: Generate or update next round games for winner and loser
+// This is called after a game is completed to progress the tournament bracket
+async function progressTournamentBracket(turnierId, completedGame, gewinnerId, verliererId) {
+    try {
+        // Get phases for the tournament
+        const [phasen] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? ORDER BY reihenfolge',
+            [turnierId]
+        );
+
+        const currentPhase = phasen.find(p => p.id === completedGame.phase_id);
+        if (!currentPhase) {
+            console.log('Phase not found for game');
+            return;
+        }
+
+        const currentRunde = completedGame.runde;
+
+        // Determine the next phases for winner and loser based on current phase
+        let winnerPhase = null;
+        let loserPhase = null;
+
+        if (currentPhase.phase_typ === 'hauptrunde') {
+            // From main round (Plan A), winners go to Plan A1, losers to Plan A2
+            winnerPhase = phasen.find(p => p.phase_name === 'Plan A1');
+            loserPhase = phasen.find(p => p.phase_name === 'Plan A2');
+        } else if (currentPhase.phase_typ === 'gewinner') {
+            // From winner bracket, determine next winner phase
+            const phaseLetter = parsePhaseNameLetter(currentPhase.phase_name);
+            if (phaseLetter) {
+                const nextLetter = getNextPhaseLetter(phaseLetter);
+                winnerPhase = phasen.find(p => p.phase_name === `Plan ${nextLetter}1`);
+                loserPhase = phasen.find(p => p.phase_name === `Plan ${nextLetter}2`);
+            }
+        } else if (currentPhase.phase_typ === 'verlierer') {
+            // From loser bracket, winners stay in loser bracket progression
+            const phaseLetter = parsePhaseNameLetter(currentPhase.phase_name);
+            if (phaseLetter) {
+                const nextLetter = getNextPhaseLetter(phaseLetter);
+                // Loser bracket winners go to next loser bracket round
+                winnerPhase = phasen.find(p => p.phase_name === `Plan ${nextLetter}2`);
+                // Losers in loser bracket are eliminated (no further progression)
+                loserPhase = null;
+            }
+        }
+
+        // Get the maximum spiel_nummer to generate next game numbers
+        const [maxSpielResult] = await db.query(
+            'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+            [turnierId]
+        );
+        let nextSpielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+
+        // Process winner: find or create next round game
+        if (winnerPhase && gewinnerId) {
+            const winnerGameCreated = await assignTeamToNextRoundGame(turnierId, winnerPhase.id, currentRunde + 1, gewinnerId, nextSpielNummer, 'gewinner');
+            if (winnerGameCreated) {
+                nextSpielNummer++;
+            }
+        }
+
+        // Process loser: find or create next round game in loser bracket
+        if (loserPhase && verliererId) {
+            await assignTeamToNextRoundGame(turnierId, loserPhase.id, currentRunde + 1, verliererId, nextSpielNummer, 'verlierer');
+        }
+
+        console.log(`Bracket progression completed for game #${completedGame.spiel_nummer}`);
+    } catch (err) {
+        console.error('Error progressing tournament bracket:', err);
+    }
+}
+
+// Helper: Assign a team to an existing waiting game or create a new one
+// Returns true if a new game was created, false if team was assigned to existing game
+async function assignTeamToNextRoundGame(turnierId, phaseId, runde, teamId, nextSpielNummer, bracketType) {
+    try {
+        // Look for an existing game in this phase and round that needs a team
+        const [existingGames] = await db.query(
+            `SELECT * FROM turnier_spiele 
+             WHERE turnier_id = ? AND phase_id = ? AND runde = ? 
+             AND (team1_id IS NULL OR team2_id IS NULL) AND status = 'wartend'
+             ORDER BY spiel_nummer ASC LIMIT 1`,
+            [turnierId, phaseId, runde]
+        );
+
+        if (existingGames.length > 0) {
+            const game = existingGames[0];
+            // Assign the team to the available slot
+            if (game.team1_id === null) {
+                await db.query(
+                    'UPDATE turnier_spiele SET team1_id = ? WHERE id = ?',
+                    [teamId, game.id]
+                );
+                console.log(`Assigned team ${teamId} to team1 slot of game #${game.spiel_nummer}`);
+            } else if (game.team2_id === null) {
+                await db.query(
+                    'UPDATE turnier_spiele SET team2_id = ? WHERE id = ?',
+                    [teamId, game.id]
+                );
+                console.log(`Assigned team ${teamId} to team2 slot of game #${game.spiel_nummer}`);
+            }
+            return false; // No new game was created
+        } else {
+            // Create a new waiting game for this phase and round
+            const bestCode = generateConfirmationCode();
+            await db.query(
+                `INSERT INTO turnier_spiele 
+                (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 'wartend', ?)`,
+                [turnierId, phaseId, runde, nextSpielNummer, teamId, bestCode]
+            );
+            console.log(`Created new ${bracketType} bracket game #${nextSpielNummer} with team ${teamId}`);
+            return true; // New game was created
+        }
+    } catch (err) {
+        console.error('Error assigning team to next round game:', err);
+        return false;
     }
 }
 
@@ -500,6 +632,35 @@ app.get('/api/turniere/:turnierId/spiele', async (req, res) => {
     }
 });
 
+// Get Vorschau (preview) - next 10 upcoming games that are waiting and have both teams assigned
+app.get('/api/turniere/:turnierId/vorschau', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const [rows] = await db.query(`
+            SELECT s.*, 
+                   t1.team_name as team1_name, t1.verein as team1_verein,
+                   t2.team_name as team2_name, t2.verein as team2_verein,
+                   p.phase_name, p.phase_typ
+            FROM turnier_spiele s
+            LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+            LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+            LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            WHERE s.turnier_id = ? 
+              AND s.status = 'wartend' 
+              AND s.feld_id IS NULL
+              AND s.team1_id IS NOT NULL 
+              AND s.team2_id IS NOT NULL
+            ORDER BY s.spiel_nummer ASC
+            LIMIT ?
+        `, [req.params.turnierId, limit]);
+
+        res.json(rows);
+    } catch (err) {
+        console.error('GET vorschau error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // Get single game
 app.get('/api/turniere/:turnierId/spiele/:spielId', async (req, res) => {
     try {
@@ -841,6 +1002,9 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
         // Update result report status
         await db.query('UPDATE turnier_ergebnis_meldungen SET status = "bestaetigt" WHERE id = ?', [meldung.id]);
 
+        // Progress the tournament bracket - create next round games for winner and loser
+        await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+
         // If the game had a field assigned, assign the next waiting game to that field
         if (game.feld_id) {
             await assignNextWaitingGame(turnierId, game.feld_id);
@@ -967,6 +1131,9 @@ app.post('/api/turniere/:turnierId/meldungen/:meldungId/genehmigen', async (req,
             [geprueft_von, meldungId]
         );
 
+        // Progress the tournament bracket - create next round games for winner and loser
+        await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+
         // If the game had a field assigned, assign the next waiting game to that field
         if (game.feld_id) {
             await assignNextWaitingGame(turnierId, game.feld_id);
@@ -1032,6 +1199,11 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
              gewinnerId, verliererId,
              bemerkung, spielId]
         );
+
+        // Progress the tournament bracket if the game wasn't already finished
+        if (game.status !== 'beendet') {
+            await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+        }
 
         // If the game had a field assigned and wasn't already finished, assign the next waiting game
         if (game.feld_id && game.status !== 'beendet') {

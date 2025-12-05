@@ -202,11 +202,21 @@
                         </div>
                     </div>
 
-                    <!-- Pending Games (without field) -->
+                    <!-- Vorschau: Next 10 upcoming games -->
                     <div class="games-section">
-                        <h3 class="section-title">⏳ Ausstehende Spiele (offen)</h3>
-                        <div class="games-grid" id="pending-games-container">
-                            <p class="empty-state">Keine ausstehenden Spiele</p>
+                        <h3 class="section-title">👁️ Vorschau - Nächste 10 Spiele</h3>
+                        <div class="games-grid" id="vorschau-games-container">
+                            <p class="empty-state">Keine Vorschau-Spiele verfügbar</p>
+                        </div>
+                    </div>
+
+                    <!-- Pending Games (without field, waiting for teams) -->
+                    <div class="games-section">
+                        <h3 class="section-title collapsible" onclick="togglePending()">
+                            <span id="pending-toggle-icon">▶</span> ⏳ Wartende Spiele (noch ohne Team)
+                        </h3>
+                        <div class="games-grid collapsed" id="pending-games-container">
+                            <p class="empty-state">Keine wartenden Spiele</p>
                         </div>
                     </div>
 
