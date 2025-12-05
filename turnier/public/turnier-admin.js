@@ -554,9 +554,11 @@ async function loadPhasen() {
 // GAMES MANAGEMENT
 // ==========================================
 
-// History collapsed state
+// History and pending collapsed state
 let historyCollapsed = true;
+let pendingCollapsed = true;
 let anzahlFelder = 4; // Default, will be loaded from config
+let vorschauGames = []; // Store Vorschau games
 
 async function loadSpiele() {
     if (!currentTurnierId) return;
@@ -577,10 +579,25 @@ async function loadSpiele() {
         const res = await fetch(url);
         spiele = await res.json();
 
+        // Load Vorschau (next 10 upcoming games)
+        await loadVorschau();
+
         renderGameOverview();
         renderSpieleTable();
     } catch (err) {
         console.error('Error loading games:', err);
+    }
+}
+
+async function loadVorschau() {
+    if (!currentTurnierId) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/vorschau?limit=10`);
+        vorschauGames = await res.json();
+    } catch (err) {
+        console.error('Error loading Vorschau:', err);
+        vorschauGames = [];
     }
 }
 
@@ -592,12 +609,12 @@ function renderGameOverview() {
         s.team1_id && s.team2_id
     ).sort((a, b) => a.spiel_nummer - b.spiel_nummer);
 
-    // Pending games without field (limited to 10)
+    // Pending games without both teams (waiting for bracket progression)
     const pendingGames = spiele.filter(s => 
         !s.feld_id && 
         s.status === 'wartend' && 
-        s.team1_id && s.team2_id
-    ).sort((a, b) => a.spiel_nummer - b.spiel_nummer).slice(0, 10);
+        (!s.team1_id || !s.team2_id)
+    ).sort((a, b) => a.spiel_nummer - b.spiel_nummer);
 
     // Finished games for history (max of anzahlFelder or 10, whichever is greater)
     const historyLimit = Math.max(anzahlFelder, 10);
@@ -606,6 +623,7 @@ function renderGameOverview() {
     ).sort((a, b) => b.spiel_nummer - a.spiel_nummer).slice(0, historyLimit);
 
     renderGameCards('active-games-container', activeGames, 'active');
+    renderGameCards('vorschau-games-container', vorschauGames, 'vorschau');
     renderGameCards('pending-games-container', pendingGames, 'pending');
     renderGameCards('history-games-container', finishedGames, 'finished');
 }
@@ -617,7 +635,8 @@ function renderGameCards(containerId, games, type) {
     if (games.length === 0) {
         const emptyMessages = {
             'active': 'Keine aktiven Spiele auf Feldern',
-            'pending': 'Keine ausstehenden Spiele',
+            'vorschau': 'Keine Vorschau-Spiele verfügbar',
+            'pending': 'Keine wartenden Spiele',
             'finished': 'Keine abgeschlossenen Spiele'
         };
         container.innerHTML = `<p class="empty-state">${emptyMessages[type]}</p>`;
@@ -630,9 +649,19 @@ function renderGameCards(containerId, games, type) {
         const team2Class = game.gewinner_id === game.team2_id ? 'winner' : 
                           (game.gewinner_id === game.team1_id ? 'loser' : '');
         
-        const fieldDisplay = game.feld_name 
-            ? `<span class="game-card-field">📍 ${escapeHtml(game.feld_name)}</span>`
-            : `<span class="game-card-field no-field">⏳ Offen</span>`;
+        let fieldDisplay;
+        if (game.feld_name) {
+            fieldDisplay = `<span class="game-card-field">📍 ${escapeHtml(game.feld_name)}</span>`;
+        } else if (type === 'vorschau') {
+            fieldDisplay = `<span class="game-card-field no-field">🔜 Nächste</span>`;
+        } else {
+            fieldDisplay = `<span class="game-card-field no-field">⏳ Offen</span>`;
+        }
+
+        // Display phase info for Vorschau
+        const phaseDisplay = game.phase_name 
+            ? `<span class="game-card-phase">${escapeHtml(game.phase_name)}</span>` 
+            : '';
 
         const score1 = game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-';
         const score2 = game.ergebnis_team2 !== null ? game.ergebnis_team2 : '-';
@@ -643,6 +672,7 @@ function renderGameCards(containerId, games, type) {
                     <span class="game-card-number">Spiel #${game.spiel_nummer}</span>
                     ${fieldDisplay}
                 </div>
+                ${phaseDisplay ? `<div class="game-card-phase-info">${phaseDisplay}</div>` : ''}
                 <div class="game-card-teams">
                     <div class="game-card-team ${team1Class}">
                         <span class="game-card-team-name">${escapeHtml(game.team1_name || 'TBD')}</span>
@@ -670,6 +700,20 @@ function toggleHistory() {
     const icon = document.getElementById('history-toggle-icon');
     
     if (historyCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
+    }
+}
+
+function togglePending() {
+    pendingCollapsed = !pendingCollapsed;
+    const container = document.getElementById('pending-games-container');
+    const icon = document.getElementById('pending-toggle-icon');
+    
+    if (pendingCollapsed) {
         container.classList.add('collapsed');
         icon.textContent = '▶';
     } else {
