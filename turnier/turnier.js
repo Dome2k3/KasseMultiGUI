@@ -85,6 +85,38 @@ async function logAudit(turnierIdVal, aktion, tabelle, datensatzIdVal, alteWerte
     }
 }
 
+// Helper: Assign next waiting game to a freed field
+async function assignNextWaitingGame(turnierId, freedFieldId) {
+    try {
+        // Find the next waiting game (in order of spiel_nummer)
+        const [waitingGames] = await db.query(
+            `SELECT * FROM turnier_spiele 
+             WHERE turnier_id = ? AND status = 'wartend' AND feld_id IS NULL 
+             ORDER BY spiel_nummer ASC LIMIT 1`,
+            [turnierId]
+        );
+
+        if (waitingGames.length === 0) {
+            return null; // No waiting games
+        }
+
+        const nextGame = waitingGames[0];
+        const now = new Date();
+
+        // Assign the freed field to this game and update status to 'geplant'
+        await db.query(
+            `UPDATE turnier_spiele SET feld_id = ?, geplante_zeit = ?, status = 'geplant' WHERE id = ?`,
+            [freedFieldId, now, nextGame.id]
+        );
+
+        console.log(`Assigned waiting game #${nextGame.spiel_nummer} to field ${freedFieldId}`);
+        return nextGame.id;
+    } catch (err) {
+        console.error('Error assigning next waiting game:', err);
+        return null;
+    }
+}
+
 // ==========================================
 // TURNIER CONFIG ENDPOINTS
 // ==========================================
@@ -499,7 +531,7 @@ app.get('/api/turniere/:turnierId/spiele/:spielId', async (req, res) => {
 // TOURNAMENT START / GAME GENERATION
 // ==========================================
 
-// Start tournament - generate all games for round 1
+// Start tournament - generate only games for available fields
 app.post('/api/turniere/:turnierId/starten', async (req, res) => {
     try {
         const turnierId = req.params.turnierId;
@@ -531,6 +563,10 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
         // Get fields
         const [felder] = await db.query('SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer', [turnierId]);
 
+        if (felder.length === 0) {
+            return res.status(400).json({ error: 'No active fields available' });
+        }
+
         // Shuffle teams based on mode
         let orderedTeams;
         if (config.modus === 'seeded') {
@@ -541,18 +577,23 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             orderedTeams = shuffleArray([...teams]);
         }
 
-        // Generate pairings for round 1
-        const spiele = [];
-        let spielNummer = 1;
-        let currentTime = new Date(`${config.turnier_datum}T${config.startzeit}`);
-
+        // Generate ALL pairings for round 1 (but only create games for available fields)
+        const allPairings = [];
         for (let i = 0; i < orderedTeams.length; i += 2) {
             const team1 = orderedTeams[i];
             const team2 = orderedTeams[i + 1] || null;
+            allPairings.push({ team1, team2 });
+        }
 
-            const feldIndex = (spielNummer - 1) % felder.length;
-            const feld = felder[feldIndex];
+        // Only create games for the number of available fields
+        const maxGamesToCreate = Math.min(felder.length, allPairings.length);
+        const spiele = [];
+        let spielNummer = 1;
+        const currentTime = new Date(`${config.turnier_datum}T${config.startzeit}`);
 
+        for (let i = 0; i < maxGamesToCreate; i++) {
+            const pairing = allPairings[i];
+            const feld = felder[i];
             const bestCode = generateConfirmationCode();
 
             spiele.push({
@@ -560,21 +601,38 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
                 phase_id: planAId,
                 runde: 1,
                 spiel_nummer: spielNummer,
-                team1_id: team1.id,
-                team2_id: team2 ? team2.id : null,
+                team1_id: pairing.team1.id,
+                team2_id: pairing.team2 ? pairing.team2.id : null,
                 feld_id: feld.id,
                 geplante_zeit: new Date(currentTime),
-                status: team2 ? 'geplant' : 'beendet', // If no opponent, auto-win
-                gewinner_id: team2 ? null : team1.id,
+                status: pairing.team2 ? 'geplant' : 'beendet', // If no opponent, auto-win
+                gewinner_id: pairing.team2 ? null : pairing.team1.id,
                 bestaetigungs_code: bestCode
             });
 
             spielNummer++;
+        }
 
-            // Move time forward after all fields are used in this time slot
-            if (spielNummer % felder.length === 1) {
-                currentTime = new Date(currentTime.getTime() + (config.spielzeit_minuten + config.pause_minuten) * 60000);
-            }
+        // Create remaining pairings as "wartend" (waiting) games without a field assignment
+        for (let i = maxGamesToCreate; i < allPairings.length; i++) {
+            const pairing = allPairings[i];
+            const bestCode = generateConfirmationCode();
+
+            spiele.push({
+                turnier_id: turnierId,
+                phase_id: planAId,
+                runde: 1,
+                spiel_nummer: spielNummer,
+                team1_id: pairing.team1.id,
+                team2_id: pairing.team2 ? pairing.team2.id : null,
+                feld_id: null, // No field assigned yet - waiting
+                geplante_zeit: null,
+                status: pairing.team2 ? 'wartend' : 'beendet', // New status: wartend (waiting for field)
+                gewinner_id: pairing.team2 ? null : pairing.team1.id,
+                bestaetigungs_code: bestCode
+            });
+
+            spielNummer++;
         }
 
         // Insert games into database
@@ -587,9 +645,18 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             );
         }
 
-        await logAudit(turnierId, 'START_TURNIER', 'turnier_spiele', null, null, { games_created: spiele.length });
+        await logAudit(turnierId, 'START_TURNIER', 'turnier_spiele', null, null, { 
+            games_created: spiele.length,
+            games_on_fields: maxGamesToCreate,
+            games_waiting: spiele.length - maxGamesToCreate
+        });
 
-        res.json({ success: true, spiele_erstellt: spiele.length });
+        res.json({ 
+            success: true, 
+            spiele_erstellt: spiele.length,
+            spiele_auf_feldern: maxGamesToCreate,
+            spiele_wartend: spiele.length - maxGamesToCreate
+        });
     } catch (err) {
         console.error('POST starten error:', err);
         res.status(500).json({ error: 'Database error: ' + err.message });
@@ -707,28 +774,23 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
         }
         const game = games[0];
 
-        // Check confirmation code
-        if (game.bestaetigungs_code && bestaetigungs_code !== game.bestaetigungs_code) {
-            return res.status(403).json({ error: 'Invalid confirmation code' });
-        }
-
-        // Get latest reported result
-        const [meldungen] = await db.query(
+        // Get latest reported result to determine who is the loser
+        const [reportedResults] = await db.query(
             'SELECT * FROM turnier_ergebnis_meldungen WHERE spiel_id = ? AND status = "gemeldet" ORDER BY created_at DESC LIMIT 1',
             [spielId]
         );
 
-        if (meldungen.length === 0) {
+        if (reportedResults.length === 0) {
             return res.status(400).json({ error: 'No result to confirm' });
         }
 
-        const meldung = meldungen[0];
+        const reportedResult = reportedResults[0];
 
-        // Determine winner using helper function (handles ties properly)
+        // Determine the winner and loser team based on reported scores
         const { gewinnerId, verliererId } = determineWinnerLoser(
-            meldung.ergebnis_team1, 
-            meldung.ergebnis_team2, 
-            game.team1_id, 
+            reportedResult.ergebnis_team1,
+            reportedResult.ergebnis_team2,
+            game.team1_id,
             game.team2_id
         );
 
@@ -736,6 +798,26 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
         if (gewinnerId === null) {
             return res.status(400).json({ error: 'Tie games are not allowed - please provide a valid result' });
         }
+
+        // Get the loser team's confirmation code
+        let validCode = game.bestaetigungs_code; // fallback to game code
+        if (verliererId) {
+            const [loserTeam] = await db.query('SELECT bestaetigungs_code FROM turnier_teams WHERE id = ?', [verliererId]);
+            if (loserTeam.length > 0 && loserTeam[0].bestaetigungs_code) {
+                validCode = loserTeam[0].bestaetigungs_code;
+            }
+        }
+
+        // Check confirmation code - compare with both uppercase versions
+        const enteredCode = (bestaetigungs_code || '').toUpperCase();
+        const expectedCode = (validCode || '').toUpperCase();
+        
+        if (expectedCode && enteredCode !== expectedCode) {
+            return res.status(403).json({ error: 'Invalid confirmation code' });
+        }
+
+        // Use the reported result for updating the game
+        const meldung = reportedResult;
 
         // Update game with confirmed result
         await db.query(
@@ -759,6 +841,11 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
         // Update result report status
         await db.query('UPDATE turnier_ergebnis_meldungen SET status = "bestaetigt" WHERE id = ?', [meldung.id]);
 
+        // If the game had a field assigned, assign the next waiting game to that field
+        if (game.feld_id) {
+            await assignNextWaitingGame(turnierId, game.feld_id);
+        }
+
         await logAudit(turnierId, 'CONFIRM_RESULT', 'turnier_spiele', spielId, null, { gewinner_id: gewinnerId });
 
         res.json({ success: true, gewinner_id: gewinnerId });
@@ -779,8 +866,8 @@ app.get('/api/turniere/:turnierId/meldungen', async (req, res) => {
         const [rows] = await db.query(`
             SELECT m.*, 
                    s.spiel_nummer, s.runde, s.team1_id, s.team2_id, s.bestaetigungs_code,
-                   t1.team_name as team1_name,
-                   t2.team_name as team2_name,
+                   t1.team_name as team1_name, t1.bestaetigungs_code as team1_code,
+                   t2.team_name as team2_name, t2.bestaetigungs_code as team2_code,
                    p.phase_name
             FROM turnier_ergebnis_meldungen m
             JOIN turnier_spiele s ON m.spiel_id = s.id
@@ -790,7 +877,32 @@ app.get('/api/turniere/:turnierId/meldungen', async (req, res) => {
             WHERE s.turnier_id = ? AND m.status = ?
             ORDER BY m.created_at DESC
         `, [req.params.turnierId, status]);
-        res.json(rows);
+        
+        // Add loser_team_code to each row based on the scores
+        const processedRows = rows.map(row => {
+            const { verliererId } = determineWinnerLoser(
+                row.ergebnis_team1,
+                row.ergebnis_team2,
+                row.team1_id,
+                row.team2_id
+            );
+            let loserTeamCode = null;
+            let loserTeamName = null;
+            if (verliererId === row.team1_id) {
+                loserTeamCode = row.team1_code;
+                loserTeamName = row.team1_name;
+            } else if (verliererId === row.team2_id) {
+                loserTeamCode = row.team2_code;
+                loserTeamName = row.team2_name;
+            }
+            return {
+                ...row,
+                loser_team_code: loserTeamCode,
+                loser_team_name: loserTeamName
+            };
+        });
+        
+        res.json(processedRows);
     } catch (err) {
         console.error('GET meldungen error:', err);
         res.status(500).json({ error: 'Database error' });
@@ -855,6 +967,11 @@ app.post('/api/turniere/:turnierId/meldungen/:meldungId/genehmigen', async (req,
             [geprueft_von, meldungId]
         );
 
+        // If the game had a field assigned, assign the next waiting game to that field
+        if (game.feld_id) {
+            await assignNextWaitingGame(turnierId, game.feld_id);
+        }
+
         await logAudit(turnierId, 'ADMIN_APPROVE', 'turnier_ergebnis_meldungen', meldungId, null, { geprueft_von });
 
         res.json({ success: true });
@@ -915,6 +1032,11 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
              gewinnerId, verliererId,
              bemerkung, spielId]
         );
+
+        // If the game had a field assigned and wasn't already finished, assign the next waiting game
+        if (game.feld_id && game.status !== 'beendet') {
+            await assignNextWaitingGame(turnierId, game.feld_id);
+        }
 
         await logAudit(turnierId, 'ADMIN_UPDATE_RESULT', 'turnier_spiele', spielId, game, req.body, bearbeitet_von);
 
