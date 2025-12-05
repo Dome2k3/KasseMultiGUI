@@ -9,12 +9,34 @@ let turniere = [];
 let teams = [];
 let spiele = [];
 let phasen = [];
+let currentAdminTab = 'config';
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
     loadTurniere();
     createToastContainer();
 });
+
+// ==========================================
+// TAB NAVIGATION
+// ==========================================
+
+function switchAdminTab(tabName) {
+    // Update current tab state
+    currentAdminTab = tabName;
+    
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`.tab-btn[onclick="switchAdminTab('${tabName}')"]`).classList.add('active');
+    
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+}
 
 // ==========================================
 // UTILITY FUNCTIONS
@@ -247,6 +269,10 @@ async function saveConfig() {
 // TEAMS MANAGEMENT
 // ==========================================
 
+// Teams display limit state
+let teamsDisplayLimit = 32;
+const TEAMS_PAGE_SIZE = 16;
+
 async function loadTeams() {
     if (!currentTurnierId) return;
 
@@ -254,6 +280,7 @@ async function loadTeams() {
         const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/teams`);
         teams = await res.json();
 
+        teamsDisplayLimit = 32; // Reset to default when loading
         updateTeamStats();
         renderTeamsTable();
     } catch (err) {
@@ -284,10 +311,15 @@ function renderTeamsTable() {
 
     if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Keine Teams gefunden</td></tr>';
+        updateTeamsShowMoreButton(0, 0);
         return;
     }
 
-    filtered.forEach((team, idx) => {
+    // Limit display to teamsDisplayLimit
+    const displayTeams = filtered.slice(0, teamsDisplayLimit);
+    const remainingCount = filtered.length - teamsDisplayLimit;
+
+    displayTeams.forEach((team, idx) => {
         const tr = document.createElement('tr');
         const isAbgemeldet = team.status === 'abgemeldet';
         const toggleBtnClass = isAbgemeldet ? 'btn-success' : 'btn-warning';
@@ -311,9 +343,47 @@ function renderTeamsTable() {
         `;
         tbody.appendChild(tr);
     });
+
+    updateTeamsShowMoreButton(remainingCount, filtered.length);
+}
+
+function updateTeamsShowMoreButton(remainingCount, totalCount) {
+    // Remove existing buttons if any
+    const existingControls = document.getElementById('teams-pagination-controls');
+    if (existingControls) {
+        existingControls.remove();
+    }
+
+    if (remainingCount <= 0) return;
+
+    const tableContainer = document.querySelector('#teams-table').parentElement;
+    const controls = document.createElement('div');
+    controls.id = 'teams-pagination-controls';
+    controls.className = 'teams-pagination-controls';
+    controls.innerHTML = `
+        <span class="teams-info">Zeige ${teamsDisplayLimit} von ${totalCount} Teams</span>
+        <button class="btn btn-secondary btn-small" onclick="showMoreTeams(${TEAMS_PAGE_SIZE})">
+            Weitere ${Math.min(TEAMS_PAGE_SIZE, remainingCount)} anzeigen
+        </button>
+        <button class="btn btn-secondary btn-small" onclick="showAllTeams()">
+            Alle anzeigen (${remainingCount} mehr)
+        </button>
+    `;
+    tableContainer.appendChild(controls);
+}
+
+function showMoreTeams(count) {
+    teamsDisplayLimit += count;
+    renderTeamsTable();
+}
+
+function showAllTeams() {
+    teamsDisplayLimit = Infinity;
+    renderTeamsTable();
 }
 
 function filterTeams() {
+    teamsDisplayLimit = 32; // Reset limit when filtering
     renderTeamsTable();
 }
 
@@ -635,6 +705,12 @@ async function loadMeldungen() {
                 <div class="meldung-result">
                     ${m.ergebnis_team1} : ${m.ergebnis_team2}
                 </div>
+                ${m.loser_team_code ? `
+                <div class="meldung-code">
+                    <strong>🔑 Bestätigungscode für ${escapeHtml(m.loser_team_name || 'Verlierer')}:</strong>
+                    <span class="code-display">${escapeHtml(m.loser_team_code)}</span>
+                </div>
+                ` : ''}
                 <div class="meldung-actions">
                     <button class="btn btn-small btn-success" onclick="approveMeldung(${m.id})">✅ Genehmigen</button>
                     <button class="btn btn-small btn-danger" onclick="rejectMeldung(${m.id})">❌ Ablehnen</button>

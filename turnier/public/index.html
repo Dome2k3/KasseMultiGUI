@@ -30,196 +30,213 @@
 
         <!-- Tournament Details (hidden until selected) -->
         <div id="turnier-details" style="display: none;">
-            <!-- Config Section -->
-            <section class="card">
-                <h2>📋 Turnier-Konfiguration</h2>
-                <div class="config-grid">
-                    <div class="config-item">
-                        <label>Turniername</label>
-                        <input type="text" id="config-name" placeholder="z.B. BVT 37">
+            <!-- Tab Navigation -->
+            <div class="admin-tabs">
+                <button class="tab-btn active" onclick="switchAdminTab('config')">⚙️ Konfiguration</button>
+                <button class="tab-btn" onclick="switchAdminTab('teams')">👥 Teams & Platzierung</button>
+                <button class="tab-btn" onclick="switchAdminTab('games')">🎮 Spiele & Steuerung</button>
+            </div>
+
+            <!-- Tab 1: Configuration -->
+            <div id="tab-config" class="tab-content active">
+                <!-- Config Section -->
+                <section class="card">
+                    <h2>📋 Turnier-Konfiguration</h2>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <label>Turniername</label>
+                            <input type="text" id="config-name" placeholder="z.B. BVT 37">
+                        </div>
+                        <div class="config-item">
+                            <label>Startdatum</label>
+                            <input type="date" id="config-datum">
+                        </div>
+                        <div class="config-item">
+                            <label>Enddatum (optional, für mehrtägig)</label>
+                            <input type="date" id="config-datum-ende">
+                        </div>
+                        <div class="config-item">
+                            <label>Anzahl Teams</label>
+                            <input type="number" id="config-teams" min="4" max="128" value="32">
+                        </div>
+                        <div class="config-item">
+                            <label>Anzahl Felder</label>
+                            <input type="number" id="config-felder" min="1" max="20" value="4">
+                        </div>
+                        <div class="config-item">
+                            <label>Spielzeit (Min) - optional</label>
+                            <input type="number" id="config-spielzeit" min="0" max="60" value="0">
+                        </div>
+                        <div class="config-item">
+                            <label>Pause (Min) - optional</label>
+                            <input type="number" id="config-pause" min="0" max="30" value="0">
+                        </div>
+                        <div class="config-item">
+                            <label>Startzeit</label>
+                            <input type="time" id="config-startzeit" value="09:00">
+                        </div>
+                        <div class="config-item">
+                            <label>Endzeit</label>
+                            <input type="time" id="config-endzeit" value="18:00">
+                        </div>
+                        <div class="config-item">
+                            <label>Modus</label>
+                            <select id="config-modus">
+                                <option value="seeded">Gesetzt (Lostöpfe)</option>
+                                <option value="random">Zufällig</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <label>E-Mail Benachrichtigung</label>
+                            <input type="checkbox" id="config-email" checked>
+                        </div>
                     </div>
-                    <div class="config-item">
-                        <label>Startdatum</label>
-                        <input type="date" id="config-datum">
+                    <div class="button-row">
+                        <button class="btn btn-primary" onclick="saveConfig()">💾 Speichern</button>
+                        <button class="btn btn-info" onclick="showEmailPreviewModal()">📧 E-Mail Vorschau</button>
                     </div>
-                    <div class="config-item">
-                        <label>Enddatum (optional, für mehrtägig)</label>
-                        <input type="date" id="config-datum-ende">
+                </section>
+            </div>
+
+            <!-- Tab 2: Teams & Placement -->
+            <div id="tab-teams" class="tab-content">
+                <!-- Teams Section -->
+                <section class="card">
+                    <h2>👥 Teams</h2>
+                    <div class="team-stats">
+                        <span>Gesamt: <strong id="team-count">0</strong></span>
+                        <span>Angemeldet: <strong id="team-angemeldet">0</strong></span>
+                        <span>Bestätigt: <strong id="team-bestaetigt">0</strong></span>
                     </div>
-                    <div class="config-item">
-                        <label>Anzahl Teams</label>
-                        <input type="number" id="config-teams" min="4" max="128" value="32">
+                    <div class="button-row">
+                        <button class="btn btn-primary" onclick="showAddTeamModal()">+ Team hinzufügen</button>
+                        <button class="btn btn-secondary" onclick="showImportTeamsModal()">📥 Teams importieren</button>
                     </div>
-                    <div class="config-item">
-                        <label>Anzahl Felder</label>
-                        <input type="number" id="config-felder" min="1" max="20" value="4">
-                    </div>
-                    <div class="config-item">
-                        <label>Spielzeit (Min) - optional</label>
-                        <input type="number" id="config-spielzeit" min="0" max="60" value="0">
-                    </div>
-                    <div class="config-item">
-                        <label>Pause (Min) - optional</label>
-                        <input type="number" id="config-pause" min="0" max="30" value="0">
-                    </div>
-                    <div class="config-item">
-                        <label>Startzeit</label>
-                        <input type="time" id="config-startzeit" value="09:00">
-                    </div>
-                    <div class="config-item">
-                        <label>Endzeit</label>
-                        <input type="time" id="config-endzeit" value="18:00">
-                    </div>
-                    <div class="config-item">
-                        <label>Modus</label>
-                        <select id="config-modus">
-                            <option value="seeded">Gesetzt (Lostöpfe)</option>
-                            <option value="random">Zufällig</option>
+                    <div class="filter-row">
+                        <input type="text" id="team-search" placeholder="Team suchen..." oninput="filterTeams()">
+                        <select id="team-filter-klasse" onchange="filterTeams()">
+                            <option value="">Alle Klassen</option>
+                            <option value="A">Klasse A</option>
+                            <option value="B">Klasse B</option>
+                            <option value="C">Klasse C</option>
+                            <option value="D">Klasse D</option>
+                            <option value="E">Klasse E</option>
                         </select>
                     </div>
-                    <div class="config-item">
-                        <label>E-Mail Benachrichtigung</label>
-                        <input type="checkbox" id="config-email" checked>
+                    <div class="table-container">
+                        <table id="teams-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Team</th>
+                                    <th>Ansprechpartner</th>
+                                    <th>E-Mail</th>
+                                    <th>Verein</th>
+                                    <th>Klasse</th>
+                                    <th>Setzpos.</th>
+                                    <th>Status</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
-                </div>
-                <div class="button-row">
-                    <button class="btn btn-primary" onclick="saveConfig()">💾 Speichern</button>
-                    <button class="btn btn-info" onclick="showEmailPreviewModal()">📧 E-Mail Vorschau</button>
-                </div>
-            </section>
+                </section>
 
-            <!-- Teams Section -->
-            <section class="card">
-                <h2>👥 Teams</h2>
-                <div class="team-stats">
-                    <span>Gesamt: <strong id="team-count">0</strong></span>
-                    <span>Angemeldet: <strong id="team-angemeldet">0</strong></span>
-                    <span>Bestätigt: <strong id="team-bestaetigt">0</strong></span>
-                </div>
-                <div class="button-row">
-                    <button class="btn btn-primary" onclick="showAddTeamModal()">+ Team hinzufügen</button>
-                    <button class="btn btn-secondary" onclick="showImportTeamsModal()">📥 Teams importieren</button>
-                </div>
-                <div class="filter-row">
-                    <input type="text" id="team-search" placeholder="Team suchen..." oninput="filterTeams()">
-                    <select id="team-filter-klasse" onchange="filterTeams()">
-                        <option value="">Alle Klassen</option>
-                        <option value="A">Klasse A</option>
-                        <option value="B">Klasse B</option>
-                        <option value="C">Klasse C</option>
-                        <option value="D">Klasse D</option>
-                        <option value="E">Klasse E</option>
-                    </select>
-                </div>
-                <div class="table-container">
-                    <table id="teams-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Team</th>
-                                <th>Ansprechpartner</th>
-                                <th>E-Mail</th>
-                                <th>Verein</th>
-                                <th>Klasse</th>
-                                <th>Setzpos.</th>
-                                <th>Status</th>
-                                <th>Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </section>
+                <!-- Ranking Section -->
+                <section class="card">
+                    <h2>🏆 Platzierung</h2>
+                    <div class="filter-row">
+                        <select id="platzierung-runde" onchange="loadPlatzierung()">
+                            <option value="">Runde wählen</option>
+                            <option value="1">Nach Runde 1</option>
+                            <option value="2">Nach Runde 2</option>
+                            <option value="3">Nach Runde 3</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadEndplatzierung()">Endplatzierung anzeigen</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="platzierung-table">
+                            <thead>
+                                <tr>
+                                    <th>Platz</th>
+                                    <th>Team</th>
+                                    <th>Verein</th>
+                                    <th>Siege</th>
+                                    <th>Niederlagen</th>
+                                    <th>Punkte +</th>
+                                    <th>Punkte -</th>
+                                    <th>Differenz</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
 
-            <!-- Games Control Section -->
-            <section class="card">
-                <h2>🎮 Turnier-Steuerung</h2>
-                <div class="control-buttons">
-                    <button class="btn btn-success btn-large" onclick="startTurnier()">▶️ Turnier starten</button>
-                    <button class="btn btn-primary" onclick="autoAssignFields()">📍 Felder zuweisen</button>
-                    <button class="btn btn-primary" onclick="calculateRanking()">📊 Platzierung berechnen</button>
-                    <button class="btn btn-primary" onclick="calculateFinalRanking()">🏆 Endplatzierung</button>
-                    <button class="btn btn-danger" onclick="resetTurnier()">🔄 Reset</button>
-                </div>
-            </section>
+            <!-- Tab 3: Games & Control -->
+            <div id="tab-games" class="tab-content">
+                <!-- Games Control Section -->
+                <section class="card">
+                    <h2>🎮 Turnier-Steuerung</h2>
+                    <div class="control-buttons">
+                        <button class="btn btn-success btn-large" onclick="startTurnier()">▶️ Turnier starten</button>
+                        <button class="btn btn-primary" onclick="autoAssignFields()">📍 Felder zuweisen</button>
+                        <button class="btn btn-primary" onclick="calculateRanking()">📊 Platzierung berechnen</button>
+                        <button class="btn btn-primary" onclick="calculateFinalRanking()">🏆 Endplatzierung</button>
+                        <button class="btn btn-danger" onclick="resetTurnier()">🔄 Reset</button>
+                    </div>
+                </section>
 
-            <!-- Games Overview Section -->
-            <section class="card">
-                <h2>🎯 Spiele</h2>
-                <div class="filter-row">
-                    <select id="spiele-filter-phase" onchange="loadSpiele()">
-                        <option value="">Alle Phasen</option>
-                    </select>
-                    <select id="spiele-filter-status" onchange="loadSpiele()">
-                        <option value="">Alle Status</option>
-                        <option value="geplant">Geplant</option>
-                        <option value="bereit">Bereit</option>
-                        <option value="laeuft">Läuft</option>
-                        <option value="beendet">Beendet</option>
-                        <option value="wartend_bestaetigung">Warten auf Bestätigung</option>
-                    </select>
-                    <input type="text" id="spiele-search" placeholder="Team suchen..." oninput="filterSpiele()">
-                </div>
-                <div class="table-container">
-                    <table id="spiele-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Phase</th>
-                                <th>Runde</th>
-                                <th>Team 1</th>
-                                <th>vs</th>
-                                <th>Team 2</th>
-                                <th>Feld</th>
-                                <th>Zeit</th>
-                                <th>Ergebnis</th>
-                                <th>Status</th>
-                                <th>Aktionen</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </section>
+                <!-- Games Overview Section -->
+                <section class="card">
+                    <h2>🎯 Spiele</h2>
+                    <div class="filter-row">
+                        <select id="spiele-filter-phase" onchange="loadSpiele()">
+                            <option value="">Alle Phasen</option>
+                        </select>
+                        <select id="spiele-filter-status" onchange="loadSpiele()">
+                            <option value="">Alle Status</option>
+                            <option value="geplant">Geplant</option>
+                            <option value="bereit">Bereit</option>
+                            <option value="laeuft">Läuft</option>
+                            <option value="beendet">Beendet</option>
+                            <option value="wartend_bestaetigung">Warten auf Bestätigung</option>
+                            <option value="wartend">Wartend (kein Feld)</option>
+                        </select>
+                        <input type="text" id="spiele-search" placeholder="Team suchen..." oninput="filterSpiele()">
+                    </div>
+                    <div class="table-container">
+                        <table id="spiele-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Phase</th>
+                                    <th>Runde</th>
+                                    <th>Team 1</th>
+                                    <th>vs</th>
+                                    <th>Team 2</th>
+                                    <th>Feld</th>
+                                    <th>Zeit</th>
+                                    <th>Ergebnis</th>
+                                    <th>Status</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
 
-            <!-- Pending Results Section -->
-            <section class="card">
-                <h2>📝 Gemeldete Ergebnisse</h2>
-                <div id="meldungen-container">
-                    <p>Keine offenen Meldungen</p>
-                </div>
-            </section>
-
-            <!-- Ranking Section -->
-            <section class="card">
-                <h2>🏆 Platzierung</h2>
-                <div class="filter-row">
-                    <select id="platzierung-runde" onchange="loadPlatzierung()">
-                        <option value="">Runde wählen</option>
-                        <option value="1">Nach Runde 1</option>
-                        <option value="2">Nach Runde 2</option>
-                        <option value="3">Nach Runde 3</option>
-                    </select>
-                    <button class="btn btn-secondary" onclick="loadEndplatzierung()">Endplatzierung anzeigen</button>
-                </div>
-                <div class="table-container">
-                    <table id="platzierung-table">
-                        <thead>
-                            <tr>
-                                <th>Platz</th>
-                                <th>Team</th>
-                                <th>Verein</th>
-                                <th>Siege</th>
-                                <th>Niederlagen</th>
-                                <th>Punkte +</th>
-                                <th>Punkte -</th>
-                                <th>Differenz</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </section>
+                <!-- Pending Results Section -->
+                <section class="card">
+                    <h2>📝 Gemeldete Ergebnisse</h2>
+                    <div id="meldungen-container">
+                        <p>Keine offenen Meldungen</p>
+                    </div>
+                </section>
+            </div>
         </div>
     </div>
 
