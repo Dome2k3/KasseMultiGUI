@@ -39,8 +39,12 @@
                         <input type="text" id="config-name" placeholder="z.B. BVT 37">
                     </div>
                     <div class="config-item">
-                        <label>Datum</label>
+                        <label>Startdatum</label>
                         <input type="date" id="config-datum">
+                    </div>
+                    <div class="config-item">
+                        <label>Enddatum (optional, für mehrtägig)</label>
+                        <input type="date" id="config-datum-ende">
                     </div>
                     <div class="config-item">
                         <label>Anzahl Teams</label>
@@ -51,12 +55,12 @@
                         <input type="number" id="config-felder" min="1" max="20" value="4">
                     </div>
                     <div class="config-item">
-                        <label>Spielzeit (Min)</label>
-                        <input type="number" id="config-spielzeit" min="5" max="60" value="15">
+                        <label>Spielzeit (Min) - optional</label>
+                        <input type="number" id="config-spielzeit" min="0" max="60" value="0">
                     </div>
                     <div class="config-item">
-                        <label>Pause (Min)</label>
-                        <input type="number" id="config-pause" min="0" max="30" value="5">
+                        <label>Pause (Min) - optional</label>
+                        <input type="number" id="config-pause" min="0" max="30" value="0">
                     </div>
                     <div class="config-item">
                         <label>Startzeit</label>
@@ -80,6 +84,7 @@
                 </div>
                 <div class="button-row">
                     <button class="btn btn-primary" onclick="saveConfig()">💾 Speichern</button>
+                    <button class="btn btn-info" onclick="showEmailPreviewModal()">📧 E-Mail Vorschau</button>
                 </div>
             </section>
 
@@ -102,6 +107,8 @@
                         <option value="A">Klasse A</option>
                         <option value="B">Klasse B</option>
                         <option value="C">Klasse C</option>
+                        <option value="D">Klasse D</option>
+                        <option value="E">Klasse E</option>
                     </select>
                 </div>
                 <div class="table-container">
@@ -273,11 +280,17 @@
                     <option value="A">A</option>
                     <option value="B">B</option>
                     <option value="C">C</option>
+                    <option value="D">D</option>
+                    <option value="E">E</option>
                 </select>
             </div>
             <div class="form-group">
                 <label>Setzposition</label>
                 <input type="number" id="team-setzposition" value="0" min="0">
+            </div>
+            <div class="form-group">
+                <label>Passwort / Bestätigungscode</label>
+                <input type="password" id="team-passwort" placeholder="Optionales Passwort">
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="addTeam()">Hinzufügen</button>
@@ -291,9 +304,9 @@
         <div class="modal modal-large">
             <h3>Teams importieren</h3>
             <p>Füge die Teams im CSV-Format ein (eine Zeile pro Team):</p>
-            <p class="hint">Format: Teamname;Ansprechpartner;Email;Telefon;Verein;Klasse;Setzposition</p>
-            <textarea id="import-teams-data" rows="10" placeholder="Team 1;Max Mustermann;max@email.de;0123456;TV Musterstadt;A;1
-Team 2;Anna Schmidt;anna@email.de;0234567;SV Beispiel;A;2"></textarea>
+            <p class="hint">Format: Teamname;Ansprechpartner;Email;Telefon;Verein;Klasse;Setzposition;Passwort</p>
+            <textarea id="import-teams-data" rows="10" placeholder="Team 1;Max Mustermann;max@email.de;0123456;TV Musterstadt;A;1;geheim123
+Team 2;Anna Schmidt;anna@email.de;0234567;SV Beispiel;A;2;passwort456"></textarea>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="importTeams()">Importieren</button>
                 <button class="btn btn-secondary" onclick="closeModal('import-teams-modal')">Abbrechen</button>
@@ -349,6 +362,32 @@ Team 2;Anna Schmidt;anna@email.de;0234567;SV Beispiel;A;2"></textarea>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="saveResult()">Speichern</button>
                 <button class="btn btn-secondary" onclick="closeModal('edit-result-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Preview Modal -->
+    <div class="modal-overlay" id="email-preview-modal">
+        <div class="modal modal-large">
+            <h3>📧 E-Mail Vorschau</h3>
+            <div class="form-group">
+                <label>E-Mail Typ</label>
+                <select id="email-preview-type" onchange="updateEmailPreview()">
+                    <option value="spielankuendigung">Spielankündigung</option>
+                    <option value="ergebnis">Ergebnis-Benachrichtigung</option>
+                    <option value="platzierung">Platzierung</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Vorschau Betreff</label>
+                <input type="text" id="email-preview-subject" readonly>
+            </div>
+            <div class="form-group">
+                <label>Vorschau Inhalt</label>
+                <div id="email-preview-content" style="background: var(--light); padding: 15px; border-radius: 8px; min-height: 200px; border: 1px solid var(--border);"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal('email-preview-modal')">Schließen</button>
             </div>
         </div>
     </div>
