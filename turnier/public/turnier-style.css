@@ -494,7 +494,7 @@ textarea {
 }
 
 .satz-row span:first-child {
-    width: 60px;
+    width: 100px;
 }
 
 .satz-input {
@@ -779,4 +779,152 @@ textarea {
 .teams-info {
     font-size: 0.9rem;
     color: var(--secondary);
+}
+
+/* Games Section Styles */
+.games-section {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.games-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    color: var(--dark);
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.section-title.collapsible {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+.section-title.collapsible:hover {
+    color: var(--primary);
+}
+
+.games-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+}
+
+.games-grid.collapsed {
+    display: none;
+}
+
+.game-card {
+    background: var(--light);
+    border-radius: 10px;
+    padding: 15px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.game-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.game-card.active {
+    border-left: 4px solid var(--warning);
+    background: linear-gradient(135deg, #fff8e1 0%, var(--light) 100%);
+}
+
+.game-card.pending {
+    border-left: 4px solid var(--info);
+    background: linear-gradient(135deg, #e3f2fd 0%, var(--light) 100%);
+}
+
+.game-card.finished {
+    border-left: 4px solid var(--success);
+    background: linear-gradient(135deg, #e8f5e9 0%, var(--light) 100%);
+}
+
+.game-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.game-card-number {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.game-card-field {
+    font-size: 0.85rem;
+    color: var(--info);
+    background: rgba(23, 162, 184, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.game-card-field.no-field {
+    color: var(--secondary);
+    background: rgba(108, 117, 125, 0.1);
+}
+
+.game-card-teams {
+    margin-bottom: 10px;
+}
+
+.game-card-team {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    margin-bottom: 5px;
+    background: var(--white);
+    border-radius: 6px;
+}
+
+.game-card-team.winner {
+    background: #c8e6c9;
+    font-weight: 600;
+}
+
+.game-card-team.loser {
+    background: #ffcdd2;
+    color: var(--secondary);
+}
+
+.game-card-team-name {
+    flex: 1;
+    font-size: 0.95rem;
+}
+
+.game-card-team-score {
+    font-weight: 600;
+    font-size: 1.1rem;
+    min-width: 30px;
+    text-align: center;
+}
+
+.game-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--secondary);
+}
+
+.game-card-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.game-card-actions .btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
 }

@@ -554,10 +554,19 @@ async function loadPhasen() {
 // GAMES MANAGEMENT
 // ==========================================
 
+// History collapsed state
+let historyCollapsed = true;
+let anzahlFelder = 4; // Default, will be loaded from config
+
 async function loadSpiele() {
     if (!currentTurnierId) return;
 
     try {
+        // Get tournament config for anzahl_felder
+        const configRes = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}`);
+        const config = await configRes.json();
+        anzahlFelder = config.anzahl_felder || 4;
+
         const phaseId = document.getElementById('spiele-filter-phase').value;
         const status = document.getElementById('spiele-filter-status').value;
 
@@ -568,9 +577,104 @@ async function loadSpiele() {
         const res = await fetch(url);
         spiele = await res.json();
 
+        renderGameOverview();
         renderSpieleTable();
     } catch (err) {
         console.error('Error loading games:', err);
+    }
+}
+
+function renderGameOverview() {
+    // Active games on fields (games with feld_id and not finished)
+    const activeGames = spiele.filter(s => 
+        s.feld_id && 
+        s.status !== 'beendet' && 
+        s.team1_id && s.team2_id
+    ).sort((a, b) => a.spiel_nummer - b.spiel_nummer);
+
+    // Pending games without field (limited to 10)
+    const pendingGames = spiele.filter(s => 
+        !s.feld_id && 
+        s.status === 'wartend' && 
+        s.team1_id && s.team2_id
+    ).sort((a, b) => a.spiel_nummer - b.spiel_nummer).slice(0, 10);
+
+    // Finished games for history (max of anzahlFelder or 10, whichever is greater)
+    const historyLimit = Math.max(anzahlFelder, 10);
+    const finishedGames = spiele.filter(s => 
+        s.status === 'beendet'
+    ).sort((a, b) => b.spiel_nummer - a.spiel_nummer).slice(0, historyLimit);
+
+    renderGameCards('active-games-container', activeGames, 'active');
+    renderGameCards('pending-games-container', pendingGames, 'pending');
+    renderGameCards('history-games-container', finishedGames, 'finished');
+}
+
+function renderGameCards(containerId, games, type) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (games.length === 0) {
+        const emptyMessages = {
+            'active': 'Keine aktiven Spiele auf Feldern',
+            'pending': 'Keine ausstehenden Spiele',
+            'finished': 'Keine abgeschlossenen Spiele'
+        };
+        container.innerHTML = `<p class="empty-state">${emptyMessages[type]}</p>`;
+        return;
+    }
+
+    container.innerHTML = games.map(game => {
+        const team1Class = game.gewinner_id === game.team1_id ? 'winner' : 
+                          (game.gewinner_id === game.team2_id ? 'loser' : '');
+        const team2Class = game.gewinner_id === game.team2_id ? 'winner' : 
+                          (game.gewinner_id === game.team1_id ? 'loser' : '');
+        
+        const fieldDisplay = game.feld_name 
+            ? `<span class="game-card-field">📍 ${escapeHtml(game.feld_name)}</span>`
+            : `<span class="game-card-field no-field">⏳ Offen</span>`;
+
+        const score1 = game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-';
+        const score2 = game.ergebnis_team2 !== null ? game.ergebnis_team2 : '-';
+
+        return `
+            <div class="game-card ${type}">
+                <div class="game-card-header">
+                    <span class="game-card-number">Spiel #${game.spiel_nummer}</span>
+                    ${fieldDisplay}
+                </div>
+                <div class="game-card-teams">
+                    <div class="game-card-team ${team1Class}">
+                        <span class="game-card-team-name">${escapeHtml(game.team1_name || 'TBD')}</span>
+                        <span class="game-card-team-score">${score1}</span>
+                    </div>
+                    <div class="game-card-team ${team2Class}">
+                        <span class="game-card-team-name">${escapeHtml(game.team2_name || 'TBD')}</span>
+                        <span class="game-card-team-score">${score2}</span>
+                    </div>
+                </div>
+                <div class="game-card-footer">
+                    <span>${formatDateTime(game.geplante_zeit)}</span>
+                    <div class="game-card-actions">
+                        <button class="btn btn-small btn-primary" onclick="showEditResultModal(${game.id})">✏️</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleHistory() {
+    historyCollapsed = !historyCollapsed;
+    const container = document.getElementById('history-games-container');
+    const icon = document.getElementById('history-toggle-icon');
+    
+    if (historyCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
     }
 }
 
