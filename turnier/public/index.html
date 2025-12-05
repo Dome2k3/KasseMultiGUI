@@ -12,7 +12,8 @@
             <h1>🏐 Turnier-Verwaltung</h1>
             <nav class="nav-buttons">
                 <button onclick="window.location.href='../admin.html'" class="btn btn-secondary">← Admin Dashboard</button>
-                <button onclick="window.location.href='bracket.html'" class="btn btn-info">📊 Turnierbaum (Public)</button>
+                <button onclick="window.location.href='bracket.html'" class="btn btn-info">📊 Turnierbaum (Karten)</button>
+                <button onclick="window.location.href='bracket-tree.html'" class="btn btn-info">🌳 Turnierbaum (Baum)</button>
                 <button onclick="window.location.href='schiedsrichter.html'" class="btn btn-info">📱 Schiedsrichter-Ansicht</button>
             </nav>
         </header>
@@ -191,7 +192,38 @@
 
                 <!-- Games Overview Section -->
                 <section class="card">
-                    <h2>🎯 Spiele</h2>
+                    <h2>🎯 Spiele-Übersicht</h2>
+                    
+                    <!-- Active Games on Fields -->
+                    <div class="games-section">
+                        <h3 class="section-title">🏐 Aktive Spiele auf Feldern</h3>
+                        <div class="games-grid" id="active-games-container">
+                            <p class="empty-state">Keine aktiven Spiele auf Feldern</p>
+                        </div>
+                    </div>
+
+                    <!-- Pending Games (without field) -->
+                    <div class="games-section">
+                        <h3 class="section-title">⏳ Ausstehende Spiele (offen)</h3>
+                        <div class="games-grid" id="pending-games-container">
+                            <p class="empty-state">Keine ausstehenden Spiele</p>
+                        </div>
+                    </div>
+
+                    <!-- Completed Games History (collapsible) -->
+                    <div class="games-section">
+                        <h3 class="section-title collapsible" onclick="toggleHistory()">
+                            <span id="history-toggle-icon">▶</span> 📜 Abgeschlossene Spiele (Historie)
+                        </h3>
+                        <div class="games-grid collapsed" id="history-games-container">
+                            <p class="empty-state">Keine abgeschlossenen Spiele</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Detailed Games Table Section -->
+                <section class="card">
+                    <h2>📋 Alle Spiele (Detailansicht)</h2>
                     <div class="filter-row">
                         <select id="spiele-filter-phase" onchange="loadSpiele()">
                             <option value="">Alle Phasen</option>
@@ -343,30 +375,30 @@ Team 2;Anna Schmidt;anna@email.de;0234567;SV Beispiel;A;2;passwort456"></textare
             </div>
             <div class="result-inputs">
                 <div class="form-group">
-                    <label>Punkte Team 1</label>
+                    <label>Satz Team 1</label>
                     <input type="number" id="edit-ergebnis-team1" min="0" value="0">
                 </div>
                 <div class="form-group">
-                    <label>Punkte Team 2</label>
+                    <label>Satz Team 2</label>
                     <input type="number" id="edit-ergebnis-team2" min="0" value="0">
                 </div>
             </div>
-            <h4>Sätze (optional)</h4>
+            <h4>Punkte pro Satz</h4>
             <div class="satz-inputs">
                 <div class="satz-row">
-                    <span>Satz 1:</span>
+                    <span>Punkte Satz 1:</span>
                     <input type="number" id="edit-satz1-team1" min="0" class="satz-input">
                     <span>:</span>
                     <input type="number" id="edit-satz1-team2" min="0" class="satz-input">
                 </div>
                 <div class="satz-row">
-                    <span>Satz 2:</span>
+                    <span>Punkte Satz 2:</span>
                     <input type="number" id="edit-satz2-team1" min="0" class="satz-input">
                     <span>:</span>
                     <input type="number" id="edit-satz2-team2" min="0" class="satz-input">
                 </div>
                 <div class="satz-row">
-                    <span>Satz 3:</span>
+                    <span>Punkte Satz 3:</span>
                     <input type="number" id="edit-satz3-team1" min="0" class="satz-input">
                     <span>:</span>
                     <input type="number" id="edit-satz3-team2" min="0" class="satz-input">

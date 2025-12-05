@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnierbaum - Baumstruktur</title>
+    <link rel="stylesheet" href="turnier-style.css">
+    <style>
+        /* Tree Bracket Styles */
+        .bracket-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .bracket-header h1 {
+            font-size: 2rem;
+            color: var(--dark);
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.5);
+        }
+
+        .bracket-header .turnier-datum {
+            font-size: 1.2rem;
+            color: rgba(0,0,0,0.6);
+        }
+
+        .tree-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tree-controls select {
+            padding: 10px 15px;
+            font-size: 1rem;
+            border-radius: 8px;
+            border: 2px solid var(--border);
+        }
+
+        /* Tree Container */
+        .tree-container {
+            overflow-x: auto;
+            padding: 20px;
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        /* Tree Structure */
+        .bracket-tree {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            min-width: max-content;
+        }
+
+        .bracket-round {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-right: 40px;
+            min-width: 250px;
+        }
+
+        .bracket-round:last-child {
+            margin-right: 0;
+        }
+
+        .round-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 20px;
+            padding: 8px 20px;
+            background: var(--primary);
+            color: var(--white);
+            border-radius: 20px;
+        }
+
+        .round-games {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Match Card in Tree */
+        .tree-match {
+            background: var(--light);
+            border-radius: 10px;
+            padding: 12px;
+            min-width: 220px;
+            position: relative;
+            border-left: 4px solid var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .tree-match:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .tree-match.finished {
+            border-left-color: var(--success);
+        }
+
+        .tree-match.running {
+            border-left-color: var(--warning);
+            animation: pulse 2s infinite;
+        }
+
+        .tree-match.upcoming {
+            border-left-color: var(--primary);
+        }
+
+        .tree-match.waiting {
+            border-left-color: var(--secondary);
+            opacity: 0.7;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 2px 15px rgba(243, 156, 18, 0.2); }
+            50% { box-shadow: 0 2px 25px rgba(243, 156, 18, 0.4); }
+        }
+
+        .tree-match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            color: var(--secondary);
+        }
+
+        .tree-match-number {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .tree-match-field {
+            background: rgba(23, 162, 184, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: var(--info);
+        }
+
+        .tree-match-teams {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tree-team {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            background: var(--white);
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .tree-team.winner {
+            background: #c8e6c9;
+            font-weight: 600;
+        }
+
+        .tree-team.loser {
+            background: #ffcdd2;
+            color: var(--secondary);
+        }
+
+        .tree-team.tbd {
+            color: var(--secondary);
+            font-style: italic;
+        }
+
+        .tree-team-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .tree-team-score {
+            font-weight: 600;
+            min-width: 25px;
+            text-align: center;
+        }
+
+        /* Connection Lines */
+        .tree-match::after {
+            content: '';
+            position: absolute;
+            right: -20px;
+            top: 50%;
+            width: 20px;
+            height: 2px;
+            background: var(--border);
+        }
+
+        .bracket-round:last-child .tree-match::after {
+            display: none;
+        }
+
+        /* Phase Legend */
+        .phase-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid;
+        }
+
+        .legend-color.winner-path {
+            background: #e8f5e9;
+            border-color: var(--success);
+        }
+
+        .legend-color.loser-path {
+            background: #ffebee;
+            border-color: var(--danger);
+        }
+
+        /* Split Trees Container */
+        .split-trees {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .tree-section {
+            padding: 20px;
+            border-radius: var(--radius);
+        }
+
+        .tree-section.winner-bracket {
+            background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+            border: 2px solid var(--success);
+        }
+
+        .tree-section.loser-bracket {
+            background: linear-gradient(135deg, #ffebee 0%, #fce4ec 100%);
+            border: 2px solid var(--danger);
+        }
+
+        .tree-section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tree-section.winner-bracket .tree-section-title {
+            color: #2e7d32;
+        }
+
+        .tree-section.loser-bracket .tree-section-title {
+            color: #c62828;
+        }
+
+        /* Empty state */
+        .empty-tree {
+            text-align: center;
+            padding: 40px;
+            color: var(--secondary);
+        }
+
+        /* Refresh Button */
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+
+        .refresh-btn:hover {
+            background: var(--primary-dark);
+            transform: scale(1.1);
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .bracket-tree {
+                flex-direction: column;
+            }
+
+            .bracket-round {
+                margin-right: 0;
+                margin-bottom: 30px;
+            }
+
+            .tree-match::after {
+                display: none;
+            }
+
+            .round-games {
+                width: 100%;
+            }
+
+            .tree-match {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="bracket-header">
+            <h1 id="turnier-name">🌳 Turnierbaum - Baumstruktur</h1>
+            <p class="turnier-datum" id="turnier-datum"></p>
+        </header>
+
+        <!-- Navigation -->
+        <div class="card" style="margin-bottom: 20px;">
+            <nav class="nav-buttons" style="justify-content: center;">
+                <button onclick="window.location.href='index.html'" class="btn btn-secondary">← Turnier-Verwaltung</button>
+                <button onclick="window.location.href='bracket.html'" class="btn btn-info">📊 Kartenansicht</button>
+                <button onclick="window.location.href='schiedsrichter.html'" class="btn btn-info">📱 Schiedsrichter</button>
+            </nav>
+        </div>
+
+        <!-- Tournament Selection -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="tree-controls">
+                <select id="turnier-select" onchange="loadTreeBracket()">
+                    <option value="">-- Turnier wählen --</option>
+                </select>
+                <select id="phase-select" onchange="renderTree()">
+                    <option value="">Alle Phasen</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Phase Legend -->
+        <div class="phase-legend">
+            <div class="legend-item">
+                <div class="legend-color winner-path"></div>
+                <span>Gewinner-Pfad</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color loser-path"></div>
+                <span>Verlierer-Pfad</span>
+            </div>
+        </div>
+
+        <!-- Tree Display -->
+        <div class="tree-container" id="tree-container">
+            <div class="empty-tree">
+                <h3>🌳 Turnierbaum</h3>
+                <p>Wähle ein Turnier aus, um den Baum zu sehen.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <button class="refresh-btn" onclick="refreshData()" title="Aktualisieren">🔄</button>
+
+    <script src="config.js"></script>
+    <script>
+        const API_BASE = window.API_URL_TURNIER || 'http://localhost:3003';
+
+        let currentTurnierId = null;
+        let allGames = [];
+        let phasen = [];
+        let teams = [];
+        let autoRefreshInterval = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTurniere();
+            autoRefreshInterval = setInterval(refreshData, 30000);
+        });
+
+        async function loadTurniere() {
+            try {
+                const res = await fetch(`${API_BASE}/api/turniere`);
+                const turniere = await res.json();
+
+                const select = document.getElementById('turnier-select');
+                select.innerHTML = '<option value="">-- Turnier wählen --</option>';
+
+                turniere.filter(t => t.aktiv).forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = `${t.turnier_name} (${formatDate(t.turnier_datum)})`;
+                    select.appendChild(opt);
+                });
+
+                // Auto-select first active tournament
+                if (turniere.length > 0) {
+                    select.value = turniere[0].id;
+                    loadTreeBracket();
+                }
+            } catch (err) {
+                console.error('Error loading tournaments:', err);
+            }
+        }
+
+        async function loadTreeBracket() {
+            currentTurnierId = document.getElementById('turnier-select').value;
+            if (!currentTurnierId) {
+                document.getElementById('tree-container').innerHTML = `
+                    <div class="empty-tree">
+                        <h3>🌳 Turnierbaum</h3>
+                        <p>Wähle ein Turnier aus, um den Baum zu sehen.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                // Load tournament data
+                const [bracketRes, teamsRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/public/turniere/${currentTurnierId}/bracket`),
+                    fetch(`${API_BASE}/api/turniere/${currentTurnierId}/teams`)
+                ]);
+                
+                const bracketData = await bracketRes.json();
+                teams = await teamsRes.json();
+
+                document.getElementById('turnier-name').textContent = `🌳 ${bracketData.turnier.turnier_name}`;
+                document.getElementById('turnier-datum').textContent = formatDate(bracketData.turnier.turnier_datum);
+
+                phasen = bracketData.phasen;
+                allGames = bracketData.spiele;
+
+                // Populate phase filter
+                const phaseSelect = document.getElementById('phase-select');
+                phaseSelect.innerHTML = '<option value="">Alle Phasen</option>';
+                phasen.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.phase_name;
+                    phaseSelect.appendChild(opt);
+                });
+
+                renderTree();
+            } catch (err) {
+                console.error('Error loading bracket:', err);
+            }
+        }
+
+        function renderTree() {
+            const container = document.getElementById('tree-container');
+            const selectedPhase = document.getElementById('phase-select').value;
+
+            // Filter games by phase if selected
+            let filteredGames = allGames;
+            if (selectedPhase) {
+                filteredGames = allGames.filter(g => String(g.phase_id) === selectedPhase);
+            }
+
+            if (filteredGames.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-tree">
+                        <h3>🌳 Keine Spiele</h3>
+                        <p>Für die ausgewählte Phase sind noch keine Spiele vorhanden.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Group games by round
+            const gamesByRound = {};
+            filteredGames.forEach(game => {
+                const round = game.runde || 1;
+                if (!gamesByRound[round]) {
+                    gamesByRound[round] = [];
+                }
+                gamesByRound[round].push(game);
+            });
+
+            // Sort rounds
+            const rounds = Object.keys(gamesByRound).sort((a, b) => parseInt(a) - parseInt(b));
+
+            // Determine if we should split into winner/loser brackets
+            // Based on phase types - if we have both gewinner and verlierer phases
+            const hasWinnerPhases = phasen.some(p => p.phase_typ === 'gewinner');
+            const hasLoserPhases = phasen.some(p => p.phase_typ === 'verlierer');
+
+            if (!selectedPhase && hasWinnerPhases && hasLoserPhases && rounds.length > 1) {
+                // Render split tree view for round 2+
+                renderSplitTree(container, gamesByRound, rounds);
+            } else {
+                // Render single tree view
+                renderSingleTree(container, gamesByRound, rounds);
+            }
+        }
+
+        function renderSingleTree(container, gamesByRound, rounds) {
+            let html = '<div class="bracket-tree">';
+
+            rounds.forEach(round => {
+                const games = gamesByRound[round];
+                html += `
+                    <div class="bracket-round">
+                        <div class="round-title">Runde ${round}</div>
+                        <div class="round-games">
+                            ${games.map(game => renderTreeMatch(game)).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function renderSplitTree(container, gamesByRound, rounds) {
+            // Separate games by phase type
+            const winnerGames = {};
+            const loserGames = {};
+
+            Object.keys(gamesByRound).forEach(round => {
+                gamesByRound[round].forEach(game => {
+                    const phase = phasen.find(p => p.id === game.phase_id);
+                    const phaseType = phase ? phase.phase_typ : 'hauptrunde';
+
+                    if (phaseType === 'verlierer') {
+                        if (!loserGames[round]) loserGames[round] = [];
+                        loserGames[round].push(game);
+                    } else {
+                        // hauptrunde, gewinner, finale all go to winner bracket
+                        if (!winnerGames[round]) winnerGames[round] = [];
+                        winnerGames[round].push(game);
+                    }
+                });
+            });
+
+            const winnerRounds = Object.keys(winnerGames).sort((a, b) => parseInt(a) - parseInt(b));
+            const loserRounds = Object.keys(loserGames).sort((a, b) => parseInt(a) - parseInt(b));
+
+            let html = '<div class="split-trees">';
+
+            // Winner Bracket
+            if (winnerRounds.length > 0) {
+                html += `
+                    <div class="tree-section winner-bracket">
+                        <div class="tree-section-title">🏆 Gewinner-Baum (Hauptturnier)</div>
+                        <div class="bracket-tree">
+                            ${winnerRounds.map(round => `
+                                <div class="bracket-round">
+                                    <div class="round-title">Runde ${round}</div>
+                                    <div class="round-games">
+                                        ${winnerGames[round].map(game => renderTreeMatch(game)).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Loser Bracket
+            if (loserRounds.length > 0) {
+                html += `
+                    <div class="tree-section loser-bracket">
+                        <div class="tree-section-title">🔄 Verlierer-Baum (Trostturnier)</div>
+                        <div class="bracket-tree">
+                            ${loserRounds.map(round => `
+                                <div class="bracket-round">
+                                    <div class="round-title">Runde ${round}</div>
+                                    <div class="round-games">
+                                        ${loserGames[round].map(game => renderTreeMatch(game)).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function renderTreeMatch(game) {
+            const statusClass = game.status === 'beendet' ? 'finished' :
+                               game.status === 'laeuft' ? 'running' :
+                               game.status === 'wartend' ? 'waiting' : 'upcoming';
+
+            const team1Class = getTeamClass(game, game.team1_name);
+            const team2Class = getTeamClass(game, game.team2_name);
+
+            const score1 = game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-';
+            const score2 = game.ergebnis_team2 !== null ? game.ergebnis_team2 : '-';
+
+            const fieldDisplay = game.feld_name 
+                ? `<span class="tree-match-field">📍 ${escapeHtml(game.feld_name)}</span>`
+                : '';
+
+            return `
+                <div class="tree-match ${statusClass}">
+                    <div class="tree-match-header">
+                        <span class="tree-match-number">#${game.spiel_nummer}</span>
+                        ${fieldDisplay}
+                    </div>
+                    <div class="tree-match-teams">
+                        <div class="tree-team ${team1Class}">
+                            <span class="tree-team-name">${escapeHtml(game.team1_name || 'TBD')}</span>
+                            <span class="tree-team-score">${score1}</span>
+                        </div>
+                        <div class="tree-team ${team2Class}">
+                            <span class="tree-team-name">${escapeHtml(game.team2_name || 'TBD')}</span>
+                            <span class="tree-team-score">${score2}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getTeamClass(game, teamName) {
+            if (!teamName) return 'tbd';
+            if (game.gewinner_name === teamName) return 'winner';
+            if (game.gewinner_name && game.gewinner_name !== teamName) return 'loser';
+            return '';
+        }
+
+        async function refreshData() {
+            if (currentTurnierId) {
+                await loadTreeBracket();
+            }
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
