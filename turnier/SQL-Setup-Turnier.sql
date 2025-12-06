@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS turnier_teams (
     status ENUM('angemeldet', 'bestaetigt', 'abgemeldet', 'disqualifiziert') DEFAULT 'angemeldet',
     teilnehmerzahl INT DEFAULT 2,
     -- Swiss system fields
-    swiss_score DECIMAL(4,1) DEFAULT 0.0,
+    swiss_score INT DEFAULT 0,
     buchholz DECIMAL(8,2) DEFAULT 0.0,
     initial_seed INT DEFAULT 0,
     swiss_qualified BOOLEAN DEFAULT FALSE,

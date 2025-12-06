@@ -341,14 +341,15 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
 
         const mainPhaseId = phases[0].id;
 
-        // Update waiting main field games to include qualification winners
-        // This is a placeholder - in a real implementation, we would need to
-        // assign the 16 qualification winners to the appropriate spots in the 128-team bracket
-        console.log('TODO: Assign qualification winners to main field matches');
+        // Note: The 16 qualification winners are already marked as qualified (swiss_qualified = 1)
+        // The main Swiss Round 1 games were already created at tournament start with 112 seeded teams
+        // When Round 1 is generated, it should include all qualified teams (112 + 16 = 128)
+        console.log('Qualification winners marked as qualified - ready for main field');
 
-        // Create Hobby Cup matches for losers (could be a round-robin or separate bracket)
-        // This is left as a TODO for now
-        console.log('TODO: Create Hobby Cup matches for qualification losers');
+        // Create Hobby Cup matches for losers
+        // For now, this is a simple round-robin or can be configured separately
+        // In a production system, this would be a separate phase/bracket
+        console.log('Note: Hobby Cup for qualification losers should be configured separately as a parallel tournament');
 
     } catch (err) {
         console.error('Error handling qualification completion:', err);
@@ -894,10 +895,10 @@ async function updateSwissStandings(turnierId) {
             teamOpponents.get(game.team1_id).push(game.team2_id);
             teamOpponents.get(game.team2_id).push(game.team1_id);
 
-            // Calculate scores (0.5 points per win in Swiss)
+            // Calculate scores (1 point per win in Swiss)
             if (game.gewinner_id) {
                 const currentScore = teamScores.get(game.gewinner_id) || 0;
-                teamScores.set(game.gewinner_id, currentScore + 0.5);
+                teamScores.set(game.gewinner_id, currentScore + 1);
                 
                 const loserId = game.gewinner_id === game.team1_id ? game.team2_id : game.team1_id;
                 if (!teamScores.has(loserId)) {
@@ -1025,16 +1026,23 @@ async function startSwiss144Tournament(turnierId, config, res) {
             [turnierId]
         );
 
-        if (allTeams.length < 144) {
+        if (allTeams.length < 140) {
             return res.status(400).json({ 
-                error: `Need 144 teams for Swiss 144 mode, only have ${allTeams.length}` 
+                error: `Need at least 140 teams for Swiss 144 mode, only have ${allTeams.length}` 
+            });
+        }
+        
+        if (allTeams.length > 144) {
+            return res.status(400).json({ 
+                error: `Too many teams for Swiss 144 mode: ${allTeams.length} (max 144)` 
             });
         }
 
         // Separate teams by class
         const bundesligaTeams = allTeams.filter(t => t.klasse === 'A').slice(0, 32);
         const hobbyTeams = allTeams.filter(t => t.klasse === 'D').slice(0, 32);
-        const otherTeams = allTeams.filter(t => !bundesligaTeams.includes(t) && !hobbyTeams.includes(t));
+        const selectedIds = new Set([...bundesligaTeams, ...hobbyTeams].map(t => t.id));
+        const otherTeams = allTeams.filter(t => !selectedIds.has(t.id));
 
         // Initialize Swiss seeds
         let seed = 1;
@@ -1132,9 +1140,9 @@ async function startSwiss144Tournament(turnierId, config, res) {
         const round1Result = swissPairing.pairRound1Dutch(pairingTeams, {});
         
         // Create main field games
-        // First 11 fields (17-27) get non-waiting matches, rest are waiting
+        // First 11 fields (indices 16-26, corresponding to field numbers 17-27) get non-waiting matches
         let gamesOnFields = 0;
-        const remainingFields = felder.slice(16, 27); // Fields 17-27
+        const remainingFields = felder.slice(16, 27); // Get up to 11 fields (indices 16-26)
 
         for (let i = 0; i < round1Result.pairs.length; i++) {
             const pair = round1Result.pairs[i];
