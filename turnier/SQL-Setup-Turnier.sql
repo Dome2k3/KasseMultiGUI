@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS turnier_config (
     pause_minuten INT NOT NULL DEFAULT 0,
     startzeit TIME NOT NULL DEFAULT '09:00:00',
     endzeit TIME NOT NULL DEFAULT '18:00:00',
-    modus ENUM('random', 'seeded') NOT NULL DEFAULT 'seeded',
+    modus ENUM('random', 'seeded', 'swiss', 'swiss_144') NOT NULL DEFAULT 'seeded',
     bestaetigungs_code VARCHAR(50) DEFAULT NULL,
     email_benachrichtigung BOOLEAN DEFAULT TRUE,
     smtp_host VARCHAR(255) DEFAULT NULL,
@@ -45,10 +45,16 @@ CREATE TABLE IF NOT EXISTS turnier_teams (
     bestaetigungs_code VARCHAR(50) DEFAULT NULL,
     status ENUM('angemeldet', 'bestaetigt', 'abgemeldet', 'disqualifiziert') DEFAULT 'angemeldet',
     teilnehmerzahl INT DEFAULT 2,
+    -- Swiss system fields
+    swiss_score DECIMAL(4,1) DEFAULT 0.0,
+    buchholz DECIMAL(8,2) DEFAULT 0.0,
+    initial_seed INT DEFAULT 0,
+    swiss_qualified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (turnier_id) REFERENCES turnier_config(id) ON DELETE CASCADE,
-    INDEX idx_turnier_teams (turnier_id, klasse)
+    INDEX idx_turnier_teams (turnier_id, klasse),
+    INDEX idx_swiss_standings (turnier_id, swiss_score, buchholz)
 );
 
 -- Spielfelder
@@ -223,6 +229,24 @@ CREATE TABLE IF NOT EXISTS turnier_audit_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (turnier_id) REFERENCES turnier_config(id) ON DELETE CASCADE,
     INDEX idx_audit_zeit (turnier_id, created_at)
+);
+
+-- Team Opponents Tracking (for Swiss system rematch avoidance)
+CREATE TABLE IF NOT EXISTS team_opponents (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    turnier_id INT NOT NULL,
+    team_id INT NOT NULL,
+    opponent_id INT NOT NULL,
+    spiel_id INT DEFAULT NULL,
+    runde INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (turnier_id) REFERENCES turnier_config(id) ON DELETE CASCADE,
+    FOREIGN KEY (team_id) REFERENCES turnier_teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (opponent_id) REFERENCES turnier_teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (spiel_id) REFERENCES turnier_spiele(id) ON DELETE SET NULL,
+    UNIQUE KEY unique_opponent (turnier_id, team_id, opponent_id),
+    INDEX idx_team_opponents (turnier_id, team_id),
+    INDEX idx_opponent_lookup (turnier_id, team_id, opponent_id)
 );
 
 -- Standard-Phasen für ein 32er-Turnier einfügen (Beispiel)

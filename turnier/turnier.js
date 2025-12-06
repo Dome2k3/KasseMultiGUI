@@ -7,6 +7,7 @@ const cors = require('cors');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+const swissPairing = require('./swiss-pairing');
 
 const app = express();
 app.use(cors());
@@ -198,6 +199,159 @@ async function progressTournamentBracket(turnierId, completedGame, gewinnerId, v
         console.log(`Bracket progression completed for game #${completedGame.spiel_nummer}`);
     } catch (err) {
         console.error('Error progressing tournament bracket:', err);
+    }
+}
+
+// Helper: Progress Swiss tournament after a game completes
+async function progressSwissTournament(turnierId, completedGame) {
+    try {
+        // Check if this round is complete
+        const [roundGames] = await db.query(
+            `SELECT COUNT(*) as total, 
+                    SUM(CASE WHEN status = 'beendet' THEN 1 ELSE 0 END) as completed
+             FROM turnier_spiele 
+             WHERE turnier_id = ? AND phase_id = ? AND runde = ?`,
+            [turnierId, completedGame.phase_id, completedGame.runde]
+        );
+
+        const roundInfo = roundGames[0];
+        console.log(`Round ${completedGame.runde}: ${roundInfo.completed}/${roundInfo.total} games completed`);
+
+        // If round is complete, generate next round
+        if (roundInfo.completed === roundInfo.total) {
+            console.log(`Round ${completedGame.runde} complete - generating next round`);
+
+            // Update Swiss standings
+            await updateSwissStandings(turnierId);
+
+            // Special handling for Swiss 144 qualification round (round 0)
+            if (completedGame.runde === 0) {
+                await handleQualificationComplete(turnierId, completedGame.phase_id);
+                return;
+            }
+
+            // Check if we've reached max rounds (7 for Swiss 144, configurable for others)
+            const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
+            const maxRounds = config[0]?.modus === 'swiss_144' ? 7 : 5;
+
+            if (completedGame.runde >= maxRounds) {
+                console.log(`Tournament complete - max rounds (${maxRounds}) reached`);
+                return;
+            }
+
+            // Generate next round pairings
+            const nextRunde = completedGame.runde + 1;
+            const pairings = await generateNextSwissRound(turnierId, nextRunde);
+
+            // Get available fields
+            const [felder] = await db.query(
+                'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+                [turnierId]
+            );
+
+            // Get max spiel_nummer
+            const [maxSpielResult] = await db.query(
+                'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+                [turnierId]
+            );
+            let spielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+
+            // Create games for next round
+            for (let i = 0; i < pairings.length; i++) {
+                const pair = pairings[i];
+                const bestCode = generateConfirmationCode();
+
+                // Assign field to first N games
+                let feldId = null;
+                let geplante_zeit = null;
+                let status = 'wartend';
+
+                if (i < felder.length) {
+                    feldId = felder[i].id;
+                    geplante_zeit = new Date();
+                    status = 'geplant';
+                }
+
+                const [result] = await db.query(
+                    `INSERT INTO turnier_spiele 
+                    (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [turnierId, completedGame.phase_id, nextRunde, spielNummer++,
+                     pair.teamA.id, pair.teamB ? pair.teamB.id : null,
+                     feldId, geplante_zeit, pair.isBye ? 'beendet' : status, bestCode]
+                );
+
+                // If bye, record the win immediately
+                if (pair.isBye) {
+                    await db.query(
+                        'UPDATE turnier_spiele SET gewinner_id = ?, status = "beendet" WHERE id = ?',
+                        [pair.teamA.id, result.insertId]
+                    );
+                }
+
+                // Record opponent relationship
+                if (pair.teamB) {
+                    await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, result.insertId, nextRunde);
+                }
+            }
+
+            console.log(`Generated ${pairings.length} pairings for round ${nextRunde}`);
+        }
+    } catch (err) {
+        console.error('Error progressing Swiss tournament:', err);
+    }
+}
+
+// Helper: Handle qualification round completion (Swiss 144)
+async function handleQualificationComplete(turnierId, qualiPhaseId) {
+    try {
+        console.log('Qualification round complete - processing winners and losers');
+
+        // Get qualification games
+        const [qualiGames] = await db.query(
+            'SELECT * FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 AND status = "beendet"',
+            [turnierId, qualiPhaseId]
+        );
+
+        const winners = [];
+        const losers = [];
+
+        for (const game of qualiGames) {
+            if (game.gewinner_id) winners.push(game.gewinner_id);
+            if (game.verlierer_id) losers.push(game.verlierer_id);
+        }
+
+        // Mark winners as qualified for main Swiss
+        for (const winnerId of winners) {
+            await db.query('UPDATE turnier_teams SET swiss_qualified = 1 WHERE id = ?', [winnerId]);
+        }
+
+        console.log(`Qualification: ${winners.length} winners qualify for main field, ${losers.length} go to Hobby Cup`);
+
+        // Get main Swiss phase
+        const [phases] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Main Swiss"',
+            [turnierId]
+        );
+
+        if (phases.length === 0) {
+            console.error('Main Swiss phase not found');
+            return;
+        }
+
+        const mainPhaseId = phases[0].id;
+
+        // Update waiting main field games to include qualification winners
+        // This is a placeholder - in a real implementation, we would need to
+        // assign the 16 qualification winners to the appropriate spots in the 128-team bracket
+        console.log('TODO: Assign qualification winners to main field matches');
+
+        // Create Hobby Cup matches for losers (could be a round-robin or separate bracket)
+        // This is left as a TODO for now
+        console.log('TODO: Create Hobby Cup matches for qualification losers');
+
+    } catch (err) {
+        console.error('Error handling qualification completion:', err);
     }
 }
 
@@ -689,10 +843,152 @@ app.get('/api/turniere/:turnierId/spiele/:spielId', async (req, res) => {
 });
 
 // ==========================================
+// SWISS SYSTEM HELPERS
+// ==========================================
+
+// Helper: Get Swiss standings for teams
+async function getSwissStandings(turnierId) {
+    const [teams] = await db.query(
+        `SELECT id, team_name, klasse, setzposition, swiss_score, buchholz, 
+                initial_seed, swiss_qualified, status
+         FROM turnier_teams 
+         WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt")
+         ORDER BY swiss_score DESC, buchholz DESC, initial_seed ASC`,
+        [turnierId]
+    );
+
+    // Get opponents for each team
+    const teamsWithOpponents = [];
+    for (const team of teams) {
+        const [opponents] = await db.query(
+            'SELECT opponent_id FROM team_opponents WHERE turnier_id = ? AND team_id = ?',
+            [turnierId, team.id]
+        );
+        teamsWithOpponents.push({
+            ...team,
+            opponents: opponents.map(o => o.opponent_id)
+        });
+    }
+
+    return teamsWithOpponents;
+}
+
+// Helper: Update Swiss standings after a round
+async function updateSwissStandings(turnierId) {
+    // Get all completed games
+    const [games] = await db.query(
+        `SELECT * FROM turnier_spiele 
+         WHERE turnier_id = ? AND status = 'beendet' AND gewinner_id IS NOT NULL`,
+        [turnierId]
+    );
+
+    // Calculate scores for each team
+    const teamScores = new Map();
+    const teamOpponents = new Map();
+
+    for (const game of games) {
+        if (game.team1_id && game.team2_id) {
+            // Record opponents
+            if (!teamOpponents.has(game.team1_id)) teamOpponents.set(game.team1_id, []);
+            if (!teamOpponents.has(game.team2_id)) teamOpponents.set(game.team2_id, []);
+            teamOpponents.get(game.team1_id).push(game.team2_id);
+            teamOpponents.get(game.team2_id).push(game.team1_id);
+
+            // Calculate scores (0.5 points per win in Swiss)
+            if (game.gewinner_id) {
+                const currentScore = teamScores.get(game.gewinner_id) || 0;
+                teamScores.set(game.gewinner_id, currentScore + 0.5);
+                
+                const loserId = game.gewinner_id === game.team1_id ? game.team2_id : game.team1_id;
+                if (!teamScores.has(loserId)) {
+                    teamScores.set(loserId, 0);
+                }
+            }
+        }
+    }
+
+    // Calculate Buchholz (sum of opponents' scores)
+    const buchholzScores = new Map();
+    for (const [teamId, opponentIds] of teamOpponents.entries()) {
+        let buchholz = 0;
+        for (const oppId of opponentIds) {
+            buchholz += teamScores.get(oppId) || 0;
+        }
+        buchholzScores.set(teamId, buchholz);
+    }
+
+    // Update database
+    for (const [teamId, score] of teamScores.entries()) {
+        const buchholz = buchholzScores.get(teamId) || 0;
+        await db.query(
+            'UPDATE turnier_teams SET swiss_score = ?, buchholz = ? WHERE id = ?',
+            [score, buchholz, teamId]
+        );
+    }
+
+    console.log(`Updated Swiss standings for ${teamScores.size} teams`);
+}
+
+// Helper: Record opponent relationship
+async function recordOpponent(turnierId, team1Id, team2Id, spielId, runde) {
+    try {
+        // Record both directions
+        await db.query(
+            `INSERT IGNORE INTO team_opponents (turnier_id, team_id, opponent_id, spiel_id, runde)
+             VALUES (?, ?, ?, ?, ?)`,
+            [turnierId, team1Id, team2Id, spielId, runde]
+        );
+        await db.query(
+            `INSERT IGNORE INTO team_opponents (turnier_id, team_id, opponent_id, spiel_id, runde)
+             VALUES (?, ?, ?, ?, ?)`,
+            [turnierId, team2Id, team1Id, spielId, runde]
+        );
+    } catch (err) {
+        console.error('Error recording opponent:', err);
+    }
+}
+
+// Helper: Generate next Swiss round pairings
+async function generateNextSwissRound(turnierId, nextRunde) {
+    try {
+        // Get Swiss standings
+        const teams = await getSwissStandings(turnierId);
+
+        // Prepare team objects for pairing engine
+        const pairingTeams = teams.map(t => ({
+            id: t.id,
+            score: t.swiss_score || 0,
+            buchholz: t.buchholz || 0,
+            initialSeed: t.initial_seed || 999,
+            opponents: t.opponents || []
+        }));
+
+        // Compute pairings
+        const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
+            timeLimitMs: 5000,
+            pairingTimeMs: 2500,
+            repairTimeMs: 2500,
+            allowFallback: true
+        });
+
+        if (!result.success && result.rematchCount > 0) {
+            console.warn(`Warning: Swiss pairing found ${result.rematchCount} rematches`);
+        }
+
+        console.log(`Generated ${result.pairs.length} pairings for round ${nextRunde}`, result.meta);
+        
+        return result.pairs;
+    } catch (err) {
+        console.error('Error generating Swiss round:', err);
+        throw err;
+    }
+}
+
+// ==========================================
 // TOURNAMENT START / GAME GENERATION
 // ==========================================
 
-// Start tournament - generate only games for available fields
+// Start tournament - generate games based on mode (bracket or Swiss)
 app.post('/api/turniere/:turnierId/starten', async (req, res) => {
     try {
         const turnierId = req.params.turnierId;
@@ -704,7 +1000,310 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
         }
         const config = configRows[0];
 
-        // Get teams
+        // Route to appropriate start function based on mode
+        if (config.modus === 'swiss_144') {
+            return await startSwiss144Tournament(turnierId, config, res);
+        } else if (config.modus === 'swiss') {
+            return await startSwissTournament(turnierId, config, res);
+        } else {
+            return await startBracketTournament(turnierId, config, res);
+        }
+    } catch (err) {
+        console.error('POST starten error:', err);
+        res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+});
+
+// Start Swiss 144 tournament (32 quali + 128 main field)
+async function startSwiss144Tournament(turnierId, config, res) {
+    try {
+        // Get all teams
+        const [allTeams] = await db.query(
+            `SELECT * FROM turnier_teams 
+             WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt") 
+             ORDER BY klasse, setzposition`,
+            [turnierId]
+        );
+
+        if (allTeams.length < 144) {
+            return res.status(400).json({ 
+                error: `Need 144 teams for Swiss 144 mode, only have ${allTeams.length}` 
+            });
+        }
+
+        // Separate teams by class
+        const bundesligaTeams = allTeams.filter(t => t.klasse === 'A').slice(0, 32);
+        const hobbyTeams = allTeams.filter(t => t.klasse === 'D').slice(0, 32);
+        const otherTeams = allTeams.filter(t => !bundesligaTeams.includes(t) && !hobbyTeams.includes(t));
+
+        // Initialize Swiss seeds
+        let seed = 1;
+        for (const team of bundesligaTeams) {
+            await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [seed++, team.id]);
+        }
+        for (const team of otherTeams.slice(0, 80)) {
+            await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [seed++, team.id]);
+        }
+        for (const team of hobbyTeams) {
+            await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [seed++, team.id]);
+        }
+
+        // Get fields
+        const [felder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+
+        if (felder.length < 16) {
+            return res.status(400).json({ error: 'Need at least 16 fields for Swiss 144' });
+        }
+
+        // Get phases
+        const [phases] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? ORDER BY reihenfolge',
+            [turnierId]
+        );
+        
+        let qualiPhase = phases.find(p => p.phase_name === 'Qualification');
+        let mainPhase = phases.find(p => p.phase_name === 'Main Swiss');
+        let hobbyCupPhase = phases.find(p => p.phase_name === 'Hobby Cup');
+
+        // Create phases if they don't exist
+        if (!qualiPhase) {
+            const [result] = await db.query(
+                'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
+                [turnierId, 'Qualification', 'hauptrunde', 1, 'Qualification Round for Hobby Teams']
+            );
+            qualiPhase = { id: result.insertId, phase_name: 'Qualification' };
+        }
+        if (!mainPhase) {
+            const [result] = await db.query(
+                'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
+                [turnierId, 'Main Swiss', 'hauptrunde', 2, 'Main Swiss System (128 teams, 7 rounds)']
+            );
+            mainPhase = { id: result.insertId, phase_name: 'Main Swiss' };
+        }
+        if (!hobbyCupPhase) {
+            const [result] = await db.query(
+                'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
+                [turnierId, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers']
+            );
+            hobbyCupPhase = { id: result.insertId, phase_name: 'Hobby Cup' };
+        }
+
+        const currentTime = new Date(`${config.turnier_datum}T${config.startzeit}`);
+        let spielNummer = 1;
+        const spiele = [];
+
+        // Create 16 qualification matches (32 hobby teams)
+        const shuffledHobby = shuffleArray([...hobbyTeams]);
+        for (let i = 0; i < 16; i++) {
+            const team1 = shuffledHobby[i * 2];
+            const team2 = shuffledHobby[i * 2 + 1];
+            const feld = felder[i]; // First 16 fields for quali
+            const bestCode = generateConfirmationCode();
+
+            spiele.push({
+                turnier_id: turnierId,
+                phase_id: qualiPhase.id,
+                runde: 0, // Round 0 for qualification
+                spiel_nummer: spielNummer++,
+                team1_id: team1.id,
+                team2_id: team2.id,
+                feld_id: feld.id,
+                geplante_zeit: new Date(currentTime),
+                status: 'geplant',
+                bestaetigungs_code: bestCode
+            });
+        }
+
+        // Prepare 112 seeded teams for main field (will add 16 quali winners later)
+        const mainFieldSeeded = [...bundesligaTeams, ...otherTeams.slice(0, 80)];
+
+        // Generate Round 1 pairings for main field using Dutch system
+        const pairingTeams = mainFieldSeeded.map(t => ({
+            id: t.id,
+            score: 0,
+            buchholz: 0,
+            initialSeed: t.setzposition || 999,
+            opponents: []
+        }));
+
+        const round1Result = swissPairing.pairRound1Dutch(pairingTeams, {});
+        
+        // Create main field games
+        // First 11 fields (17-27) get non-waiting matches, rest are waiting
+        let gamesOnFields = 0;
+        const remainingFields = felder.slice(16, 27); // Fields 17-27
+
+        for (let i = 0; i < round1Result.pairs.length; i++) {
+            const pair = round1Result.pairs[i];
+            const bestCode = generateConfirmationCode();
+            
+            // Assign field to first 11 matches (fields 17-27)
+            let feldId = null;
+            let geplante_zeit = null;
+            let status = 'wartend';
+            
+            if (gamesOnFields < remainingFields.length) {
+                feldId = remainingFields[gamesOnFields].id;
+                geplante_zeit = new Date(currentTime);
+                status = 'geplant';
+                gamesOnFields++;
+            }
+
+            spiele.push({
+                turnier_id: turnierId,
+                phase_id: mainPhase.id,
+                runde: 1,
+                spiel_nummer: spielNummer++,
+                team1_id: pair.teamA.id,
+                team2_id: pair.teamB ? pair.teamB.id : null,
+                feld_id: feldId,
+                geplante_zeit,
+                status,
+                bestaetigungs_code: bestCode
+            });
+        }
+
+        // Insert games into database
+        for (const spiel of spiele) {
+            const [result] = await db.query(
+                `INSERT INTO turnier_spiele 
+                (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [spiel.turnier_id, spiel.phase_id, spiel.runde, spiel.spiel_nummer, 
+                 spiel.team1_id, spiel.team2_id, spiel.feld_id, spiel.geplante_zeit, 
+                 spiel.status, spiel.bestaetigungs_code]
+            );
+
+            // Record opponents for tracking
+            if (spiel.team1_id && spiel.team2_id) {
+                await recordOpponent(turnierId, spiel.team1_id, spiel.team2_id, result.insertId, spiel.runde);
+            }
+        }
+
+        await logAudit(turnierId, 'START_SWISS_144', 'turnier_spiele', null, null, { 
+            total_games: spiele.length,
+            quali_games: 16,
+            main_field_games: round1Result.pairs.length,
+            fields_used: 27
+        });
+
+        res.json({ 
+            success: true, 
+            modus: 'swiss_144',
+            spiele_erstellt: spiele.length,
+            quali_spiele: 16,
+            hauptfeld_spiele: round1Result.pairs.length
+        });
+    } catch (err) {
+        console.error('Start Swiss 144 error:', err);
+        throw err;
+    }
+}
+
+// Start regular Swiss tournament
+async function startSwissTournament(turnierId, config, res) {
+    try {
+        const [teams] = await db.query(
+            'SELECT * FROM turnier_teams WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt") ORDER BY setzposition',
+            [turnierId]
+        );
+
+        if (teams.length < 4) {
+            return res.status(400).json({ error: 'Need at least 4 teams for Swiss' });
+        }
+
+        // Initialize seeds
+        for (let i = 0; i < teams.length; i++) {
+            await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [i + 1, teams[i].id]);
+        }
+
+        const [felder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+
+        const [phases] = await db.query('SELECT * FROM turnier_phasen WHERE turnier_id = ?', [turnierId]);
+        let mainPhase = phases.find(p => p.phase_name === 'Main Swiss') || phases[0];
+
+        // Generate Round 1 pairings
+        const pairingTeams = teams.map(t => ({
+            id: t.id,
+            score: 0,
+            buchholz: 0,
+            initialSeed: t.setzposition || 999,
+            opponents: []
+        }));
+
+        const round1Result = swissPairing.pairRound1Dutch(pairingTeams, {});
+        
+        const currentTime = new Date(`${config.turnier_datum}T${config.startzeit}`);
+        const spiele = [];
+        let spielNummer = 1;
+
+        for (let i = 0; i < round1Result.pairs.length; i++) {
+            const pair = round1Result.pairs[i];
+            const bestCode = generateConfirmationCode();
+            
+            let feldId = null;
+            let geplante_zeit = null;
+            let status = 'wartend';
+            
+            if (i < felder.length) {
+                feldId = felder[i].id;
+                geplante_zeit = new Date(currentTime);
+                status = 'geplant';
+            }
+
+            spiele.push({
+                turnier_id: turnierId,
+                phase_id: mainPhase.id,
+                runde: 1,
+                spiel_nummer: spielNummer++,
+                team1_id: pair.teamA.id,
+                team2_id: pair.teamB ? pair.teamB.id : null,
+                feld_id: feldId,
+                geplante_zeit,
+                status,
+                bestaetigungs_code: bestCode
+            });
+        }
+
+        for (const spiel of spiele) {
+            const [result] = await db.query(
+                `INSERT INTO turnier_spiele 
+                (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [spiel.turnier_id, spiel.phase_id, spiel.runde, spiel.spiel_nummer, 
+                 spiel.team1_id, spiel.team2_id, spiel.feld_id, spiel.geplante_zeit, 
+                 spiel.status, spiel.bestaetigungs_code]
+            );
+
+            if (spiel.team1_id && spiel.team2_id) {
+                await recordOpponent(turnierId, spiel.team1_id, spiel.team2_id, result.insertId, spiel.runde);
+            }
+        }
+
+        await logAudit(turnierId, 'START_SWISS', 'turnier_spiele', null, null, { 
+            games_created: spiele.length
+        });
+
+        res.json({ 
+            success: true, 
+            modus: 'swiss',
+            spiele_erstellt: spiele.length
+        });
+    } catch (err) {
+        console.error('Start Swiss error:', err);
+        throw err;
+    }
+}
+
+// Start bracket tournament (original logic)
+async function startBracketTournament(turnierId, config, res) {
+    try {
         const [teams] = await db.query(
             'SELECT * FROM turnier_teams WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt") ORDER BY klasse, setzposition, RAND()',
             [turnierId]
@@ -714,31 +1313,25 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             return res.status(400).json({ error: 'Not enough teams' });
         }
 
-        // Get main phase (Plan A)
         const [phases] = await db.query('SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Plan A"', [turnierId]);
         if (phases.length === 0) {
             return res.status(400).json({ error: 'Phase Plan A not found' });
         }
         const planAId = phases[0].id;
 
-        // Get fields
         const [felder] = await db.query('SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer', [turnierId]);
 
         if (felder.length === 0) {
             return res.status(400).json({ error: 'No active fields available' });
         }
 
-        // Shuffle teams based on mode
         let orderedTeams;
         if (config.modus === 'seeded') {
-            // Seeded: distribute by seed position (pot system)
             orderedTeams = seedTeams(teams);
         } else {
-            // Random shuffle
             orderedTeams = shuffleArray([...teams]);
         }
 
-        // Generate ALL pairings for round 1 (but only create games for available fields)
         const allPairings = [];
         for (let i = 0; i < orderedTeams.length; i += 2) {
             const team1 = orderedTeams[i];
@@ -746,7 +1339,6 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             allPairings.push({ team1, team2 });
         }
 
-        // Only create games for the number of available fields
         const maxGamesToCreate = Math.min(felder.length, allPairings.length);
         const spiele = [];
         let spielNummer = 1;
@@ -766,7 +1358,7 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
                 team2_id: pairing.team2 ? pairing.team2.id : null,
                 feld_id: feld.id,
                 geplante_zeit: new Date(currentTime),
-                status: pairing.team2 ? 'geplant' : 'beendet', // If no opponent, auto-win
+                status: pairing.team2 ? 'geplant' : 'beendet',
                 gewinner_id: pairing.team2 ? null : pairing.team1.id,
                 bestaetigungs_code: bestCode
             });
@@ -774,7 +1366,6 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             spielNummer++;
         }
 
-        // Create remaining pairings as "wartend" (waiting) games without a field assignment
         for (let i = maxGamesToCreate; i < allPairings.length; i++) {
             const pairing = allPairings[i];
             const bestCode = generateConfirmationCode();
@@ -786,9 +1377,9 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
                 spiel_nummer: spielNummer,
                 team1_id: pairing.team1.id,
                 team2_id: pairing.team2 ? pairing.team2.id : null,
-                feld_id: null, // No field assigned yet - waiting
+                feld_id: null,
                 geplante_zeit: null,
-                status: pairing.team2 ? 'wartend' : 'beendet', // New status: wartend (waiting for field)
+                status: pairing.team2 ? 'wartend' : 'beendet',
                 gewinner_id: pairing.team2 ? null : pairing.team1.id,
                 bestaetigungs_code: bestCode
             });
@@ -796,7 +1387,6 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             spielNummer++;
         }
 
-        // Insert games into database
         for (const spiel of spiele) {
             await db.query(
                 `INSERT INTO turnier_spiele 
@@ -819,10 +1409,10 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             spiele_wartend: spiele.length - maxGamesToCreate
         });
     } catch (err) {
-        console.error('POST starten error:', err);
-        res.status(500).json({ error: 'Database error: ' + err.message });
+        console.error('Start bracket error:', err);
+        throw err;
     }
-});
+}
 
 // Helper: Seed teams using pot system
 function seedTeams(teams) {
@@ -1002,8 +1592,22 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
         // Update result report status
         await db.query('UPDATE turnier_ergebnis_meldungen SET status = "bestaetigt" WHERE id = ?', [meldung.id]);
 
-        // Progress the tournament bracket - create next round games for winner and loser
-        await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+        // Record opponent relationship for Swiss tracking
+        if (game.team1_id && game.team2_id) {
+            await recordOpponent(turnierId, game.team1_id, game.team2_id, spielId, game.runde);
+        }
+
+        // Get tournament mode
+        const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
+        const modus = config[0]?.modus;
+
+        // Progress based on tournament mode
+        if (modus === 'swiss' || modus === 'swiss_144') {
+            await progressSwissTournament(turnierId, game);
+        } else {
+            // Bracket mode - create next round games for winner and loser
+            await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+        }
 
         // If the game had a field assigned, assign the next waiting game to that field
         if (game.feld_id) {
@@ -1131,8 +1735,22 @@ app.post('/api/turniere/:turnierId/meldungen/:meldungId/genehmigen', async (req,
             [geprueft_von, meldungId]
         );
 
-        // Progress the tournament bracket - create next round games for winner and loser
-        await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+        // Record opponent relationship for Swiss tracking
+        if (game.team1_id && game.team2_id) {
+            await recordOpponent(turnierId, game.team1_id, game.team2_id, meldung.spiel_id, game.runde);
+        }
+
+        // Get tournament mode
+        const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
+        const modus = config[0]?.modus;
+
+        // Progress based on tournament mode
+        if (modus === 'swiss' || modus === 'swiss_144') {
+            await progressSwissTournament(turnierId, game);
+        } else {
+            // Bracket mode - create next round games for winner and loser
+            await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+        }
 
         // If the game had a field assigned, assign the next waiting game to that field
         if (game.feld_id) {
@@ -1200,9 +1818,23 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
              bemerkung, spielId]
         );
 
-        // Progress the tournament bracket if the game wasn't already finished
+        // Record opponent relationship for Swiss tracking
+        if (game.team1_id && game.team2_id && game.status !== 'beendet') {
+            await recordOpponent(turnierId, game.team1_id, game.team2_id, spielId, game.runde);
+        }
+
+        // Progress the tournament if the game wasn't already finished
         if (game.status !== 'beendet') {
-            await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+            // Get tournament mode
+            const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
+            const modus = config[0]?.modus;
+
+            // Progress based on tournament mode
+            if (modus === 'swiss' || modus === 'swiss_144') {
+                await progressSwissTournament(turnierId, game);
+            } else {
+                await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+            }
         }
 
         // If the game had a field assigned and wasn't already finished, assign the next waiting game
