@@ -82,10 +82,13 @@
                         </div>
                         <div class="config-item">
                             <label>Modus</label>
-                            <select id="config-modus">
-                                <option value="seeded">Gesetzt (Lostöpfe)</option>
-                                <option value="random">Zufällig</option>
+                            <select id="config-modus" onchange="updateModusHelp()">
+                                <option value="seeded">Gesetzt (Lostöpfe) - Bracket</option>
+                                <option value="random">Zufällig - Bracket</option>
+                                <option value="swiss">Swiss System (Standard)</option>
+                                <option value="swiss_144">Swiss System 144 Teams (32 Quali + 128 Main)</option>
                             </select>
+                            <small id="modus-help" class="help-text"></small>
                         </div>
                         <div class="config-item">
                             <label>E-Mail Benachrichtigung</label>
