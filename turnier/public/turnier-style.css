@@ -945,3 +945,12 @@ textarea {
     padding: 4px 8px;
     font-size: 0.75rem;
 }
+
+/* Help text */
+.help-text {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.85rem;
+    color: var(--info);
+    font-style: italic;
+}

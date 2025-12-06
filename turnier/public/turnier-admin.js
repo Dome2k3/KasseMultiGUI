@@ -114,6 +114,23 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Update mode help text
+function updateModusHelp() {
+    const modus = document.getElementById('config-modus').value;
+    const helpEl = document.getElementById('modus-help');
+    
+    const helpTexts = {
+        'seeded': 'Klassisches Bracket-System mit Setzpositionen',
+        'random': 'Klassisches Bracket-System mit zufälliger Auslosung',
+        'swiss': 'Swiss System - jedes Team spielt alle Runden bis zum Ende',
+        'swiss_144': 'Swiss 144: 32 Hobby-Teams spielen Quali (16 Matches), 16 Gewinner + 112 gesetzte Teams = 128 im Hauptfeld (7 Runden Swiss)'
+    };
+    
+    if (helpEl) {
+        helpEl.textContent = helpTexts[modus] || '';
+    }
+}
+
 // ==========================================
 // TOURNAMENT MANAGEMENT
 // ==========================================
@@ -163,6 +180,9 @@ async function loadTurnier() {
         document.getElementById('config-endzeit').value = turnier.endzeit || '18:00';
         document.getElementById('config-modus').value = turnier.modus || 'seeded';
         document.getElementById('config-email').checked = turnier.email_benachrichtigung;
+        
+        // Update mode help text
+        updateModusHelp();
 
         document.getElementById('turnier-details').style.display = 'block';
 

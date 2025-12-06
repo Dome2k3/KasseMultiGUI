@@ -2031,6 +2031,28 @@ app.get('/api/turniere/:turnierId/platzierung', async (req, res) => {
     }
 });
 
+// Get Swiss standings
+app.get('/api/turniere/:turnierId/swiss-standings', async (req, res) => {
+    try {
+        const [teams] = await db.query(
+            `SELECT t.id, t.team_name, t.verein, t.klasse, t.setzposition,
+                    t.swiss_score, t.buchholz, t.initial_seed, t.swiss_qualified,
+                    COUNT(DISTINCT o.opponent_id) as games_played
+             FROM turnier_teams t
+             LEFT JOIN team_opponents o ON t.id = o.team_id AND o.turnier_id = ?
+             WHERE t.turnier_id = ? AND t.status IN ("angemeldet", "bestaetigt")
+             GROUP BY t.id
+             ORDER BY t.swiss_score DESC, t.buchholz DESC, t.initial_seed ASC`,
+            [req.params.turnierId, req.params.turnierId]
+        );
+
+        res.json(teams);
+    } catch (err) {
+        console.error('GET swiss-standings error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // Calculate final ranking
 app.post('/api/turniere/:turnierId/endplatzierung-berechnen', async (req, res) => {
     try {
