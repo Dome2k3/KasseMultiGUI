@@ -844,7 +844,7 @@ function renderGameCards(containerId, games, type) {
             : '';
         
         // Display either dedicated referee team or playing team acting as referee
-        const schiriName = game.schiedsrichter_team_name || game.schiedsrichter_name;
+        const schiriName = game.schiedsrichter_team_name || game.schiedsrichter_name || '';
         const schiriDisplay = schiriName
             ? `<span class="game-card-schiri">👨‍⚖️ ${escapeHtml(schiriName)}</span>`
             : '<span class="game-card-schiri no-schiri">👨‍⚖️ Kein Schiedsrichter</span>';
