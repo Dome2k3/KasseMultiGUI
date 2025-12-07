@@ -185,11 +185,11 @@
                 <section class="card">
                     <h2>🎮 Turnier-Steuerung</h2>
                     <div class="control-buttons">
-                        <button class="btn btn-success btn-large" onclick="startTurnier()">▶️ Turnier starten</button>
-                        <button class="btn btn-primary" onclick="autoAssignFields()">📍 Felder zuweisen</button>
-                        <button class="btn btn-primary" onclick="calculateRanking()">📊 Platzierung berechnen</button>
-                        <button class="btn btn-primary" onclick="calculateFinalRanking()">🏆 Endplatzierung</button>
-                        <button class="btn btn-danger" onclick="resetTurnier()">🔄 Reset</button>
+                        <button class="btn btn-success btn-large" onclick="startTurnier()" title="Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)">▶️ Turnier starten</button>
+                        <button class="btn btn-primary" onclick="autoAssignFields()" title="Felder zuweisen: Weist automatisch allen wartenden Spielen (status='geplant') ein freies Feld zu. Nützlich wenn Spiele manuell erstellt wurden.">📍 Felder zuweisen</button>
+                        <button class="btn btn-primary" onclick="calculateRanking()" title="Platzierung berechnen: Berechnet die Zwischenplatzierung nach einer bestimmten Runde basierend auf Siegen und Punktdifferenz">📊 Platzierung berechnen</button>
+                        <button class="btn btn-primary" onclick="calculateFinalRanking()" title="Endplatzierung: Berechnet die finale Platzierung aller Teams nach Abschluss des Turniers">🏆 Endplatzierung</button>
+                        <button class="btn btn-danger" onclick="resetTurnier()" title="Reset: Löscht ALLE Spiele und Ergebnisse des Turniers. Teams bleiben erhalten. Diese Aktion kann nicht rückgängig gemacht werden!">🔄 Reset</button>
                     </div>
                 </section>
 
@@ -304,6 +304,15 @@
             <div class="form-group">
                 <label>Anzahl Felder</label>
                 <input type="number" id="new-turnier-felder" value="4" min="1" max="20">
+            </div>
+            <div class="form-group">
+                <label>Modus</label>
+                <select id="new-turnier-modus">
+                    <option value="seeded">Gesetzt (Lostöpfe) - Bracket</option>
+                    <option value="random">Zufällig - Bracket</option>
+                    <option value="swiss">Swiss System (Standard)</option>
+                    <option value="swiss_144">Swiss System 144 Teams (32 Quali + 128 Main)</option>
+                </select>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="createTurnier()">Erstellen</button>

@@ -149,6 +149,13 @@ async function loadTurniere() {
             opt.textContent = `${t.turnier_name} (${formatDate(t.turnier_datum)})`;
             select.appendChild(opt);
         });
+        
+        // Auto-select tournament from localStorage if available
+        const savedTurnierId = localStorage.getItem('selectedTurnierId');
+        if (savedTurnierId && turniere.find(t => t.id == savedTurnierId)) {
+            select.value = savedTurnierId;
+            await loadTurnier();
+        }
     } catch (err) {
         console.error('Error loading tournaments:', err);
         showToast('Fehler beim Laden der Turniere', 'error');
@@ -161,8 +168,13 @@ async function loadTurnier() {
 
     if (!currentTurnierId) {
         document.getElementById('turnier-details').style.display = 'none';
+        // Clear localStorage when no tournament is selected
+        localStorage.removeItem('selectedTurnierId');
         return;
     }
+    
+    // Store selected tournament in localStorage
+    localStorage.setItem('selectedTurnierId', currentTurnierId);
 
     try {
         const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}`);
@@ -212,6 +224,7 @@ async function createTurnier() {
     const datum = document.getElementById('new-turnier-datum').value;
     const anzahlTeams = parseInt(document.getElementById('new-turnier-teams').value, 10);
     const anzahlFelder = parseInt(document.getElementById('new-turnier-felder').value, 10);
+    const modus = document.getElementById('new-turnier-modus').value;
 
     if (!name || !datum) {
         showToast('Name und Datum sind erforderlich', 'warning');
@@ -226,7 +239,8 @@ async function createTurnier() {
                 turnier_name: name,
                 turnier_datum: datum,
                 anzahl_teams: anzahlTeams,
-                anzahl_felder: anzahlFelder
+                anzahl_felder: anzahlFelder,
+                modus: modus
             })
         });
 
@@ -682,6 +696,10 @@ function renderGameCards(containerId, games, type) {
         const phaseDisplay = game.phase_name 
             ? `<span class="game-card-phase">${escapeHtml(game.phase_name)}</span>` 
             : '';
+        
+        const schiriDisplay = game.schiedsrichter_team_name
+            ? `<span class="game-card-schiri">👨‍⚖️ ${escapeHtml(game.schiedsrichter_team_name)}</span>`
+            : '<span class="game-card-schiri no-schiri">👨‍⚖️ Kein Schiedsrichter</span>';
 
         const score1 = game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-';
         const score2 = game.ergebnis_team2 !== null ? game.ergebnis_team2 : '-';
@@ -693,6 +711,7 @@ function renderGameCards(containerId, games, type) {
                     ${fieldDisplay}
                 </div>
                 ${phaseDisplay ? `<div class="game-card-phase-info">${phaseDisplay}</div>` : ''}
+                <div class="game-card-schiri-info">${schiriDisplay}</div>
                 <div class="game-card-teams">
                     <div class="game-card-team ${team1Class}">
                         <span class="game-card-team-name">${escapeHtml(game.team1_name || 'TBD')}</span>

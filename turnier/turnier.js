@@ -105,11 +105,14 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
         const nextGame = waitingGames[0];
         const now = new Date();
 
-        // Assign the freed field to this game and update status to 'geplant'
+        // Assign the freed field to this game and update status to 'bereit'
         await db.query(
-            `UPDATE turnier_spiele SET feld_id = ?, geplante_zeit = ?, status = 'geplant' WHERE id = ?`,
+            `UPDATE turnier_spiele SET feld_id = ?, geplante_zeit = ?, status = 'bereit' WHERE id = ?`,
             [freedFieldId, now, nextGame.id]
         );
+        
+        // Assign a referee team to this game
+        await assignRefereeTeam(turnierId, nextGame.id);
 
         console.log(`Assigned waiting game #${nextGame.spiel_nummer} to field ${freedFieldId}`);
         return nextGame.id;
@@ -734,6 +737,138 @@ app.put('/api/turniere/:turnierId/felder/:feldId', async (req, res) => {
 });
 
 // ==========================================
+// SCHIEDSRICHTER TEAMS ENDPOINTS
+// ==========================================
+
+// Get referee teams for tournament
+app.get('/api/turniere/:turnierId/schiedsrichter', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT * FROM turnier_schiedsrichter_teams WHERE turnier_id = ? ORDER BY team_name',
+            [req.params.turnierId]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('GET schiedsrichter error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Add referee team
+app.post('/api/turniere/:turnierId/schiedsrichter', async (req, res) => {
+    try {
+        const { team_name, ansprechpartner, telefon } = req.body;
+        
+        if (!team_name) {
+            return res.status(400).json({ error: 'Team name required' });
+        }
+        
+        const [result] = await db.query(
+            'INSERT INTO turnier_schiedsrichter_teams (turnier_id, team_name, ansprechpartner, telefon) VALUES (?, ?, ?, ?)',
+            [req.params.turnierId, team_name, ansprechpartner, telefon]
+        );
+        
+        res.json({ success: true, id: result.insertId });
+    } catch (err) {
+        console.error('POST schiedsrichter error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Update referee team
+app.put('/api/turniere/:turnierId/schiedsrichter/:schiriId', async (req, res) => {
+    try {
+        const { team_name, ansprechpartner, telefon, verfuegbar, aktiv } = req.body;
+        
+        const updateFields = [];
+        const values = [];
+        
+        if (team_name !== undefined) {
+            updateFields.push('team_name = ?');
+            values.push(team_name);
+        }
+        if (ansprechpartner !== undefined) {
+            updateFields.push('ansprechpartner = ?');
+            values.push(ansprechpartner);
+        }
+        if (telefon !== undefined) {
+            updateFields.push('telefon = ?');
+            values.push(telefon);
+        }
+        if (verfuegbar !== undefined) {
+            updateFields.push('verfuegbar = ?');
+            values.push(verfuegbar);
+        }
+        if (aktiv !== undefined) {
+            updateFields.push('aktiv = ?');
+            values.push(aktiv);
+        }
+        
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+        
+        values.push(req.params.schiriId, req.params.turnierId);
+        await db.query(
+            `UPDATE turnier_schiedsrichter_teams SET ${updateFields.join(', ')} WHERE id = ? AND turnier_id = ?`,
+            values
+        );
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT schiedsrichter error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Delete referee team
+app.delete('/api/turniere/:turnierId/schiedsrichter/:schiriId', async (req, res) => {
+    try {
+        await db.query(
+            'DELETE FROM turnier_schiedsrichter_teams WHERE id = ? AND turnier_id = ?',
+            [req.params.schiriId, req.params.turnierId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('DELETE schiedsrichter error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Helper: Assign next available referee team to a game
+async function assignRefereeTeam(turnierId, spielId) {
+    try {
+        // Find an available referee team (not currently assigned to an active game)
+        const [availableRefs] = await db.query(
+            `SELECT sr.id 
+             FROM turnier_schiedsrichter_teams sr
+             LEFT JOIN turnier_spiele s ON sr.id = s.schiedsrichter_team_id 
+                 AND s.status IN ('geplant', 'bereit', 'laeuft')
+             WHERE sr.turnier_id = ? AND sr.verfuegbar = 1 AND sr.aktiv = 1
+             GROUP BY sr.id
+             HAVING COUNT(s.id) = 0
+             ORDER BY RAND()
+             LIMIT 1`,
+            [turnierId]
+        );
+        
+        if (availableRefs.length > 0) {
+            const refId = availableRefs[0].id;
+            await db.query(
+                'UPDATE turnier_spiele SET schiedsrichter_team_id = ? WHERE id = ?',
+                [refId, spielId]
+            );
+            return refId;
+        }
+        
+        return null;
+    } catch (err) {
+        console.error('Error assigning referee team:', err);
+        return null;
+    }
+}
+
+// ==========================================
 // SPIELE ENDPOINTS
 // ==========================================
 
@@ -748,13 +883,15 @@ app.get('/api/turniere/:turnierId/spiele', async (req, res) => {
                    t2.team_name as team2_name, t2.verein as team2_verein,
                    gew.team_name as gewinner_name,
                    f.feld_nummer, f.feld_name,
-                   p.phase_name, p.phase_typ
+                   p.phase_name, p.phase_typ,
+                   sr.team_name as schiedsrichter_team_name
             FROM turnier_spiele s
             LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
             LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
             LEFT JOIN turnier_teams gew ON s.gewinner_id = gew.id
             LEFT JOIN turnier_felder f ON s.feld_id = f.id
             LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            LEFT JOIN turnier_schiedsrichter_teams sr ON s.schiedsrichter_team_id = sr.id
             WHERE s.turnier_id = ?
         `;
         
@@ -795,11 +932,13 @@ app.get('/api/turniere/:turnierId/vorschau', async (req, res) => {
             SELECT s.*, 
                    t1.team_name as team1_name, t1.verein as team1_verein,
                    t2.team_name as team2_name, t2.verein as team2_verein,
-                   p.phase_name, p.phase_typ
+                   p.phase_name, p.phase_typ,
+                   sr.team_name as schiedsrichter_team_name
             FROM turnier_spiele s
             LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
             LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
             LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            LEFT JOIN turnier_schiedsrichter_teams sr ON s.schiedsrichter_team_id = sr.id
             WHERE s.turnier_id = ? 
               AND s.status = 'wartend' 
               AND s.feld_id IS NULL
@@ -824,12 +963,14 @@ app.get('/api/turniere/:turnierId/spiele/:spielId', async (req, res) => {
                    t1.team_name as team1_name, t1.email as team1_email, t1.verein as team1_verein,
                    t2.team_name as team2_name, t2.email as team2_email, t2.verein as team2_verein,
                    f.feld_nummer, f.feld_name,
-                   p.phase_name
+                   p.phase_name,
+                   sr.team_name as schiedsrichter_team_name
             FROM turnier_spiele s
             LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
             LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
             LEFT JOIN turnier_felder f ON s.feld_id = f.id
             LEFT JOIN turnier_phasen p ON s.phase_id = p.id
+            LEFT JOIN turnier_schiedsrichter_teams sr ON s.schiedsrichter_team_id = sr.id
             WHERE s.id = ? AND s.turnier_id = ?
         `, [req.params.spielId, req.params.turnierId]);
 
@@ -839,6 +980,43 @@ app.get('/api/turniere/:turnierId/spiele/:spielId', async (req, res) => {
         res.json(rows[0]);
     } catch (err) {
         console.error('GET spiel error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Update game status (e.g., from 'bereit' to 'läuft')
+app.patch('/api/turniere/:turnierId/spiele/:spielId/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        
+        if (!status) {
+            return res.status(400).json({ error: 'Status required' });
+        }
+        
+        const validStatuses = ['geplant', 'bereit', 'laeuft', 'beendet', 'abgesagt', 'wartend_bestaetigung', 'wartend'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+        
+        // Update game status
+        await db.query(
+            'UPDATE turnier_spiele SET status = ? WHERE id = ? AND turnier_id = ?',
+            [status, req.params.spielId, req.params.turnierId]
+        );
+        
+        // If status is 'läuft', update tatsaechliche_startzeit
+        if (status === 'laeuft') {
+            await db.query(
+                'UPDATE turnier_spiele SET tatsaechliche_startzeit = NOW() WHERE id = ? AND turnier_id = ?',
+                [req.params.spielId, req.params.turnierId]
+            );
+        }
+        
+        await logAudit(req.params.turnierId, 'UPDATE_STATUS', 'turnier_spiele', req.params.spielId, null, { status });
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PATCH status error:', err);
         res.status(500).json({ error: 'Database error' });
     }
 });
@@ -1039,20 +1217,37 @@ async function startSwiss144Tournament(turnierId, config, res) {
         }
 
         // Separate teams by class
-        const bundesligaTeams = allTeams.filter(t => t.klasse === 'A').slice(0, 32);
-        const hobbyTeams = allTeams.filter(t => t.klasse === 'D').slice(0, 32);
-        const selectedIds = new Set([...bundesligaTeams, ...hobbyTeams].map(t => t.id));
+        const bundesligaTeams = allTeams.filter(t => t.klasse === 'A');
+        const hobbyTeams = allTeams.filter(t => t.klasse === 'D');
+        
+        // Validation: Check if we have the required team distribution
+        if (hobbyTeams.length < 32) {
+            return res.status(400).json({ 
+                error: `Swiss 144 benötigt mindestens 32 Hobby-Teams (Klasse D). Aktuell: ${hobbyTeams.length}. Bitte fügen Sie weitere Teams hinzu oder ändern Sie die Klasse.` 
+            });
+        }
+        
+        if (bundesligaTeams.length < 32) {
+            return res.status(400).json({ 
+                error: `Swiss 144 benötigt mindestens 32 Bundesliga-Teams (Klasse A) als gesetzte Teams. Aktuell: ${bundesligaTeams.length}. Bitte fügen Sie weitere Teams hinzu oder ändern Sie die Klasse.` 
+            });
+        }
+        
+        // Now slice to exactly what we need
+        const selectedBundesliga = bundesligaTeams.slice(0, 32);
+        const selectedHobby = hobbyTeams.slice(0, 32);
+        const selectedIds = new Set([...selectedBundesliga, ...selectedHobby].map(t => t.id));
         const otherTeams = allTeams.filter(t => !selectedIds.has(t.id));
 
         // Initialize Swiss seeds
         let seed = 1;
-        for (const team of bundesligaTeams) {
+        for (const team of selectedBundesliga) {
             await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [seed++, team.id]);
         }
         for (const team of otherTeams.slice(0, 80)) {
             await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [seed++, team.id]);
         }
-        for (const team of hobbyTeams) {
+        for (const team of selectedHobby) {
             await db.query('UPDATE turnier_teams SET initial_seed = ? WHERE id = ?', [seed++, team.id]);
         }
 
@@ -1104,7 +1299,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
         const spiele = [];
 
         // Create 16 qualification matches (32 hobby teams)
-        const shuffledHobby = shuffleArray([...hobbyTeams]);
+        const shuffledHobby = shuffleArray([...selectedHobby]);
         for (let i = 0; i < 16; i++) {
             const team1 = shuffledHobby[i * 2];
             const team2 = shuffledHobby[i * 2 + 1];
@@ -1126,7 +1321,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
         }
 
         // Prepare 112 seeded teams for main field (will add 16 quali winners later)
-        const mainFieldSeeded = [...bundesligaTeams, ...otherTeams.slice(0, 80)];
+        const mainFieldSeeded = [...selectedBundesliga, ...otherTeams.slice(0, 80)];
 
         // Generate Round 1 pairings for main field using Dutch system
         const pairingTeams = mainFieldSeeded.map(t => ({
