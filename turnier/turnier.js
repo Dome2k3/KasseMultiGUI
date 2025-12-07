@@ -98,6 +98,7 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
             [turnierId]
         );
 
+        // Debug logging - helps troubleshoot game assignment issues
         console.log(`[assignNextWaitingGame] Freed field ${freedFieldId}, found ${waitingGames.length} waiting games`);
 
         if (waitingGames.length === 0) {
@@ -2076,9 +2077,11 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
         }
 
         // Add admin note to bemerkung if not already present
+        // This marks results entered by tournament management (not referees)
         let finalBemerkung = bemerkung || '';
         const adminNote = 'Eingegeben von Turnierleitung';
-        if (!finalBemerkung.includes(adminNote)) {
+        // Check if admin note is already at the end to avoid duplicates
+        if (!finalBemerkung.endsWith(adminNote)) {
             finalBemerkung = finalBemerkung ? `${finalBemerkung} | ${adminNote}` : adminNote;
         }
 
