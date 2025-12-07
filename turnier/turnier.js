@@ -106,6 +106,9 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
         const now = new Date();
 
         // Assign the freed field to this game and update status to 'bereit'
+        // Note: We use 'bereit' instead of 'geplant' here because this is a dynamic assignment
+        // during tournament runtime. Games created at tournament start use 'geplant'.
+        // 'bereit' indicates the game is ready to start (field assigned, waiting for teams).
         await db.query(
             `UPDATE turnier_spiele SET feld_id = ?, geplante_zeit = ?, status = 'bereit' WHERE id = ?`,
             [freedFieldId, now, nextGame.id]
@@ -836,6 +839,9 @@ app.delete('/api/turniere/:turnierId/schiedsrichter/:schiriId', async (req, res)
 });
 
 // Helper: Assign next available referee team to a game
+// Note: Currently uses random selection (ORDER BY RAND()) for simplicity.
+// For advanced tournaments, consider implementing round-robin or fair distribution
+// by tracking assignment counts per referee team.
 async function assignRefereeTeam(turnierId, spielId) {
     try {
         // Find an available referee team (not currently assigned to an active game)

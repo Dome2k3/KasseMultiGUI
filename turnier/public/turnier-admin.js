@@ -152,7 +152,7 @@ async function loadTurniere() {
         
         // Auto-select tournament from localStorage if available
         const savedTurnierId = localStorage.getItem('selectedTurnierId');
-        if (savedTurnierId && turniere.find(t => t.id == savedTurnierId)) {
+        if (savedTurnierId && turniere.find(t => t.id === parseInt(savedTurnierId, 10))) {
             select.value = savedTurnierId;
             await loadTurnier();
         }
