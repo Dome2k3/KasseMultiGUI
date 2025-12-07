@@ -923,7 +923,7 @@ function renderSpieleTable() {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="empty-state">Keine Spiele gefunden</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="empty-state">Keine Spiele gefunden</td></tr>';
         return;
     }
 
@@ -933,6 +933,9 @@ function renderSpieleTable() {
         const team1Class = spiel.gewinner_id === spiel.team1_id ? 'winner' : (spiel.gewinner_id === spiel.team2_id ? 'loser' : '');
         const team2Class = spiel.gewinner_id === spiel.team2_id ? 'winner' : (spiel.gewinner_id === spiel.team1_id ? 'loser' : '');
 
+        // Display either dedicated referee team or playing team acting as referee
+        const schiriName = spiel.schiedsrichter_team_name || spiel.schiedsrichter_name || '-';
+
         tr.innerHTML = `
             <td>${spiel.spiel_nummer}</td>
             <td>${escapeHtml(spiel.phase_name || '-')}</td>
@@ -941,9 +944,11 @@ function renderSpieleTable() {
             <td>vs</td>
             <td class="${team2Class}">${escapeHtml(spiel.team2_name || 'TBD')}</td>
             <td>${escapeHtml(spiel.feld_name || '-')}</td>
+            <td>${escapeHtml(schiriName)}</td>
             <td>${formatDateTime(spiel.geplante_zeit)}</td>
             <td>${spiel.ergebnis_team1 !== null ? `${spiel.ergebnis_team1} : ${spiel.ergebnis_team2}` : '-'}</td>
             <td><span class="status-badge status-${spiel.status}">${spiel.status}</span></td>
+            <td>${escapeHtml(spiel.bemerkung || '-')}</td>
             <td class="action-btns">
                 <button class="btn btn-small btn-primary" onclick="showEditResultModal(${spiel.id})">✏️</button>
                 ${spiel.team1_id && spiel.team2_id ? `<button class="btn btn-small btn-info" onclick="sendGameNotification(${spiel.id})">📧</button>` : ''}

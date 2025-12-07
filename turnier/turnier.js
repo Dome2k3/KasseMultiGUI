@@ -98,7 +98,17 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
             [turnierId]
         );
 
+        // Debug logging - helps troubleshoot game assignment issues
+        console.log(`[assignNextWaitingGame] Freed field ${freedFieldId}, found ${waitingGames.length} waiting games`);
+
         if (waitingGames.length === 0) {
+            // Check if there are any waiting games at all (for debugging)
+            const [allWaiting] = await db.query(
+                `SELECT COUNT(*) as count FROM turnier_spiele 
+                 WHERE turnier_id = ? AND status = 'wartend'`,
+                [turnierId]
+            );
+            console.log(`[assignNextWaitingGame] Total waiting games (including without teams): ${allWaiting[0].count}`);
             return null; // No waiting games with both teams
         }
 
@@ -117,7 +127,7 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
         // Assign a referee team to this game
         await assignRefereeTeam(turnierId, nextGame.id);
 
-        console.log(`Assigned waiting game #${nextGame.spiel_nummer} to field ${freedFieldId}`);
+        console.log(`[assignNextWaitingGame] ✓ Assigned waiting game #${nextGame.spiel_nummer} (ID: ${nextGame.id}) to field ${freedFieldId}`);
         return nextGame.id;
     } catch (err) {
         console.error('Error assigning next waiting game:', err);
@@ -293,6 +303,11 @@ async function progressSwissTournament(turnierId, completedGame) {
                         'UPDATE turnier_spiele SET gewinner_id = ?, status = "beendet" WHERE id = ?',
                         [pair.teamA.id, result.insertId]
                     );
+                }
+
+                // Assign referee team to this game if it has a field
+                if (feldId) {
+                    await assignRefereeTeam(turnierId, result.insertId);
                 }
 
                 // Record opponent relationship
@@ -1425,6 +1440,11 @@ async function startSwiss144Tournament(turnierId, config, res) {
                  spiel.status, spiel.bestaetigungs_code]
             );
 
+            // Assign referee team to this game if it has a field
+            if (spiel.feld_id) {
+                await assignRefereeTeam(turnierId, result.insertId);
+            }
+
             // Record opponents for tracking
             if (spiel.team1_id && spiel.team2_id) {
                 await recordOpponent(turnierId, spiel.team1_id, spiel.team2_id, result.insertId, spiel.runde);
@@ -1528,6 +1548,11 @@ async function startSwissTournament(turnierId, config, res) {
                  spiel.team1_id, spiel.team2_id, spiel.feld_id, spiel.geplante_zeit, 
                  spiel.status, spiel.bestaetigungs_code]
             );
+
+            // Assign referee team to this game if it has a field
+            if (spiel.feld_id) {
+                await assignRefereeTeam(turnierId, result.insertId);
+            }
 
             if (spiel.team1_id && spiel.team2_id) {
                 await recordOpponent(turnierId, spiel.team1_id, spiel.team2_id, result.insertId, spiel.runde);
@@ -1859,7 +1884,10 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
 
         // If the game had a field assigned, assign the next waiting game to that field
         if (game.feld_id) {
+            console.log(`[bestaetigen] Game #${game.spiel_nummer} confirmed on field ${game.feld_id}, assigning next waiting game`);
             await assignNextWaitingGame(turnierId, game.feld_id);
+        } else {
+            console.log(`[bestaetigen] Game #${game.spiel_nummer} confirmed but no field assigned`);
         }
 
         await logAudit(turnierId, 'CONFIRM_RESULT', 'turnier_spiele', spielId, null, { gewinner_id: gewinnerId });
@@ -2048,6 +2076,15 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
             return res.status(400).json({ error: 'Tie games are not allowed' });
         }
 
+        // Add admin note to bemerkung if not already present
+        // This marks results entered by tournament management (not referees)
+        let finalBemerkung = bemerkung || '';
+        const adminNote = 'Eingegeben von Turnierleitung';
+        // Check if admin note is already at the end to avoid duplicates
+        if (!finalBemerkung.endsWith(adminNote)) {
+            finalBemerkung = finalBemerkung ? `${finalBemerkung} | ${adminNote}` : adminNote;
+        }
+
         await db.query(
             `UPDATE turnier_spiele SET 
              ergebnis_team1 = ?, ergebnis_team2 = ?,
@@ -2063,7 +2100,7 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
              satz2_team1, satz2_team2,
              satz3_team1, satz3_team2,
              gewinnerId, verliererId,
-             bemerkung, spielId]
+             finalBemerkung, spielId]
         );
 
         // Record opponent relationship for Swiss tracking
@@ -2087,7 +2124,10 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
 
         // If the game had a field assigned and wasn't already finished, assign the next waiting game
         if (game.feld_id && game.status !== 'beendet') {
+            console.log(`[admin-ergebnis] Game #${game.spiel_nummer} completed on field ${game.feld_id}, assigning next waiting game`);
             await assignNextWaitingGame(turnierId, game.feld_id);
+        } else {
+            console.log(`[admin-ergebnis] Game #${game.spiel_nummer} completed but not calling assignNextWaitingGame (feld_id: ${game.feld_id}, old status: ${game.status})`);
         }
 
         await logAudit(turnierId, 'ADMIN_UPDATE_RESULT', 'turnier_spiele', spielId, game, req.body, bearbeitet_von);
