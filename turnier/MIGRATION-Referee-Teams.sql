@@ -3,6 +3,10 @@
 -- Run this on existing databases to add referee team functionality
 -- ============================================
 
+-- Step 0: Add separate_schiri_teams column to turnier_config
+ALTER TABLE turnier_config 
+ADD COLUMN IF NOT EXISTS separate_schiri_teams BOOLEAN DEFAULT FALSE AFTER modus;
+
 -- Step 1: Create the referee teams table
 CREATE TABLE IF NOT EXISTS turnier_schiedsrichter_teams (
     id INT AUTO_INCREMENT PRIMARY KEY,

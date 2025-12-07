@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS turnier_config (
     startzeit TIME NOT NULL DEFAULT '09:00:00',
     endzeit TIME NOT NULL DEFAULT '18:00:00',
     modus ENUM('random', 'seeded', 'swiss', 'swiss_144') NOT NULL DEFAULT 'seeded',
+    separate_schiri_teams BOOLEAN DEFAULT FALSE,
     bestaetigungs_code VARCHAR(50) DEFAULT NULL,
     email_benachrichtigung BOOLEAN DEFAULT TRUE,
     smtp_host VARCHAR(255) DEFAULT NULL,

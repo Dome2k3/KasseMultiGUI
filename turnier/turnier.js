@@ -455,6 +455,7 @@ app.post('/api/turniere', async (req, res) => {
             startzeit = '09:00:00',
             endzeit = '18:00:00',
             modus = 'seeded',
+            separate_schiri_teams = false,
             email_benachrichtigung = true
         } = req.body;
 
@@ -468,11 +469,11 @@ app.post('/api/turniere', async (req, res) => {
             `INSERT INTO turnier_config 
             (turnier_name, turnier_datum, turnier_datum_ende, anzahl_teams, anzahl_felder, anzahl_klassen, 
              klassen_namen, spielzeit_minuten, pause_minuten, startzeit, endzeit, 
-             modus, bestaetigungs_code, email_benachrichtigung) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             modus, separate_schiri_teams, bestaetigungs_code, email_benachrichtigung) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [turnier_name, turnier_datum, turnier_datum_ende, anzahl_teams, anzahl_felder, anzahl_klassen,
              JSON.stringify(klassen_namen), spielzeit_minuten, pause_minuten, startzeit, endzeit,
-             modus, bestaetigungs_code, email_benachrichtigung]
+             modus, separate_schiri_teams, bestaetigungs_code, email_benachrichtigung]
         );
 
         const turnierId = result.insertId;
@@ -507,7 +508,7 @@ app.put('/api/turniere/:id', async (req, res) => {
         const allowedFields = [
             'turnier_name', 'turnier_datum', 'turnier_datum_ende', 'anzahl_teams', 'anzahl_felder',
             'anzahl_klassen', 'klassen_namen', 'spielzeit_minuten', 'pause_minuten',
-            'startzeit', 'endzeit', 'modus', 'email_benachrichtigung', 'aktiv',
+            'startzeit', 'endzeit', 'modus', 'separate_schiri_teams', 'email_benachrichtigung', 'aktiv',
             'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_sender'
         ];
 
@@ -839,32 +840,70 @@ app.delete('/api/turniere/:turnierId/schiedsrichter/:schiriId', async (req, res)
 });
 
 // Helper: Assign next available referee team to a game
-// Note: Currently uses random selection (ORDER BY RAND()) for simplicity.
-// For advanced tournaments, consider implementing round-robin or fair distribution
-// by tracking assignment counts per referee team.
+// Supports two modes:
+// 1. Separate referee teams (if tournament has separate_schiri_teams = true)
+// 2. Playing teams as referees (default) - uses teams that just won/lost and aren't waiting
 async function assignRefereeTeam(turnierId, spielId) {
     try {
-        // Find an available referee team (not currently assigned to an active game)
-        const [availableRefs] = await db.query(
-            `SELECT sr.id 
-             FROM turnier_schiedsrichter_teams sr
-             LEFT JOIN turnier_spiele s ON sr.id = s.schiedsrichter_team_id 
-                 AND s.status IN ('geplant', 'bereit', 'laeuft')
-             WHERE sr.turnier_id = ? AND sr.verfuegbar = 1 AND sr.aktiv = 1
-             GROUP BY sr.id
-             HAVING COUNT(s.id) = 0
-             ORDER BY RAND()
-             LIMIT 1`,
+        // Check tournament configuration
+        const [config] = await db.query(
+            'SELECT separate_schiri_teams FROM turnier_config WHERE id = ?',
             [turnierId]
         );
         
-        if (availableRefs.length > 0) {
-            const refId = availableRefs[0].id;
-            await db.query(
-                'UPDATE turnier_spiele SET schiedsrichter_team_id = ? WHERE id = ?',
-                [refId, spielId]
+        const useSeparateSchiri = config.length > 0 && config[0].separate_schiri_teams;
+        
+        if (useSeparateSchiri) {
+            // Mode 1: Use dedicated referee teams
+            const [availableRefs] = await db.query(
+                `SELECT sr.id 
+                 FROM turnier_schiedsrichter_teams sr
+                 LEFT JOIN turnier_spiele s ON sr.id = s.schiedsrichter_team_id 
+                     AND s.status IN ('geplant', 'bereit', 'laeuft')
+                 WHERE sr.turnier_id = ? AND sr.verfuegbar = 1 AND sr.aktiv = 1
+                 GROUP BY sr.id
+                 HAVING COUNT(s.id) = 0
+                 ORDER BY RAND()
+                 LIMIT 1`,
+                [turnierId]
             );
-            return refId;
+            
+            if (availableRefs.length > 0) {
+                const refId = availableRefs[0].id;
+                await db.query(
+                    'UPDATE turnier_spiele SET schiedsrichter_team_id = ? WHERE id = ?',
+                    [refId, spielId]
+                );
+                return refId;
+            }
+        } else {
+            // Mode 2: Use playing teams as referees
+            // Prefer teams that just finished a game (won or lost) and aren't in waiting games
+            const [availableTeams] = await db.query(
+                `SELECT DISTINCT t.id, t.team_name,
+                    MAX(s_finished.bestaetigt_zeit) as last_game_time
+                 FROM turnier_teams t
+                 LEFT JOIN turnier_spiele s_finished ON (t.id = s_finished.team1_id OR t.id = s_finished.team2_id)
+                     AND s_finished.turnier_id = ? AND s_finished.status = 'beendet'
+                 LEFT JOIN turnier_spiele s_waiting ON (t.id = s_waiting.team1_id OR t.id = s_waiting.team2_id)
+                     AND s_waiting.turnier_id = ? AND s_waiting.status IN ('geplant', 'bereit', 'wartend')
+                 WHERE t.turnier_id = ? 
+                     AND t.status IN ('angemeldet', 'bestaetigt')
+                     AND s_waiting.id IS NULL
+                 GROUP BY t.id, t.team_name
+                 ORDER BY last_game_time DESC NULLS LAST, RAND()
+                 LIMIT 1`,
+                [turnierId, turnierId, turnierId]
+            );
+            
+            if (availableTeams.length > 0) {
+                // Use the team_name as the schiedsrichter_name field
+                await db.query(
+                    'UPDATE turnier_spiele SET schiedsrichter_name = ? WHERE id = ?',
+                    [availableTeams[0].team_name, spielId]
+                );
+                return availableTeams[0].id;
+            }
         }
         
         return null;

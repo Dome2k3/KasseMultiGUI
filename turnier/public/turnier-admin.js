@@ -226,6 +226,7 @@ async function createTurnier() {
     const anzahlTeams = parseInt(document.getElementById('new-turnier-teams').value, 10);
     const anzahlFelder = parseInt(document.getElementById('new-turnier-felder').value, 10);
     const modus = document.getElementById('new-turnier-modus').value;
+    const separateSchiri = document.getElementById('new-turnier-separate-schiri').checked;
 
     if (!name || !datum) {
         showToast('Name und Datum sind erforderlich', 'warning');
@@ -241,7 +242,8 @@ async function createTurnier() {
                 turnier_datum: datum,
                 anzahl_teams: anzahlTeams,
                 anzahl_felder: anzahlFelder,
-                modus: modus
+                modus: modus,
+                separate_schiri_teams: separateSchiri
             })
         });
 
@@ -841,8 +843,10 @@ function renderGameCards(containerId, games, type) {
             ? `<span class="game-card-phase">${escapeHtml(game.phase_name)}</span>` 
             : '';
         
-        const schiriDisplay = game.schiedsrichter_team_name
-            ? `<span class="game-card-schiri">👨‍⚖️ ${escapeHtml(game.schiedsrichter_team_name)}</span>`
+        // Display either dedicated referee team or playing team acting as referee
+        const schiriName = game.schiedsrichter_team_name || game.schiedsrichter_name;
+        const schiriDisplay = schiriName
+            ? `<span class="game-card-schiri">👨‍⚖️ ${escapeHtml(schiriName)}</span>`
             : '<span class="game-card-schiri no-schiri">👨‍⚖️ Kein Schiedsrichter</span>';
 
         const score1 = game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-';
