@@ -84,6 +84,21 @@ CREATE TABLE IF NOT EXISTS turnier_phasen (
     UNIQUE KEY unique_phase (turnier_id, phase_name)
 );
 
+-- Schiedsrichter Teams (Referee Teams) - Must be created before turnier_spiele
+CREATE TABLE IF NOT EXISTS turnier_schiedsrichter_teams (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    turnier_id INT NOT NULL,
+    team_name VARCHAR(255) NOT NULL,
+    ansprechpartner VARCHAR(255),
+    telefon VARCHAR(50),
+    verfuegbar BOOLEAN DEFAULT TRUE,
+    aktiv BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (turnier_id) REFERENCES turnier_config(id) ON DELETE CASCADE,
+    INDEX idx_schiedsrichter_verfuegbar (turnier_id, verfuegbar)
+);
+
 -- Spiele / Begegnungen
 CREATE TABLE IF NOT EXISTS turnier_spiele (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -249,21 +264,6 @@ CREATE TABLE IF NOT EXISTS team_opponents (
     UNIQUE KEY unique_opponent (turnier_id, team_id, opponent_id),
     INDEX idx_team_opponents (turnier_id, team_id),
     INDEX idx_opponent_lookup (turnier_id, team_id, opponent_id)
-);
-
--- Schiedsrichter Teams (Referee Teams)
-CREATE TABLE IF NOT EXISTS turnier_schiedsrichter_teams (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    turnier_id INT NOT NULL,
-    team_name VARCHAR(255) NOT NULL,
-    ansprechpartner VARCHAR(255),
-    telefon VARCHAR(50),
-    verfuegbar BOOLEAN DEFAULT TRUE,
-    aktiv BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (turnier_id) REFERENCES turnier_config(id) ON DELETE CASCADE,
-    INDEX idx_schiedsrichter_verfuegbar (turnier_id, verfuegbar)
 );
 
 -- Standard-Phasen für ein 32er-Turnier einfügen (Beispiel)

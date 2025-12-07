@@ -892,6 +892,24 @@ textarea {
     border-radius: 4px;
 }
 
+.game-card-schiri-info {
+    margin-bottom: 8px;
+}
+
+.game-card-schiri {
+    font-size: 0.8rem;
+    color: #2196f3;
+    background: rgba(33, 150, 243, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.game-card-schiri.no-schiri {
+    color: #999;
+    background: rgba(0, 0, 0, 0.05);
+}
+
 .game-card-teams {
     margin-bottom: 10px;
 }

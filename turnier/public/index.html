@@ -104,6 +104,30 @@
 
             <!-- Tab 2: Teams & Placement -->
             <div id="tab-teams" class="tab-content">
+                <!-- Referee Teams Section -->
+                <section class="card">
+                    <h2>👨‍⚖️ Schiedsrichter-Teams</h2>
+                    <div class="button-row">
+                        <button class="btn btn-primary" onclick="showAddSchiriModal()">+ Schiedsrichter-Team hinzufügen</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="schiri-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Team Name</th>
+                                    <th>Ansprechpartner</th>
+                                    <th>Telefon</th>
+                                    <th>Verfügbar</th>
+                                    <th>Aktiv</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <!-- Teams Section -->
                 <section class="card">
                     <h2>👥 Teams</h2>
@@ -317,6 +341,29 @@
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="createTurnier()">Erstellen</button>
                 <button class="btn btn-secondary" onclick="closeModal('new-turnier-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Schiedsrichter Team Modal -->
+    <div class="modal-overlay" id="add-schiri-modal">
+        <div class="modal">
+            <h3>Schiedsrichter-Team hinzufügen</h3>
+            <div class="form-group">
+                <label>Team Name *</label>
+                <input type="text" id="schiri-name" required>
+            </div>
+            <div class="form-group">
+                <label>Ansprechpartner</label>
+                <input type="text" id="schiri-ansprechpartner">
+            </div>
+            <div class="form-group">
+                <label>Telefon</label>
+                <input type="tel" id="schiri-telefon">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="addSchiri()">Hinzufügen</button>
+                <button class="btn btn-secondary" onclick="closeModal('add-schiri-modal')">Abbrechen</button>
             </div>
         </div>
     </div>
