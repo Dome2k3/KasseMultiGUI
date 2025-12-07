@@ -295,6 +295,11 @@ async function progressSwissTournament(turnierId, completedGame) {
                     );
                 }
 
+                // Assign referee team to this game if it has a field
+                if (feldId) {
+                    await assignRefereeTeam(turnierId, result.insertId);
+                }
+
                 // Record opponent relationship
                 if (pair.teamB) {
                     await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, result.insertId, nextRunde);
@@ -1425,6 +1430,11 @@ async function startSwiss144Tournament(turnierId, config, res) {
                  spiel.status, spiel.bestaetigungs_code]
             );
 
+            // Assign referee team to this game if it has a field
+            if (spiel.feld_id) {
+                await assignRefereeTeam(turnierId, result.insertId);
+            }
+
             // Record opponents for tracking
             if (spiel.team1_id && spiel.team2_id) {
                 await recordOpponent(turnierId, spiel.team1_id, spiel.team2_id, result.insertId, spiel.runde);
@@ -1528,6 +1538,11 @@ async function startSwissTournament(turnierId, config, res) {
                  spiel.team1_id, spiel.team2_id, spiel.feld_id, spiel.geplante_zeit, 
                  spiel.status, spiel.bestaetigungs_code]
             );
+
+            // Assign referee team to this game if it has a field
+            if (spiel.feld_id) {
+                await assignRefereeTeam(turnierId, result.insertId);
+            }
 
             if (spiel.team1_id && spiel.team2_id) {
                 await recordOpponent(turnierId, spiel.team1_id, spiel.team2_id, result.insertId, spiel.runde);
@@ -2048,6 +2063,13 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
             return res.status(400).json({ error: 'Tie games are not allowed' });
         }
 
+        // Add admin note to bemerkung if not already present
+        let finalBemerkung = bemerkung || '';
+        const adminNote = 'Eingegeben von Turnierleitung';
+        if (!finalBemerkung.includes(adminNote)) {
+            finalBemerkung = finalBemerkung ? `${finalBemerkung} | ${adminNote}` : adminNote;
+        }
+
         await db.query(
             `UPDATE turnier_spiele SET 
              ergebnis_team1 = ?, ergebnis_team2 = ?,
@@ -2063,7 +2085,7 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
              satz2_team1, satz2_team2,
              satz3_team1, satz3_team2,
              gewinnerId, verliererId,
-             bemerkung, spielId]
+             finalBemerkung, spielId]
         );
 
         // Record opponent relationship for Swiss tracking
