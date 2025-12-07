@@ -98,7 +98,16 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
             [turnierId]
         );
 
+        console.log(`[assignNextWaitingGame] Freed field ${freedFieldId}, found ${waitingGames.length} waiting games`);
+
         if (waitingGames.length === 0) {
+            // Check if there are any waiting games at all (for debugging)
+            const [allWaiting] = await db.query(
+                `SELECT COUNT(*) as count FROM turnier_spiele 
+                 WHERE turnier_id = ? AND status = 'wartend'`,
+                [turnierId]
+            );
+            console.log(`[assignNextWaitingGame] Total waiting games (including without teams): ${allWaiting[0].count}`);
             return null; // No waiting games with both teams
         }
 
@@ -117,7 +126,7 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
         // Assign a referee team to this game
         await assignRefereeTeam(turnierId, nextGame.id);
 
-        console.log(`Assigned waiting game #${nextGame.spiel_nummer} to field ${freedFieldId}`);
+        console.log(`[assignNextWaitingGame] ✓ Assigned waiting game #${nextGame.spiel_nummer} (ID: ${nextGame.id}) to field ${freedFieldId}`);
         return nextGame.id;
     } catch (err) {
         console.error('Error assigning next waiting game:', err);
@@ -1874,7 +1883,10 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
 
         // If the game had a field assigned, assign the next waiting game to that field
         if (game.feld_id) {
+            console.log(`[bestaetigen] Game #${game.spiel_nummer} confirmed on field ${game.feld_id}, assigning next waiting game`);
             await assignNextWaitingGame(turnierId, game.feld_id);
+        } else {
+            console.log(`[bestaetigen] Game #${game.spiel_nummer} confirmed but no field assigned`);
         }
 
         await logAudit(turnierId, 'CONFIRM_RESULT', 'turnier_spiele', spielId, null, { gewinner_id: gewinnerId });
@@ -2109,7 +2121,10 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
 
         // If the game had a field assigned and wasn't already finished, assign the next waiting game
         if (game.feld_id && game.status !== 'beendet') {
+            console.log(`[admin-ergebnis] Game #${game.spiel_nummer} completed on field ${game.feld_id}, assigning next waiting game`);
             await assignNextWaitingGame(turnierId, game.feld_id);
+        } else {
+            console.log(`[admin-ergebnis] Game #${game.spiel_nummer} completed but not calling assignNextWaitingGame (feld_id: ${game.feld_id}, old status: ${game.status})`);
         }
 
         await logAudit(turnierId, 'ADMIN_UPDATE_RESULT', 'turnier_spiele', spielId, game, req.body, bearbeitet_von);
