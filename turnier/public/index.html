@@ -104,6 +104,30 @@
 
             <!-- Tab 2: Teams & Placement -->
             <div id="tab-teams" class="tab-content">
+                <!-- Referee Teams Section -->
+                <section class="card">
+                    <h2>👨‍⚖️ Schiedsrichter-Teams</h2>
+                    <div class="button-row">
+                        <button class="btn btn-primary" onclick="showAddSchiriModal()">+ Schiedsrichter-Team hinzufügen</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="schiri-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Team Name</th>
+                                    <th>Ansprechpartner</th>
+                                    <th>Telefon</th>
+                                    <th>Verfügbar</th>
+                                    <th>Aktiv</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <!-- Teams Section -->
                 <section class="card">
                     <h2>👥 Teams</h2>
@@ -185,11 +209,11 @@
                 <section class="card">
                     <h2>🎮 Turnier-Steuerung</h2>
                     <div class="control-buttons">
-                        <button class="btn btn-success btn-large" onclick="startTurnier()">▶️ Turnier starten</button>
-                        <button class="btn btn-primary" onclick="autoAssignFields()">📍 Felder zuweisen</button>
-                        <button class="btn btn-primary" onclick="calculateRanking()">📊 Platzierung berechnen</button>
-                        <button class="btn btn-primary" onclick="calculateFinalRanking()">🏆 Endplatzierung</button>
-                        <button class="btn btn-danger" onclick="resetTurnier()">🔄 Reset</button>
+                        <button class="btn btn-success btn-large" onclick="startTurnier()" title="Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)">▶️ Turnier starten</button>
+                        <button class="btn btn-primary" onclick="autoAssignFields()" title="Felder zuweisen: Weist automatisch allen wartenden Spielen (status='geplant') ein freies Feld zu. Nützlich wenn Spiele manuell erstellt wurden.">📍 Felder zuweisen</button>
+                        <button class="btn btn-primary" onclick="calculateRanking()" title="Platzierung berechnen: Berechnet die Zwischenplatzierung nach einer bestimmten Runde basierend auf Siegen und Punktdifferenz">📊 Platzierung berechnen</button>
+                        <button class="btn btn-primary" onclick="calculateFinalRanking()" title="Endplatzierung: Berechnet die finale Platzierung aller Teams nach Abschluss des Turniers">🏆 Endplatzierung</button>
+                        <button class="btn btn-danger" onclick="resetTurnier()" title="Reset: Löscht ALLE Spiele und Ergebnisse des Turniers. Teams bleiben erhalten. Diese Aktion kann nicht rückgängig gemacht werden!">🔄 Reset</button>
                     </div>
                 </section>
 
@@ -305,9 +329,48 @@
                 <label>Anzahl Felder</label>
                 <input type="number" id="new-turnier-felder" value="4" min="1" max="20">
             </div>
+            <div class="form-group">
+                <label>Modus</label>
+                <select id="new-turnier-modus">
+                    <option value="seeded">Gesetzt (Lostöpfe) - Bracket</option>
+                    <option value="random">Zufällig - Bracket</option>
+                    <option value="swiss">Swiss System (Standard)</option>
+                    <option value="swiss_144">Swiss System 144 Teams (32 Quali + 128 Main)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="new-turnier-separate-schiri">
+                    Separate Schiedsrichter-Teams verwenden
+                </label>
+                <small class="help-text">Wenn nicht aktiviert, werden spielende Teams als Schiedsrichter eingesetzt (bevorzugt Teams, die gerade nicht warten)</small>
+            </div>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="createTurnier()">Erstellen</button>
                 <button class="btn btn-secondary" onclick="closeModal('new-turnier-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Schiedsrichter Team Modal -->
+    <div class="modal-overlay" id="add-schiri-modal">
+        <div class="modal">
+            <h3>Schiedsrichter-Team hinzufügen</h3>
+            <div class="form-group">
+                <label>Team Name *</label>
+                <input type="text" id="schiri-name" required>
+            </div>
+            <div class="form-group">
+                <label>Ansprechpartner</label>
+                <input type="text" id="schiri-ansprechpartner">
+            </div>
+            <div class="form-group">
+                <label>Telefon</label>
+                <input type="tel" id="schiri-telefon">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="addSchiri()">Hinzufügen</button>
+                <button class="btn btn-secondary" onclick="closeModal('add-schiri-modal')">Abbrechen</button>
             </div>
         </div>
     </div>

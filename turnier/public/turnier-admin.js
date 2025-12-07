@@ -149,6 +149,13 @@ async function loadTurniere() {
             opt.textContent = `${t.turnier_name} (${formatDate(t.turnier_datum)})`;
             select.appendChild(opt);
         });
+        
+        // Auto-select tournament from localStorage if available
+        const savedTurnierId = localStorage.getItem('selectedTurnierId');
+        if (savedTurnierId && turniere.find(t => t.id === parseInt(savedTurnierId, 10))) {
+            select.value = savedTurnierId;
+            await loadTurnier();
+        }
     } catch (err) {
         console.error('Error loading tournaments:', err);
         showToast('Fehler beim Laden der Turniere', 'error');
@@ -161,8 +168,13 @@ async function loadTurnier() {
 
     if (!currentTurnierId) {
         document.getElementById('turnier-details').style.display = 'none';
+        // Clear localStorage when no tournament is selected
+        localStorage.removeItem('selectedTurnierId');
         return;
     }
+    
+    // Store selected tournament in localStorage
+    localStorage.setItem('selectedTurnierId', currentTurnierId);
 
     try {
         const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}`);
@@ -188,6 +200,7 @@ async function loadTurnier() {
 
         // Load related data
         await Promise.all([
+            loadSchiriTeams(),
             loadTeams(),
             loadPhasen(),
             loadSpiele(),
@@ -212,6 +225,8 @@ async function createTurnier() {
     const datum = document.getElementById('new-turnier-datum').value;
     const anzahlTeams = parseInt(document.getElementById('new-turnier-teams').value, 10);
     const anzahlFelder = parseInt(document.getElementById('new-turnier-felder').value, 10);
+    const modus = document.getElementById('new-turnier-modus').value;
+    const separateSchiri = document.getElementById('new-turnier-separate-schiri').checked;
 
     if (!name || !datum) {
         showToast('Name und Datum sind erforderlich', 'warning');
@@ -226,7 +241,9 @@ async function createTurnier() {
                 turnier_name: name,
                 turnier_datum: datum,
                 anzahl_teams: anzahlTeams,
-                anzahl_felder: anzahlFelder
+                anzahl_felder: anzahlFelder,
+                modus: modus,
+                separate_schiri_teams: separateSchiri
             })
         });
 
@@ -284,6 +301,149 @@ async function saveConfig() {
     } catch (err) {
         console.error('Error saving config:', err);
         showToast('Fehler beim Speichern', 'error');
+    }
+}
+
+// ==========================================
+// SCHIEDSRICHTER TEAMS MANAGEMENT
+// ==========================================
+
+let schiriTeams = [];
+
+async function loadSchiriTeams() {
+    if (!currentTurnierId) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/schiedsrichter`);
+        schiriTeams = await res.json();
+        
+        renderSchiriTable();
+    } catch (err) {
+        console.error('Error loading schiri teams:', err);
+    }
+}
+
+function renderSchiriTable() {
+    const tbody = document.querySelector('#schiri-table tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (schiriTeams.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Keine Schiedsrichter-Teams</td></tr>';
+        return;
+    }
+    
+    schiriTeams.forEach((schiri, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(schiri.team_name)}</td>
+            <td>${escapeHtml(schiri.ansprechpartner || '-')}</td>
+            <td>${escapeHtml(schiri.telefon || '-')}</td>
+            <td>${schiri.verfuegbar ? '✅ Ja' : '❌ Nein'}</td>
+            <td>${schiri.aktiv ? '✅ Ja' : '❌ Nein'}</td>
+            <td class="action-btns">
+                <button class="btn btn-small ${schiri.verfuegbar ? 'btn-warning' : 'btn-success'}" 
+                        onclick="toggleSchiriVerfuegbar(${schiri.id}, ${!schiri.verfuegbar})"
+                        title="${schiri.verfuegbar ? 'Als nicht verfügbar markieren' : 'Als verfügbar markieren'}">
+                    ${schiri.verfuegbar ? '🚫' : '✅'}
+                </button>
+                <button class="btn btn-small btn-danger" onclick="deleteSchiri(${schiri.id})">🗑️</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function showAddSchiriModal() {
+    document.getElementById('schiri-name').value = '';
+    document.getElementById('schiri-ansprechpartner').value = '';
+    document.getElementById('schiri-telefon').value = '';
+    openModal('add-schiri-modal');
+}
+
+async function addSchiri() {
+    if (!currentTurnierId) return;
+    
+    const teamName = document.getElementById('schiri-name').value.trim();
+    if (!teamName) {
+        showToast('Team Name ist erforderlich', 'warning');
+        return;
+    }
+    
+    const schiri = {
+        team_name: teamName,
+        ansprechpartner: document.getElementById('schiri-ansprechpartner').value.trim(),
+        telefon: document.getElementById('schiri-telefon').value.trim()
+    };
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/schiedsrichter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(schiri)
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Schiedsrichter-Team hinzugefügt', 'success');
+            closeModal('add-schiri-modal');
+            await loadSchiriTeams();
+        } else {
+            showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error adding schiri:', err);
+        showToast('Fehler beim Hinzufügen', 'error');
+    }
+}
+
+async function toggleSchiriVerfuegbar(schiriId, verfuegbar) {
+    if (!currentTurnierId) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/schiedsrichter/${schiriId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ verfuegbar })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast(verfuegbar ? 'Als verfügbar markiert' : 'Als nicht verfügbar markiert', 'success');
+            await loadSchiriTeams();
+        } else {
+            showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error toggling schiri:', err);
+        showToast('Fehler', 'error');
+    }
+}
+
+async function deleteSchiri(schiriId) {
+    if (!currentTurnierId) return;
+    if (!confirm('Schiedsrichter-Team wirklich löschen?')) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/schiedsrichter/${schiriId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Schiedsrichter-Team gelöscht', 'success');
+            await loadSchiriTeams();
+        } else {
+            showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error deleting schiri:', err);
+        showToast('Fehler beim Löschen', 'error');
     }
 }
 
@@ -682,6 +842,12 @@ function renderGameCards(containerId, games, type) {
         const phaseDisplay = game.phase_name 
             ? `<span class="game-card-phase">${escapeHtml(game.phase_name)}</span>` 
             : '';
+        
+        // Display either dedicated referee team or playing team acting as referee
+        const schiriName = game.schiedsrichter_team_name || game.schiedsrichter_name || '';
+        const schiriDisplay = schiriName
+            ? `<span class="game-card-schiri">👨‍⚖️ ${escapeHtml(schiriName)}</span>`
+            : '<span class="game-card-schiri no-schiri">👨‍⚖️ Kein Schiedsrichter</span>';
 
         const score1 = game.ergebnis_team1 !== null ? game.ergebnis_team1 : '-';
         const score2 = game.ergebnis_team2 !== null ? game.ergebnis_team2 : '-';
@@ -693,6 +859,7 @@ function renderGameCards(containerId, games, type) {
                     ${fieldDisplay}
                 </div>
                 ${phaseDisplay ? `<div class="game-card-phase-info">${phaseDisplay}</div>` : ''}
+                <div class="game-card-schiri-info">${schiriDisplay}</div>
                 <div class="game-card-teams">
                     <div class="game-card-team ${team1Class}">
                         <span class="game-card-team-name">${escapeHtml(game.team1_name || 'TBD')}</span>
@@ -706,6 +873,7 @@ function renderGameCards(containerId, games, type) {
                 <div class="game-card-footer">
                     <span>${formatDateTime(game.geplante_zeit)}</span>
                     <div class="game-card-actions">
+                        ${game.status === 'bereit' ? `<button class="btn btn-small btn-success" onclick="markGameAsRunning(${game.id})" title="Spielbogen abgeholt - Spiel läuft">▶️</button>` : ''}
                         <button class="btn btn-small btn-primary" onclick="showEditResultModal(${game.id})">✏️</button>
                     </div>
                 </div>
@@ -807,6 +975,30 @@ function showEditResultModal(spielId) {
     document.getElementById('edit-bemerkung').value = spiel.bemerkung || '';
 
     openModal('edit-result-modal');
+}
+
+async function markGameAsRunning(spielId) {
+    if (!currentTurnierId) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/spiele/${spielId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'laeuft' })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Spiel als laufend markiert', 'success');
+            await loadSpiele();
+        } else {
+            showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error updating game status:', err);
+        showToast('Fehler beim Aktualisieren', 'error');
+    }
 }
 
 async function saveResult() {
