@@ -70,6 +70,21 @@ function switchAdminTab(tabName) {
         content.classList.remove('active');
     });
     document.getElementById(`tab-${tabName}`).classList.add('active');
+    
+    // Refresh data when switching to teams tab (Task 3: UI Statistics Refresh)
+    if (tabName === 'teams' && currentTurnierId) {
+        // Reload teams, games, and statistics to ensure fresh data
+        Promise.all([
+            loadTeams(),
+            loadSpiele()
+        ]).then(() => {
+            // Recalculate stats after both teams and games are loaded
+            calculateAllTeamStats();
+            renderTeamsTable();
+        }).catch(err => {
+            console.error('Error refreshing teams data:', err);
+        });
+    }
 }
 
 // ==========================================
