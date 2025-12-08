@@ -1294,14 +1294,25 @@ async function assignRefereeTeam(turnierId, spielId) {
             
             const excludedTeamIds = [];
             if (currentGame.length > 0) {
-                if (currentGame[0].team1_id) excludedTeamIds.push(currentGame[0].team1_id);
-                if (currentGame[0].team2_id) excludedTeamIds.push(currentGame[0].team2_id);
+                // Validate team IDs are numbers to prevent SQL injection
+                if (currentGame[0].team1_id && typeof currentGame[0].team1_id === 'number') {
+                    excludedTeamIds.push(currentGame[0].team1_id);
+                }
+                if (currentGame[0].team2_id && typeof currentGame[0].team2_id === 'number') {
+                    excludedTeamIds.push(currentGame[0].team2_id);
+                }
             }
             
-            // Build exclusion clause
-            const excludeClause = excludedTeamIds.length > 0 
-                ? `AND t.id NOT IN (${excludedTeamIds.join(',')})` 
-                : '';
+            // Build exclusion clause and parameters safely
+            let excludeClause = '';
+            const queryParams = [turnierId, turnierId, turnierId, turnierId, turnierId];
+            
+            if (excludedTeamIds.length > 0) {
+                // Use parameterized placeholders for excluded team IDs
+                const placeholders = excludedTeamIds.map(() => '?').join(',');
+                excludeClause = `AND t.id NOT IN (${placeholders})`;
+                queryParams.push(...excludedTeamIds);
+            }
             
             // Find free teams that are not currently:
             // - Playing (geplant, bereit, laeuft status)
@@ -1328,7 +1339,7 @@ async function assignRefereeTeam(turnierId, spielId) {
                  GROUP BY t.id, t.team_name
                  ORDER BY waiting_games_count ASC, last_game_time DESC NULLS LAST, RAND()
                  LIMIT 1`,
-                [turnierId, turnierId, turnierId, turnierId, turnierId]
+                queryParams
             );
             
             if (availableTeams.length > 0) {
