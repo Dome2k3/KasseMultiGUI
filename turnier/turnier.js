@@ -2853,10 +2853,31 @@ app.post('/api/turniere/:turnierId/reset', async (req, res) => {
 
 // Batch complete first X games with 2:0 score for testing
 // WARNING: This is a testing function only and should be removed in production
+// WARNING: This endpoint has no authentication - DO NOT deploy to production
 app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) => {
     try {
         const turnierId = req.params.turnierId;
-        const { count = 10 } = req.body; // Default to first 10 games
+        const { count = 10 } = req.body;
+
+        // Input validation for count parameter
+        const validatedCount = parseInt(count, 10);
+        if (isNaN(validatedCount) || validatedCount < 1 || validatedCount > 100) {
+            return res.status(400).json({ 
+                error: 'Invalid count parameter. Must be a number between 1 and 100.' 
+            });
+        }
+
+        // Verify tournament exists
+        const [tournamentCheck] = await db.query(
+            'SELECT id, modus FROM turnier_config WHERE id = ?',
+            [turnierId]
+        );
+        
+        if (tournamentCheck.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+        
+        const tournamentModus = tournamentCheck[0].modus;
 
         // Get first X games that are not yet completed
         const [games] = await db.query(
@@ -2867,7 +2888,7 @@ app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) 
              WHERE s.turnier_id = ? AND s.status != 'beendet' AND s.team1_id IS NOT NULL AND s.team2_id IS NOT NULL
              ORDER BY s.runde, s.spiel_nummer
              LIMIT ?`,
-            [turnierId, count]
+            [turnierId, validatedCount]
         );
 
         if (games.length === 0) {
@@ -2903,12 +2924,8 @@ app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) 
                 await recordOpponent(turnierId, game.team1_id, game.team2_id, game.id, game.runde);
             }
 
-            // Get tournament mode
-            const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
-            const modus = config[0]?.modus;
-
             // Progress based on tournament mode
-            if (modus === 'swiss' || modus === 'swiss_144') {
+            if (tournamentModus === 'swiss' || tournamentModus === 'swiss_144') {
                 await progressSwissTournament(turnierId, game);
             } else {
                 await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);

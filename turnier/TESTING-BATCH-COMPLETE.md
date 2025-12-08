@@ -69,9 +69,11 @@ curl -X POST http://localhost:3004/api/turniere/1/test/batch-complete-games \
 
 - ⚠️ This is a **TESTING ONLY** feature
 - ⚠️ Must be **REMOVED** before production deployment
+- ⚠️ **NO AUTHENTICATION** - endpoint is completely unprotected
 - ⚠️ Results are clearly marked as test data
 - ⚠️ Always completes with Team 1 winning 2:0
 - ⚠️ Only completes games with both teams assigned
+- ⚠️ Count parameter limited to 1-100 games per request
 
 ## Removal Checklist
 
