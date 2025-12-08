@@ -2848,6 +2848,126 @@ app.post('/api/turniere/:turnierId/reset', async (req, res) => {
 });
 
 // ==========================================
+// TESTING FUNCTIONS (TEMPORARY - TO BE REMOVED)
+// ==========================================
+
+// Batch complete first X games with 2:0 score for testing
+// WARNING: This is a testing function only and should be removed in production
+// WARNING: This endpoint has no authentication - DO NOT deploy to production
+app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+        const { count = 10 } = req.body;
+
+        // Input validation for count parameter
+        const validatedCount = Number(count);
+        if (!Number.isInteger(validatedCount) || validatedCount < 1 || validatedCount > 100) {
+            return res.status(400).json({ 
+                error: 'Invalid count parameter. Must be an integer between 1 and 100.' 
+            });
+        }
+
+        // Verify tournament exists
+        const [tournamentCheck] = await db.query(
+            'SELECT id, modus FROM turnier_config WHERE id = ?',
+            [turnierId]
+        );
+        
+        if (tournamentCheck.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+        
+        const tournamentModus = tournamentCheck[0].modus;
+
+        // Get first X games that are not yet completed
+        const [games] = await db.query(
+            `SELECT s.*, t1.team_name as team1_name, t2.team_name as team2_name
+             FROM turnier_spiele s
+             LEFT JOIN turnier_teams t1 ON s.team1_id = t1.id
+             LEFT JOIN turnier_teams t2 ON s.team2_id = t2.id
+             WHERE s.turnier_id = ? AND s.status != 'beendet' AND s.team1_id IS NOT NULL AND s.team2_id IS NOT NULL
+             ORDER BY s.runde, s.spiel_nummer
+             LIMIT ?`,
+            [turnierId, validatedCount]
+        );
+
+        if (games.length === 0) {
+            return res.json({ success: true, message: 'No games to complete', completed: 0 });
+        }
+
+        let completed = 0;
+        const completedGames = [];
+
+        for (const game of games) {
+            // Set team1 as winner with 2:0 score
+            const ergebnis_team1 = 2;
+            const ergebnis_team2 = 0;
+            const gewinnerId = game.team1_id;
+            const verliererId = game.team2_id;
+
+            // Update game with test result
+            await db.query(
+                `UPDATE turnier_spiele SET 
+                 ergebnis_team1 = ?, ergebnis_team2 = ?,
+                 satz1_team1 = 25, satz1_team2 = 20,
+                 satz2_team1 = 25, satz2_team2 = 20,
+                 gewinner_id = ?, verlierer_id = ?,
+                 status = 'beendet',
+                 bemerkung = 'TEST: Automatisch abgeschlossen für Testdurchlauf',
+                 bestaetigt_zeit = NOW()
+                 WHERE id = ?`,
+                [ergebnis_team1, ergebnis_team2, gewinnerId, verliererId, game.id]
+            );
+
+            // Record opponent relationship for Swiss tracking (after successful update)
+            if (game.team1_id && game.team2_id) {
+                try {
+                    await recordOpponent(turnierId, game.team1_id, game.team2_id, game.id, game.runde);
+                } catch (opponentErr) {
+                    console.error(`Error recording opponent for game ${game.id}:`, opponentErr);
+                    // Continue with tournament progression even if opponent recording fails
+                }
+            }
+
+            // Progress based on tournament mode
+            if (tournamentModus === 'swiss' || tournamentModus === 'swiss_144') {
+                await progressSwissTournament(turnierId, game);
+            } else {
+                await progressTournamentBracket(turnierId, game, gewinnerId, verliererId);
+            }
+
+            // If the game had a field assigned, assign the next waiting game to that field
+            if (game.feld_id) {
+                await assignNextWaitingGame(turnierId, game.feld_id);
+            }
+
+            completed++;
+            completedGames.push({
+                spiel_nummer: game.spiel_nummer,
+                team1: game.team1_name,
+                team2: game.team2_name,
+                ergebnis: '2:0'
+            });
+        }
+
+        await logAudit(turnierId, 'TEST_BATCH_COMPLETE', 'turnier_spiele', null, null, { 
+            completed,
+            games: completedGames
+        });
+
+        res.json({ 
+            success: true, 
+            message: `${completed} games completed with 2:0 for testing`,
+            completed,
+            games: completedGames
+        });
+    } catch (err) {
+        console.error('POST test/batch-complete-games error:', err);
+        res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+});
+
+// ==========================================
 // EMAIL NOTIFICATIONS
 // ==========================================
 
