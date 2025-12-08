@@ -137,42 +137,123 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
 
 // Helper: Try to create next round games dynamically for Swiss 144
 // This allows Round 2+ games to start as soon as enough Round 1 teams have finished
-// NOTE: This is infrastructure for future implementation. Currently monitors progress
-// but doesn't create games until round completes (safe existing behavior maintained).
-// Full implementation requires: partial round Swiss pairing, score-based matching,
-// and Hobby Cup interleaving logic.
+// Helper: Get teams that have finished their game in the current round
+async function getReadyTeamsForRound(turnierId, phaseId, currentRunde) {
+    const [finishedTeams] = await db.query(
+        `SELECT DISTINCT 
+            CASE 
+                WHEN s.team1_id IS NOT NULL THEN s.team1_id
+                WHEN s.team2_id IS NOT NULL THEN s.team2_id
+            END as team_id
+         FROM turnier_spiele s
+         WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ? AND s.status = 'beendet'
+            AND (s.team1_id IS NOT NULL OR s.team2_id IS NOT NULL)`,
+        [turnierId, phaseId, currentRunde]
+    );
+    return finishedTeams.map(t => t.team_id).filter(id => id !== null);
+}
+
+// Helper: Get teams that don't have a game yet in the next round
+async function getUnpairedTeamsInRound(turnierId, phaseId, nextRunde) {
+    const [pairedTeams] = await db.query(
+        `SELECT DISTINCT 
+            CASE 
+                WHEN s.team1_id IS NOT NULL THEN s.team1_id
+                WHEN s.team2_id IS NOT NULL THEN s.team2_id
+            END as team_id
+         FROM turnier_spiele s
+         WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ?
+            AND (s.team1_id IS NOT NULL OR s.team2_id IS NOT NULL)`,
+        [turnierId, phaseId, nextRunde]
+    );
+    
+    const pairedSet = new Set(pairedTeams.map(t => t.team_id).filter(id => id !== null));
+    return pairedSet;
+}
+
+// Helper: Create Swiss games from pairings
+async function createSwissGames(turnierId, phaseId, nextRunde, pairings, felder) {
+    // Get max spiel_nummer
+    const [maxSpielResult] = await db.query(
+        'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+        [turnierId]
+    );
+    let spielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+    
+    // Track which fields are currently free
+    const [busyFields] = await db.query(
+        `SELECT feld_id FROM turnier_spiele 
+         WHERE turnier_id = ? AND feld_id IS NOT NULL 
+         AND status IN ('geplant', 'bereit', 'laeuft')`,
+        [turnierId]
+    );
+    const busyFieldSet = new Set(busyFields.map(f => f.feld_id));
+    const freeFelder = felder.filter(f => !busyFieldSet.has(f.id));
+    
+    const gamesCreated = [];
+    
+    for (let i = 0; i < pairings.length; i++) {
+        const pair = pairings[i];
+        const bestCode = generateConfirmationCode();
+        
+        // Assign field if available
+        let feldId = null;
+        let geplante_zeit = null;
+        let status = 'wartend';
+        
+        if (i < freeFelder.length) {
+            feldId = freeFelder[i].id;
+            geplante_zeit = new Date();
+            status = 'geplant';
+        }
+        
+        const [result] = await db.query(
+            `INSERT INTO turnier_spiele 
+            (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [turnierId, phaseId, nextRunde, spielNummer++,
+             pair.teamA.id, pair.teamB ? pair.teamB.id : null,
+             feldId, geplante_zeit, pair.isBye ? 'beendet' : status, bestCode]
+        );
+        
+        const spielId = result.insertId;
+        
+        // If bye, record the win immediately
+        if (pair.isBye) {
+            await db.query(
+                'UPDATE turnier_spiele SET gewinner_id = ?, status = "beendet" WHERE id = ?',
+                [pair.teamA.id, spielId]
+            );
+        }
+        
+        // Assign referee team to this game if it has a field
+        if (feldId) {
+            await assignRefereeTeam(turnierId, spielId);
+        }
+        
+        // Record opponent relationship
+        if (pair.teamB) {
+            await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, spielId, nextRunde);
+        }
+        
+        gamesCreated.push({ spielId, spielNummer: spielNummer - 1, feldId, status });
+    }
+    
+    return gamesCreated;
+}
+
+// Dynamic Swiss round progression - creates partial pairings when threshold is reached
 async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
     try {
         const nextRunde = currentRunde + 1;
         
-        // Check if next round already has games created
-        const [existingNextRound] = await db.query(
-            'SELECT COUNT(*) as count FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = ?',
-            [turnierId, phaseId, nextRunde]
-        );
+        // Get configurable threshold from environment (default 0.5 = 50%)
+        const thresholdPercent = parseFloat(process.env.DYNAMIC_SWISS_THRESHOLD || '0.5');
         
-        // If next round already exists, skip
-        if (existingNextRound[0].count > 0) {
-            return;
-        }
+        // Get ready teams (finished current round)
+        const readyTeamIds = await getReadyTeamsForRound(turnierId, phaseId, currentRunde);
         
-        // Count teams that have finished current round
-        const [finishedTeams] = await db.query(
-            `SELECT DISTINCT 
-                CASE 
-                    WHEN s.team1_id IS NOT NULL THEN s.team1_id
-                    WHEN s.team2_id IS NOT NULL THEN s.team2_id
-                END as team_id
-             FROM turnier_spiele s
-             WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ? AND s.status = 'beendet'
-                AND (s.team1_id IS NOT NULL OR s.team2_id IS NOT NULL)`,
-            [turnierId, phaseId, currentRunde]
-        );
-        
-        const teamsReady = finishedTeams.length;
-        
-        // Need at least half the teams to have finished to start creating next round pairings
-        // For 56 pairs (112 teams), we need at least 56 teams finished (50%)
+        // Get total teams in current round
         const [totalTeamsInRound] = await db.query(
             `SELECT COUNT(DISTINCT 
                 CASE 
@@ -185,29 +266,83 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
         );
         
         const totalTeams = totalTeamsInRound[0].count;
-        const threshold = Math.floor(totalTeams * 0.5); // 50% threshold
+        const threshold = Math.floor(totalTeams * thresholdPercent);
         
-        // Debug logging - can be disabled in production via environment variable
+        // Debug logging
         if (process.env.DEBUG_SWISS === 'true') {
-            console.log(`[Dynamic Swiss] Round ${currentRunde}: ${teamsReady}/${totalTeams} teams finished (threshold: ${threshold})`);
+            console.log(`[Dynamic Swiss] Round ${currentRunde}: ${readyTeamIds.length}/${totalTeams} teams finished (threshold: ${threshold})`);
         }
         
         // Not enough teams finished yet
-        if (teamsReady < threshold) {
+        if (readyTeamIds.length < threshold) {
+            return;
+        }
+        
+        // Get teams already paired in next round
+        const pairedTeamsSet = await getUnpairedTeamsInRound(turnierId, phaseId, nextRunde);
+        
+        // Filter out teams that are already paired in next round
+        const unpairedReadyTeamIds = readyTeamIds.filter(id => !pairedTeamsSet.has(id));
+        
+        // Need at least 2 unpaired ready teams to create a pairing
+        if (unpairedReadyTeamIds.length < 2) {
+            if (process.env.DEBUG_SWISS === 'true') {
+                console.log(`[Dynamic Swiss] Not enough unpaired teams (${unpairedReadyTeamIds.length}) for new pairings`);
+            }
             return;
         }
         
         if (process.env.DEBUG_SWISS === 'true') {
-            console.log(`[Dynamic Swiss] Threshold reached - ready for dynamic pairing (not yet implemented)`);
+            console.log(`[Dynamic Swiss] Threshold reached - pairing ${unpairedReadyTeamIds.length} teams for round ${nextRunde}`);
         }
         
-        // TODO: Implement dynamic pairing logic here
-        // Would need to:
-        // 1. Pair finished teams with same score (Swiss pairing rules)
-        // 2. Check opponent history to avoid rematches
-        // 3. Assign to available fields
-        // 4. Create games in database
-        // 5. Potentially interleave Hobby Cup games
+        // Update Swiss standings to get current scores
+        await updateSwissStandings(turnierId);
+        
+        // Get Swiss standings for ready, unpaired teams
+        const allStandings = await getSwissStandings(turnierId);
+        const readyTeams = allStandings.filter(t => unpairedReadyTeamIds.includes(t.id));
+        
+        // Prepare team objects for pairing engine
+        const pairingTeams = readyTeams.map(t => ({
+            id: t.id,
+            score: t.swiss_score || 0,
+            buchholz: t.buchholz || 0,
+            initialSeed: t.initial_seed || 999,
+            opponents: t.opponents || []
+        }));
+        
+        // Compute pairings for ready teams
+        const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
+            timeLimitMs: 5000,
+            pairingTimeMs: 2500,
+            repairTimeMs: 2500,
+            allowFallback: true
+        });
+        
+        if (!result.success && result.rematchCount > 0) {
+            console.warn(`[Dynamic Swiss] Warning: Found ${result.rematchCount} rematches in partial pairings`);
+        }
+        
+        if (process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Generated ${result.pairs.length} pairings for round ${nextRunde}`, result.meta);
+        }
+        
+        // Get available fields
+        const [felder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+        
+        // Create games from pairings
+        const gamesCreated = await createSwissGames(turnierId, phaseId, nextRunde, result.pairs, felder);
+        
+        if (process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Created ${gamesCreated.length} games for round ${nextRunde}`);
+            gamesCreated.forEach(g => {
+                console.log(`  - Game #${g.spielNummer}: field=${g.feldId || 'waiting'}, status=${g.status}`);
+            });
+        }
         
     } catch (err) {
         console.error(`Error in dynamic Swiss progression for tournament ${turnierId}, phase ${phaseId}, round ${currentRunde}:`, err);
@@ -302,10 +437,10 @@ async function progressSwissTournament(turnierId, completedGame) {
     try {
         // Check tournament mode for dynamic progression
         const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
-        const isSwiss144 = config[0]?.modus === 'swiss_144';
+        const modus = config[0]?.modus;
 
-        // For Swiss 144, try dynamic progression after each game
-        if (isSwiss144 && completedGame.runde >= 1) {
+        // For all Swiss modes, try dynamic progression after each game (round 1+)
+        if ((modus === 'swiss' || modus === 'swiss_144') && completedGame.runde >= 1) {
             await tryDynamicSwissProgression(turnierId, completedGame.phase_id, completedGame.runde);
         }
 
@@ -454,10 +589,60 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         // When Round 1 is generated, it should include all qualified teams (112 + 16 = 128)
         console.log('Qualification winners marked as qualified - ready for main field');
 
-        // Create Hobby Cup matches for losers
-        // For now, this is a simple round-robin or can be configured separately
-        // In a production system, this would be a separate phase/bracket
-        console.log('Note: Hobby Cup for qualification losers should be configured separately as a parallel tournament');
+        // Create Hobby Cup matches for losers with interleaving support
+        if (losers.length > 0) {
+            // Check if Hobby Cup phase exists
+            const [hobbyCupPhase] = await db.query(
+                'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Hobby Cup"',
+                [turnierId]
+            );
+            
+            if (hobbyCupPhase.length > 0) {
+                const hobbyCupPhaseId = hobbyCupPhase[0].id;
+                
+                // Get loser teams with their standings
+                const [loserTeams] = await db.query(
+                    'SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (?) ORDER BY initial_seed ASC',
+                    [turnierId, losers]
+                );
+                
+                // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
+                const hobbyCupPairs = [];
+                for (let i = 0; i < loserTeams.length; i += 2) {
+                    if (i + 1 < loserTeams.length) {
+                        hobbyCupPairs.push({
+                            teamA: loserTeams[i],
+                            teamB: loserTeams[i + 1],
+                            isBye: false
+                        });
+                    } else {
+                        // Odd number - give bye to last team
+                        hobbyCupPairs.push({
+                            teamA: loserTeams[i],
+                            teamB: null,
+                            isBye: true
+                        });
+                    }
+                }
+                
+                // Get available fields
+                const [felder] = await db.query(
+                    'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+                    [turnierId]
+                );
+                
+                // Create Hobby Cup games with field assignments
+                const hobbyCupGames = await createSwissGames(turnierId, hobbyCupPhaseId, 1, hobbyCupPairs, felder);
+                
+                if (process.env.DEBUG_SWISS === 'true') {
+                    console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
+                }
+                
+                console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
+            } else {
+                console.log('Note: Hobby Cup phase not found - losers not paired');
+            }
+        }
 
     } catch (err) {
         console.error('Error handling qualification completion:', err);
