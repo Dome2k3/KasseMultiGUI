@@ -1028,4 +1028,8 @@ textarea {
     .result-notification-badge {
         animation: none;
     }
+    
+    .result-notification-badge:hover {
+        transform: none;
+    }
 }

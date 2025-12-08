@@ -25,6 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 30000);
 });
 
+// Cleanup polling when page unloads
+window.addEventListener('beforeunload', () => {
+    if (meldungenPollInterval) {
+        clearInterval(meldungenPollInterval);
+        meldungenPollInterval = null;
+    }
+});
+
 // ==========================================
 // TAB NAVIGATION
 // ==========================================
@@ -552,8 +560,11 @@ function renderTeamsTable() {
         return true;
     });
 
+    // Constants for table structure
+    const TEAMS_TABLE_COLUMNS = 11; // #, Team, Ansprechpartner, E-Mail, Verein, Klasse, Setzpos, Spiele, Schiri, Status, Aktionen
+    
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="empty-state">Keine Teams gefunden</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${TEAMS_TABLE_COLUMNS}" class="empty-state">Keine Teams gefunden</td></tr>`;
         updateTeamsShowMoreButton(0, 0);
         return;
     }

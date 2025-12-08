@@ -187,14 +187,19 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
         const totalTeams = totalTeamsInRound[0].count;
         const threshold = Math.floor(totalTeams * 0.5); // 50% threshold
         
-        console.log(`[Dynamic Swiss] Round ${currentRunde}: ${teamsReady}/${totalTeams} teams finished (threshold: ${threshold})`);
+        // Debug logging - can be disabled in production via environment variable
+        if (process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Round ${currentRunde}: ${teamsReady}/${totalTeams} teams finished (threshold: ${threshold})`);
+        }
         
         // Not enough teams finished yet
         if (teamsReady < threshold) {
             return;
         }
         
-        console.log(`[Dynamic Swiss] Threshold reached - ready for dynamic pairing (not yet implemented)`);
+        if (process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Threshold reached - ready for dynamic pairing (not yet implemented)`);
+        }
         
         // TODO: Implement dynamic pairing logic here
         // Would need to:
@@ -205,7 +210,7 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
         // 5. Potentially interleave Hobby Cup games
         
     } catch (err) {
-        console.error('Error in dynamic Swiss progression:', err);
+        console.error(`Error in dynamic Swiss progression for tournament ${turnierId}, phase ${phaseId}, round ${currentRunde}:`, err);
     }
 }
 
