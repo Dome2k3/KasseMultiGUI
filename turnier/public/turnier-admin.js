@@ -70,6 +70,21 @@ function switchAdminTab(tabName) {
         content.classList.remove('active');
     });
     document.getElementById(`tab-${tabName}`).classList.add('active');
+    
+    // Refresh data when switching to teams tab (Task 3: UI Statistics Refresh)
+    if (tabName === 'teams' && currentTurnierId) {
+        // Reload teams, games, and statistics to ensure fresh data
+        Promise.all([
+            loadTeams(),
+            loadSpiele()
+        ]).then(() => {
+            // Recalculate stats after both teams and games are loaded
+            calculateAllTeamStats();
+            renderTeamsTable();
+        }).catch(err => {
+            console.error('Error refreshing teams data:', err);
+        });
+    }
 }
 
 // ==========================================
@@ -887,6 +902,32 @@ async function loadPhasen() {
     }
 }
 
+// Helper: Populate round filter dropdown based on available games (Task 4: UI Extensions)
+function populateRoundFilter() {
+    const select = document.getElementById('spiele-filter-runde');
+    if (!select) return;
+    
+    // Get unique round numbers from loaded games
+    const rounds = [...new Set(spiele.map(s => s.runde).filter(r => r !== null && r !== undefined))].sort((a, b) => a - b);
+    
+    // Save current selection
+    const currentValue = select.value;
+    
+    // Rebuild options
+    select.innerHTML = '<option value="">Alle Runden</option>';
+    rounds.forEach(runde => {
+        const opt = document.createElement('option');
+        opt.value = runde;
+        opt.textContent = `Runde ${runde}`;
+        select.appendChild(opt);
+    });
+    
+    // Restore selection if it still exists
+    if (currentValue && rounds.includes(parseInt(currentValue))) {
+        select.value = currentValue;
+    }
+}
+
 // ==========================================
 // GAMES MANAGEMENT
 // ==========================================
@@ -912,14 +953,19 @@ async function loadSpiele() {
         anzahlFelder = config.anzahl_felder || 4;
 
         const phaseId = document.getElementById('spiele-filter-phase').value;
+        const runde = document.getElementById('spiele-filter-runde').value;
         const status = document.getElementById('spiele-filter-status').value;
 
         let url = `${API_BASE}/api/turniere/${currentTurnierId}/spiele?`;
         if (phaseId) url += `phase_id=${phaseId}&`;
+        if (runde) url += `runde=${runde}&`;
         if (status) url += `status=${status}&`;
 
         const res = await fetch(url);
         spiele = await res.json();
+
+        // Populate round filter dropdown dynamically (Task 4: UI Extensions)
+        populateRoundFilter();
 
         // Load Vorschau (next 10 upcoming games)
         await loadVorschau();
@@ -1001,10 +1047,14 @@ function renderGameCards(containerId, games, type) {
             fieldDisplay = `<span class="game-card-field no-field">⏳ Offen</span>`;
         }
 
-        // Display phase info for Vorschau
-        const phaseDisplay = game.phase_name 
-            ? `<span class="game-card-phase">${escapeHtml(game.phase_name)}</span>` 
-            : '';
+        // Display phase info with round number (Task 4: UI Extensions)
+        let phaseDisplay = '';
+        if (game.phase_name) {
+            phaseDisplay = `<span class="game-card-phase">${escapeHtml(game.phase_name)}</span>`;
+            if (game.runde !== null && game.runde !== undefined) {
+                phaseDisplay += ` <span class="game-card-round">- Runde ${game.runde}</span>`;
+            }
+        }
         
         // Display either dedicated referee team or playing team acting as referee
         const schiriName = game.schiedsrichter_team_name || game.schiedsrichter_name || '';

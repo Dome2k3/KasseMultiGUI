@@ -346,15 +346,18 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
             score: t.swiss_score || 0,
             buchholz: t.buchholz || 0,
             initialSeed: t.initial_seed || 999,
-            opponents: t.opponents || []
+            opponents: t.opponents || [],
+            gamesPlayed: t.opponents ? t.opponents.length : 0
         }));
         
-        // Compute pairings for ready teams
+        // Compute pairings for ready teams with gamesPlayed prioritization
         const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
             timeLimitMs: 5000,
             pairingTimeMs: 2500,
             repairTimeMs: 2500,
-            allowFallback: true
+            allowFallback: true,
+            prioritizeGamesPlayed: true,
+            maxGamesDiscrepancy: 1
         });
         
         if (!result.success && result.rematchCount > 0) {
@@ -538,14 +541,17 @@ async function progressSwissTournament(turnierId, completedGame) {
                         score: t.swiss_score || 0,
                         buchholz: t.buchholz || 0,
                         initialSeed: t.initial_seed || 999,
-                        opponents: t.opponents || []
+                        opponents: t.opponents || [],
+                        gamesPlayed: t.opponents ? t.opponents.length : 0
                     }));
                     
                     const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
                         timeLimitMs: 5000,
                         pairingTimeMs: 2500,
                         repairTimeMs: 2500,
-                        allowFallback: true
+                        allowFallback: true,
+                        prioritizeGamesPlayed: true,
+                        maxGamesDiscrepancy: 1
                     });
                     
                     // Get available fields
@@ -1275,23 +1281,65 @@ async function assignRefereeTeam(turnierId, spielId) {
             }
         } else {
             // Mode 2: Use playing teams as referees
-            // Prefer teams that aren't currently playing (not in 'geplant', 'bereit', or 'laeuft' games)
-            // Teams in 'wartend' games (scheduled but not yet on a field) CAN be referees
+            // Priority:
+            // 1. Teams that are completely free (no upcoming games)
+            // 2. Teams that just finished playing (not actively playing or waiting)
+            // Exclude: Teams playing in this game, teams actively playing, teams being assigned as referee
+            
+            // Get the game being assigned to make sure we don't assign players from this game
+            const [currentGame] = await db.query(
+                'SELECT team1_id, team2_id FROM turnier_spiele WHERE id = ?',
+                [spielId]
+            );
+            
+            const excludedTeamIds = [];
+            if (currentGame.length > 0) {
+                // Validate team IDs are numbers to prevent SQL injection
+                if (currentGame[0].team1_id && typeof currentGame[0].team1_id === 'number') {
+                    excludedTeamIds.push(currentGame[0].team1_id);
+                }
+                if (currentGame[0].team2_id && typeof currentGame[0].team2_id === 'number') {
+                    excludedTeamIds.push(currentGame[0].team2_id);
+                }
+            }
+            
+            // Build exclusion clause and parameters safely
+            let excludeClause = '';
+            const queryParams = [turnierId, turnierId, turnierId, turnierId, turnierId];
+            
+            if (excludedTeamIds.length > 0) {
+                // Use parameterized placeholders for excluded team IDs
+                const placeholders = excludedTeamIds.map(() => '?').join(',');
+                excludeClause = `AND t.id NOT IN (${placeholders})`;
+                queryParams.push(...excludedTeamIds);
+            }
+            
+            // Find free teams that are not currently:
+            // - Playing (geplant, bereit, laeuft status)
+            // - Assigned as referees for active games
+            // - Part of the current game
             const [availableTeams] = await db.query(
                 `SELECT DISTINCT t.id, t.team_name,
-                    MAX(s_finished.bestaetigt_zeit) as last_game_time
+                    MAX(s_finished.bestaetigt_zeit) as last_game_time,
+                    COUNT(DISTINCT s_waiting.id) as waiting_games_count
                  FROM turnier_teams t
                  LEFT JOIN turnier_spiele s_finished ON (t.id = s_finished.team1_id OR t.id = s_finished.team2_id)
                      AND s_finished.turnier_id = ? AND s_finished.status = 'beendet'
                  LEFT JOIN turnier_spiele s_active ON (t.id = s_active.team1_id OR t.id = s_active.team2_id)
                      AND s_active.turnier_id = ? AND s_active.status IN ('geplant', 'bereit', 'laeuft')
+                 LEFT JOIN turnier_spiele s_waiting ON (t.id = s_waiting.team1_id OR t.id = s_waiting.team2_id)
+                     AND s_waiting.turnier_id = ? AND s_waiting.status = 'wartend'
+                 LEFT JOIN turnier_spiele s_ref ON t.team_name = s_ref.schiedsrichter_name
+                     AND s_ref.turnier_id = ? AND s_ref.status IN ('geplant', 'bereit', 'laeuft')
                  WHERE t.turnier_id = ? 
                      AND t.status IN ('angemeldet', 'bestaetigt')
                      AND s_active.id IS NULL
+                     AND s_ref.id IS NULL
+                     ${excludeClause}
                  GROUP BY t.id, t.team_name
-                 ORDER BY last_game_time DESC NULLS LAST, RAND()
+                 ORDER BY waiting_games_count ASC, last_game_time DESC NULLS LAST, RAND()
                  LIMIT 1`,
-                [turnierId, turnierId, turnierId]
+                queryParams
             );
             
             if (availableTeams.length > 0) {
@@ -1582,15 +1630,18 @@ async function generateNextSwissRound(turnierId, nextRunde) {
             score: t.swiss_score || 0,
             buchholz: t.buchholz || 0,
             initialSeed: t.initial_seed || 999,
-            opponents: t.opponents || []
+            opponents: t.opponents || [],
+            gamesPlayed: t.opponents ? t.opponents.length : 0
         }));
 
-        // Compute pairings
+        // Compute pairings with gamesPlayed prioritization
         const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
             timeLimitMs: 5000,
             pairingTimeMs: 2500,
             repairTimeMs: 2500,
-            allowFallback: true
+            allowFallback: true,
+            prioritizeGamesPlayed: true,
+            maxGamesDiscrepancy: 1
         });
 
         if (!result.success && result.rematchCount > 0) {
