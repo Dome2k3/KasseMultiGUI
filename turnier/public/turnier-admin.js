@@ -10,11 +10,19 @@ let teams = [];
 let spiele = [];
 let phasen = [];
 let currentAdminTab = 'config';
+let meldungenPollInterval = null;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
     loadTurniere();
     createToastContainer();
+    
+    // Poll for new meldungen every 30 seconds
+    meldungenPollInterval = setInterval(() => {
+        if (currentTurnierId) {
+            loadMeldungen();
+        }
+    }, 30000);
 });
 
 // ==========================================
@@ -1082,6 +1090,29 @@ async function saveResult() {
 // PENDING RESULTS (MELDUNGEN)
 // ==========================================
 
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('result-notification-badge');
+    const countEl = document.getElementById('notification-count');
+    
+    if (count > 0) {
+        countEl.textContent = count;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function showMeldungenTab() {
+    // Switch to games tab (where meldungen section is located)
+    switchAdminTab('games');
+    
+    // Scroll to meldungen section
+    const meldungenSection = document.getElementById('meldungen-container').closest('.card');
+    if (meldungenSection) {
+        meldungenSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
 async function loadMeldungen() {
     if (!currentTurnierId) return;
 
@@ -1090,6 +1121,9 @@ async function loadMeldungen() {
         const meldungen = await res.json();
 
         const container = document.getElementById('meldungen-container');
+        
+        // Update notification badge
+        updateNotificationBadge(meldungen.length);
 
         if (meldungen.length === 0) {
             container.innerHTML = '<p class="empty-state">Keine offenen Meldungen</p>';

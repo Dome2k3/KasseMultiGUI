@@ -972,3 +972,53 @@ textarea {
     color: var(--info);
     font-style: italic;
 }
+
+/* Result Notification Badge */
+.result-notification-badge {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--danger);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 25px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: pulse 2s infinite;
+    z-index: 1000;
+    font-weight: 600;
+}
+
+.result-notification-badge:hover {
+    background: #c62828;
+    transform: scale(1.05);
+}
+
+#notification-count {
+    background: white;
+    color: var(--danger);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.notification-text {
+    font-size: 0.95rem;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    50% {
+        box-shadow: 0 4px 16px rgba(244, 67, 54, 0.6);
+    }
+}
