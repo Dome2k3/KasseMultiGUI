@@ -23,6 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
             loadMeldungen();
         }
     }, 30000);
+    
+    // Add keyboard event handlers for collapsible sections
+    setupCollapsibleKeyboardHandlers();
 });
 
 // Cleanup polling when page unloads
@@ -32,6 +35,19 @@ window.addEventListener('beforeunload', () => {
         meldungenPollInterval = null;
     }
 });
+
+// Setup keyboard handlers for collapsible sections
+function setupCollapsibleKeyboardHandlers() {
+    const collapsibles = document.querySelectorAll('.collapsible[role="button"]');
+    collapsibles.forEach(element => {
+        element.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                element.click();
+            }
+        });
+    });
+}
 
 // ==========================================
 // TAB NAVIGATION
