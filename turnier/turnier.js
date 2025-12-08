@@ -1239,6 +1239,18 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
         }
         const config = configRows[0];
 
+        // Check if tournament has already been started
+        const [existingGames] = await db.query(
+            'SELECT COUNT(*) as count FROM turnier_spiele WHERE turnier_id = ?',
+            [turnierId]
+        );
+        
+        if (existingGames[0].count > 0) {
+            return res.status(400).json({ 
+                error: 'Turnier wurde bereits gestartet. Bitte verwenden Sie den Reset-Button, um das Turnier zurückzusetzen.' 
+            });
+        }
+
         // Route to appropriate start function based on mode
         if (config.modus === 'swiss_144') {
             return await startSwiss144Tournament(turnierId, config, res);

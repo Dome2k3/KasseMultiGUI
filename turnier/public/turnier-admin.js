@@ -764,6 +764,7 @@ async function loadSpiele() {
 
         renderGameOverview();
         renderSpieleTable();
+        updateTournamentControls();
     } catch (err) {
         console.error('Error loading games:', err);
     }
@@ -1124,6 +1125,22 @@ async function rejectMeldung(meldungId) {
 // TOURNAMENT CONTROL
 // ==========================================
 
+function updateTournamentControls() {
+    // Enable/disable start button based on whether tournament has already started
+    const startBtn = document.querySelector('button[onclick="startTurnier()"]');
+    if (startBtn && spiele.length > 0) {
+        startBtn.disabled = true;
+        startBtn.title = 'Turnier wurde bereits gestartet. Verwenden Sie Reset, um neu zu starten.';
+        startBtn.style.opacity = '0.5';
+        startBtn.style.cursor = 'not-allowed';
+    } else if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.title = 'Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)';
+        startBtn.style.opacity = '1';
+        startBtn.style.cursor = 'pointer';
+    }
+}
+
 async function startTurnier() {
     if (!currentTurnierId) return;
 
@@ -1239,6 +1256,7 @@ async function resetTurnier() {
             showToast('Turnier zurückgesetzt', 'success');
             await loadSpiele();
             await loadMeldungen();
+            updateTournamentControls(); // Re-enable start button after reset
         } else {
             showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
         }
