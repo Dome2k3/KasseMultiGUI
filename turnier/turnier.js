@@ -137,6 +137,10 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
 
 // Helper: Try to create next round games dynamically for Swiss 144
 // This allows Round 2+ games to start as soon as enough Round 1 teams have finished
+// NOTE: This is infrastructure for future implementation. Currently monitors progress
+// but doesn't create games until round completes (safe existing behavior maintained).
+// Full implementation requires: partial round Swiss pairing, score-based matching,
+// and Hobby Cup interleaving logic.
 async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
     try {
         const nextRunde = currentRunde + 1;
@@ -190,11 +194,15 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
             return;
         }
         
-        console.log(`[Dynamic Swiss] Creating partial next round games for ready teams`);
+        console.log(`[Dynamic Swiss] Threshold reached - ready for dynamic pairing (not yet implemented)`);
         
-        // This is a simplified dynamic pairing - in reality we'd need more sophisticated logic
-        // For now, we'll just note this and let the full round completion handle it
-        // To implement fully: would need to pair finished teams with same score dynamically
+        // TODO: Implement dynamic pairing logic here
+        // Would need to:
+        // 1. Pair finished teams with same score (Swiss pairing rules)
+        // 2. Check opponent history to avoid rematches
+        // 3. Assign to available fields
+        // 4. Create games in database
+        // 5. Potentially interleave Hobby Cup games
         
     } catch (err) {
         console.error('Error in dynamic Swiss progression:', err);

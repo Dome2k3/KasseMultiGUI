@@ -1022,3 +1022,10 @@ textarea {
         box-shadow: 0 4px 16px rgba(244, 67, 54, 0.6);
     }
 }
+
+/* Accessibility: Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    .result-notification-badge {
+        animation: none;
+    }
+}

@@ -495,26 +495,51 @@ function updateTeamStats() {
     document.getElementById('team-klasse-breakdown').textContent = `(A: ${klasseA}, B: ${klasseB}, C: ${klasseC}, D: ${klasseD})`;
 }
 
+// Cache for team statistics to avoid recalculation
+let teamStatsCache = {};
+
+function calculateAllTeamStats() {
+    // Reset cache
+    teamStatsCache = {};
+    
+    // Pre-calculate stats for all teams in one pass through games
+    teams.forEach(team => {
+        teamStatsCache[team.id] = { gamesPlayed: 0, refCount: 0 };
+    });
+    
+    // Single pass through games to calculate all statistics
+    spiele.forEach(spiel => {
+        if (spiel.status === 'beendet') {
+            // Count games played
+            if (spiel.team1_id && teamStatsCache[spiel.team1_id]) {
+                teamStatsCache[spiel.team1_id].gamesPlayed++;
+            }
+            if (spiel.team2_id && teamStatsCache[spiel.team2_id]) {
+                teamStatsCache[spiel.team2_id].gamesPlayed++;
+            }
+            
+            // Count referee duties
+            if (spiel.schiedsrichter_name) {
+                const refTeam = teams.find(t => t.team_name === spiel.schiedsrichter_name);
+                if (refTeam && teamStatsCache[refTeam.id]) {
+                    teamStatsCache[refTeam.id].refCount++;
+                }
+            }
+        }
+    });
+}
+
 function getTeamGameStats(teamId) {
-    // Count games where this team participated
-    const gamesPlayed = spiele.filter(s => 
-        (s.team1_id === teamId || s.team2_id === teamId) && 
-        s.status === 'beendet'
-    ).length;
-    
-    // Count games where this team was referee (schiedsrichter_name matches team name)
-    const team = teams.find(t => t.id === teamId);
-    const refCount = team ? spiele.filter(s => 
-        s.schiedsrichter_name === team.team_name && 
-        s.status === 'beendet'
-    ).length : 0;
-    
-    return { gamesPlayed, refCount };
+    // Return cached stats or default values
+    return teamStatsCache[teamId] || { gamesPlayed: 0, refCount: 0 };
 }
 
 function renderTeamsTable() {
     const tbody = document.querySelector('#teams-table tbody');
     tbody.innerHTML = '';
+
+    // Recalculate team statistics before rendering
+    calculateAllTeamStats();
 
     const search = document.getElementById('team-search').value.toLowerCase();
     const klasseFilter = document.getElementById('team-filter-klasse').value;
