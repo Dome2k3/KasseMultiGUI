@@ -24,7 +24,14 @@ response=$(curl -s -X POST "$BASE_URL/api/turniere/$TURNIER_ID/test/batch-comple
   -d "{\"count\": $COUNT}")
 
 echo "Response:"
-echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+# Try to format JSON with jq or python3, fallback to plain output
+if command -v jq &> /dev/null; then
+    echo "$response" | jq 2>/dev/null || echo "$response"
+elif command -v python3 &> /dev/null; then
+    echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+else
+    echo "$response"
+fi
 echo ""
 echo "=========================================="
 echo "Done!"

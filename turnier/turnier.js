@@ -2860,10 +2860,10 @@ app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) 
         const { count = 10 } = req.body;
 
         // Input validation for count parameter
-        const validatedCount = parseInt(count, 10);
-        if (isNaN(validatedCount) || validatedCount < 1 || validatedCount > 100) {
+        const validatedCount = Number(count);
+        if (!Number.isInteger(validatedCount) || validatedCount < 1 || validatedCount > 100) {
             return res.status(400).json({ 
-                error: 'Invalid count parameter. Must be a number between 1 and 100.' 
+                error: 'Invalid count parameter. Must be an integer between 1 and 100.' 
             });
         }
 
@@ -2919,9 +2919,14 @@ app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) 
                 [ergebnis_team1, ergebnis_team2, gewinnerId, verliererId, game.id]
             );
 
-            // Record opponent relationship for Swiss tracking
+            // Record opponent relationship for Swiss tracking (after successful update)
             if (game.team1_id && game.team2_id) {
-                await recordOpponent(turnierId, game.team1_id, game.team2_id, game.id, game.runde);
+                try {
+                    await recordOpponent(turnierId, game.team1_id, game.team2_id, game.id, game.runde);
+                } catch (opponentErr) {
+                    console.error(`Error recording opponent for game ${game.id}:`, opponentErr);
+                    // Continue with tournament progression even if opponent recording fails
+                }
             }
 
             // Progress based on tournament mode
