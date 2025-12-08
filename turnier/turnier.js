@@ -194,6 +194,37 @@ async function createSwissGames(turnierId, phaseId, nextRunde, pairings, felder)
     
     for (let i = 0; i < pairings.length; i++) {
         const pair = pairings[i];
+        
+        // Safety check: Verify teams don't already have a game in this round
+        if (pair.teamA) {
+            const [existingGame] = await db.query(
+                `SELECT id FROM turnier_spiele 
+                 WHERE turnier_id = ? AND phase_id = ? AND runde = ? 
+                 AND (team1_id = ? OR team2_id = ?)`,
+                [turnierId, phaseId, nextRunde, pair.teamA.id, pair.teamA.id]
+            );
+            if (existingGame.length > 0) {
+                if (process.env.DEBUG_SWISS === 'true') {
+                    console.log(`[Dynamic Swiss] Skipping duplicate: Team ${pair.teamA.id} already has game in round ${nextRunde}`);
+                }
+                continue;
+            }
+        }
+        if (pair.teamB) {
+            const [existingGame] = await db.query(
+                `SELECT id FROM turnier_spiele 
+                 WHERE turnier_id = ? AND phase_id = ? AND runde = ? 
+                 AND (team1_id = ? OR team2_id = ?)`,
+                [turnierId, phaseId, nextRunde, pair.teamB.id, pair.teamB.id]
+            );
+            if (existingGame.length > 0) {
+                if (process.env.DEBUG_SWISS === 'true') {
+                    console.log(`[Dynamic Swiss] Skipping duplicate: Team ${pair.teamB.id} already has game in round ${nextRunde}`);
+                }
+                continue;
+            }
+        }
+        
         const bestCode = generateConfirmationCode();
         
         // Assign field if available
@@ -479,66 +510,113 @@ async function progressSwissTournament(turnierId, completedGame) {
 
             // Generate next round pairings
             const nextRunde = completedGame.runde + 1;
-            const pairings = await generateNextSwissRound(turnierId, nextRunde);
-
-            // Get available fields
-            const [felder] = await db.query(
-                'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
-                [turnierId]
+            
+            // Check if any games were already created dynamically for next round
+            const [existingNextGames] = await db.query(
+                'SELECT COUNT(*) as count FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = ?',
+                [turnierId, completedGame.phase_id, nextRunde]
             );
-
-            // Get max spiel_nummer
-            const [maxSpielResult] = await db.query(
-                'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
-                [turnierId]
-            );
-            let spielNummer = (maxSpielResult[0].max_nr || 0) + 1;
-
-            // Create games for next round
-            for (let i = 0; i < pairings.length; i++) {
-                const pair = pairings[i];
-                const bestCode = generateConfirmationCode();
-
-                // Assign field to first N games
-                let feldId = null;
-                let geplante_zeit = null;
-                let status = 'wartend';
-
-                if (i < felder.length) {
-                    feldId = felder[i].id;
-                    geplante_zeit = new Date();
-                    status = 'geplant';
+            
+            if (existingNextGames[0].count > 0) {
+                console.log(`Round ${nextRunde} already has ${existingNextGames[0].count} games (created dynamically) - completing remaining pairings`);
+                
+                // Get teams that still need pairing
+                const pairedTeamsSet = await getUnpairedTeamsInRound(turnierId, completedGame.phase_id, nextRunde);
+                const allStandings = await getSwissStandings(turnierId);
+                const unpairedTeams = allStandings.filter(t => !pairedTeamsSet.has(t.id));
+                
+                if (unpairedTeams.length >= 2) {
+                    // Create pairings for remaining teams
+                    const pairingTeams = unpairedTeams.map(t => ({
+                        id: t.id,
+                        score: t.swiss_score || 0,
+                        buchholz: t.buchholz || 0,
+                        initialSeed: t.initial_seed || 999,
+                        opponents: t.opponents || []
+                    }));
+                    
+                    const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
+                        timeLimitMs: 5000,
+                        pairingTimeMs: 2500,
+                        repairTimeMs: 2500,
+                        allowFallback: true
+                    });
+                    
+                    // Get available fields
+                    const [felder] = await db.query(
+                        'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+                        [turnierId]
+                    );
+                    
+                    // Create remaining games
+                    const remainingGames = await createSwissGames(turnierId, completedGame.phase_id, nextRunde, result.pairs, felder);
+                    console.log(`Created ${remainingGames.length} remaining pairings for round ${nextRunde}`);
+                } else {
+                    console.log(`All teams already paired for round ${nextRunde}`);
                 }
+            } else {
+                // No dynamic games were created - create full round normally
+                const pairings = await generateNextSwissRound(turnierId, nextRunde);
 
-                const [result] = await db.query(
-                    `INSERT INTO turnier_spiele 
-                    (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [turnierId, completedGame.phase_id, nextRunde, spielNummer++,
-                     pair.teamA.id, pair.teamB ? pair.teamB.id : null,
-                     feldId, geplante_zeit, pair.isBye ? 'beendet' : status, bestCode]
+                // Get available fields
+                const [felder] = await db.query(
+                    'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+                    [turnierId]
                 );
 
-                // If bye, record the win immediately
-                if (pair.isBye) {
-                    await db.query(
-                        'UPDATE turnier_spiele SET gewinner_id = ?, status = "beendet" WHERE id = ?',
-                        [pair.teamA.id, result.insertId]
+                // Get max spiel_nummer
+                const [maxSpielResult] = await db.query(
+                    'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+                    [turnierId]
+                );
+                let spielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+
+                // Create games for next round
+                for (let i = 0; i < pairings.length; i++) {
+                    const pair = pairings[i];
+                    const bestCode = generateConfirmationCode();
+
+                    // Assign field to first N games
+                    let feldId = null;
+                    let geplante_zeit = null;
+                    let status = 'wartend';
+
+                    if (i < felder.length) {
+                        feldId = felder[i].id;
+                        geplante_zeit = new Date();
+                        status = 'geplant';
+                    }
+
+                    const [result] = await db.query(
+                        `INSERT INTO turnier_spiele 
+                        (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [turnierId, completedGame.phase_id, nextRunde, spielNummer++,
+                         pair.teamA.id, pair.teamB ? pair.teamB.id : null,
+                         feldId, geplante_zeit, pair.isBye ? 'beendet' : status, bestCode]
                     );
+
+                    // If bye, record the win immediately
+                    if (pair.isBye) {
+                        await db.query(
+                            'UPDATE turnier_spiele SET gewinner_id = ?, status = "beendet" WHERE id = ?',
+                            [pair.teamA.id, result.insertId]
+                        );
+                    }
+
+                    // Assign referee team to this game if it has a field
+                    if (feldId) {
+                        await assignRefereeTeam(turnierId, result.insertId);
+                    }
+
+                    // Record opponent relationship
+                    if (pair.teamB) {
+                        await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, result.insertId, nextRunde);
+                    }
                 }
 
-                // Assign referee team to this game if it has a field
-                if (feldId) {
-                    await assignRefereeTeam(turnierId, result.insertId);
-                }
-
-                // Record opponent relationship
-                if (pair.teamB) {
-                    await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, result.insertId, nextRunde);
-                }
+                console.log(`Generated ${pairings.length} pairings for round ${nextRunde}`);
             }
-
-            console.log(`Generated ${pairings.length} pairings for round ${nextRunde}`);
         }
     } catch (err) {
         console.error('Error progressing Swiss tournament:', err);
