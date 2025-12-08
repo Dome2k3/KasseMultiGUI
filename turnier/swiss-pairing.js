@@ -8,7 +8,8 @@
  *   score: number (0.5 for each win),
  *   buchholz: number (sum of opponents' scores),
  *   initialSeed: number (1-128, lower is better),
- *   opponents: [opponent_ids...] (array of team IDs already faced)
+ *   opponents: [opponent_ids...] (array of team IDs already faced),
+ *   gamesPlayed: number (count of games played - used for prioritization)
  * }
  */
 
@@ -25,6 +26,8 @@ const DEFAULT_OPTIONS = {
     allowFallback: true,
     floaterSelection: 'weakest', // 'weakest' or 'strongest'
     halfSplit: true, // Use half-split for candidate ordering
+    prioritizeGamesPlayed: true, // Prioritize teams with fewer games played (anti-runaway logic)
+    maxGamesDiscrepancy: 1, // Maximum allowed difference in games played between teams
 };
 
 // ==========================================
@@ -47,12 +50,28 @@ function computeSwissPairings(teams, roundNumber, options = {}) {
         return { success: false, pairs: [], rematchCount: 0, error: 'Not enough teams' };
     }
 
+    // Filter teams by gamesPlayed discrepancy (anti-runaway logic)
+    // Only pair teams if their gamesPlayed is within the allowed discrepancy
+    let eligibleTeams = teams;
+    if (opts.prioritizeGamesPlayed && roundNumber > 1) {
+        const minGamesPlayed = Math.min(...teams.map(t => t.gamesPlayed || 0));
+        const maxAllowedGames = minGamesPlayed + opts.maxGamesDiscrepancy;
+        
+        eligibleTeams = teams.filter(t => (t.gamesPlayed || 0) <= maxAllowedGames);
+        
+        // If filtering leaves us with fewer than 2 teams, use all teams
+        // (this ensures we can always make pairings even if some teams are ahead)
+        if (eligibleTeams.length < 2) {
+            eligibleTeams = teams;
+        }
+    }
+
     // Odd number of teams - add a bye (dummy opponent)
-    let teamsWithBye = [...teams];
+    let teamsWithBye = [...eligibleTeams];
     let byeTeam = null;
-    if (teams.length % 2 === 1) {
+    if (eligibleTeams.length % 2 === 1) {
         // Find team with lowest score who hasn't had a bye
-        const byeCandidates = teams
+        const byeCandidates = eligibleTeams
             .filter(t => !t.hadBye)
             .sort((a, b) => {
                 if (a.score !== b.score) return a.score - b.score;
@@ -62,7 +81,7 @@ function computeSwissPairings(teams, roundNumber, options = {}) {
         
         if (byeCandidates.length > 0) {
             byeTeam = byeCandidates[0];
-            teamsWithBye = teams.filter(t => t.id !== byeTeam.id);
+            teamsWithBye = eligibleTeams.filter(t => t.id !== byeTeam.id);
         }
     }
 
@@ -178,9 +197,10 @@ function pairRound1Dutch(teams, opts) {
 
 /**
  * Quick greedy pairing with score groups and half-split
+ * Prioritizes teams with fewer games played if enabled
  */
 function quickGreedyPairing(teams, opts) {
-    const groups = groupByScore(teams);
+    const groups = groupByScore(teams, opts.prioritizeGamesPlayed);
     const pairs = [];
     let rematchCount = 0;
 
@@ -363,13 +383,14 @@ function repairPairingsGreedySwap(initialPairs, teamMap, options = {}) {
 
 /**
  * Iterative DFS pairing with explicit stack (no recursion)
+ * Prioritizes teams with fewer games played if enabled
  */
 function computeSwissPairingsIterative(teams, roundNumber, options = {}) {
     const startTime = Date.now();
     const timeLimit = options.pairingTimeMs || 2000;
     const maxIterations = options.maxIterations || 20000;
     
-    const groups = groupByScore(teams);
+    const groups = groupByScore(teams, options.prioritizeGamesPlayed);
     const allPairs = [];
     let totalRematches = 0;
     let iterations = 0;
@@ -494,25 +515,66 @@ function pairWithinGroupIterative(teamList, opts) {
 // ==========================================
 
 /**
- * Group teams by score
+ * Group teams by score, with optional gamesPlayed prioritization
  */
-function groupByScore(teams) {
-    const scoreMap = new Map();
-    
-    for (const team of teams) {
-        const score = team.score || 0;
-        if (!scoreMap.has(score)) {
-            scoreMap.set(score, []);
+function groupByScore(teams, prioritizeGamesPlayed = false) {
+    if (prioritizeGamesPlayed) {
+        // Group by gamesPlayed first (ascending - fewer games = higher priority)
+        // Then by score within each gamesPlayed group
+        const gamesPlayedMap = new Map();
+        
+        for (const team of teams) {
+            const gamesPlayed = team.gamesPlayed || 0;
+            if (!gamesPlayedMap.has(gamesPlayed)) {
+                gamesPlayedMap.set(gamesPlayed, []);
+            }
+            gamesPlayedMap.get(gamesPlayed).push(team);
         }
-        scoreMap.get(score).push(team);
+        
+        // Sort gamesPlayed groups ascending (fewer games first)
+        const sortedGamesPlayedGroups = Array.from(gamesPlayedMap.entries())
+            .sort((a, b) => a[0] - b[0]);
+        
+        // Within each gamesPlayed group, further group by score
+        const allGroups = [];
+        for (const [gamesPlayed, teamsInGroup] of sortedGamesPlayedGroups) {
+            const scoreMap = new Map();
+            for (const team of teamsInGroup) {
+                const score = team.score || 0;
+                if (!scoreMap.has(score)) {
+                    scoreMap.set(score, []);
+                }
+                scoreMap.get(score).push(team);
+            }
+            
+            // Sort by score descending within this gamesPlayed group
+            const scoreGroups = Array.from(scoreMap.entries())
+                .sort((a, b) => b[0] - a[0])
+                .map(entry => entry[1]);
+            
+            allGroups.push(...scoreGroups);
+        }
+        
+        return allGroups;
+    } else {
+        // Original behavior: group by score only
+        const scoreMap = new Map();
+        
+        for (const team of teams) {
+            const score = team.score || 0;
+            if (!scoreMap.has(score)) {
+                scoreMap.set(score, []);
+            }
+            scoreMap.get(score).push(team);
+        }
+
+        // Sort groups by score descending
+        const groups = Array.from(scoreMap.entries())
+            .sort((a, b) => b[0] - a[0])
+            .map(entry => entry[1]);
+
+        return groups;
     }
-
-    // Sort groups by score descending
-    const groups = Array.from(scoreMap.entries())
-        .sort((a, b) => b[0] - a[0])
-        .map(entry => entry[1]);
-
-    return groups;
 }
 
 /**

@@ -346,15 +346,18 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
             score: t.swiss_score || 0,
             buchholz: t.buchholz || 0,
             initialSeed: t.initial_seed || 999,
-            opponents: t.opponents || []
+            opponents: t.opponents || [],
+            gamesPlayed: t.opponents ? t.opponents.length : 0
         }));
         
-        // Compute pairings for ready teams
+        // Compute pairings for ready teams with gamesPlayed prioritization
         const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
             timeLimitMs: 5000,
             pairingTimeMs: 2500,
             repairTimeMs: 2500,
-            allowFallback: true
+            allowFallback: true,
+            prioritizeGamesPlayed: true,
+            maxGamesDiscrepancy: 1
         });
         
         if (!result.success && result.rematchCount > 0) {
@@ -538,14 +541,17 @@ async function progressSwissTournament(turnierId, completedGame) {
                         score: t.swiss_score || 0,
                         buchholz: t.buchholz || 0,
                         initialSeed: t.initial_seed || 999,
-                        opponents: t.opponents || []
+                        opponents: t.opponents || [],
+                        gamesPlayed: t.opponents ? t.opponents.length : 0
                     }));
                     
                     const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
                         timeLimitMs: 5000,
                         pairingTimeMs: 2500,
                         repairTimeMs: 2500,
-                        allowFallback: true
+                        allowFallback: true,
+                        prioritizeGamesPlayed: true,
+                        maxGamesDiscrepancy: 1
                     });
                     
                     // Get available fields
@@ -1582,15 +1588,18 @@ async function generateNextSwissRound(turnierId, nextRunde) {
             score: t.swiss_score || 0,
             buchholz: t.buchholz || 0,
             initialSeed: t.initial_seed || 999,
-            opponents: t.opponents || []
+            opponents: t.opponents || [],
+            gamesPlayed: t.opponents ? t.opponents.length : 0
         }));
 
-        // Compute pairings
+        // Compute pairings with gamesPlayed prioritization
         const result = swissPairing.computeSwissPairings(pairingTeams, nextRunde, {
             timeLimitMs: 5000,
             pairingTimeMs: 2500,
             repairTimeMs: 2500,
-            allowFallback: true
+            allowFallback: true,
+            prioritizeGamesPlayed: true,
+            maxGamesDiscrepancy: 1
         });
 
         if (!result.success && result.rematchCount > 0) {
