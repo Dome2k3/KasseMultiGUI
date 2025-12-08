@@ -1075,13 +1075,18 @@ function toggleControlSection() {
     controlSectionCollapsed = !controlSectionCollapsed;
     const container = document.getElementById('control-section-content');
     const icon = document.getElementById('control-toggle-icon');
+    const header = container.previousElementSibling;
     
     if (controlSectionCollapsed) {
         container.classList.add('collapsed');
+        container.setAttribute('aria-hidden', 'true');
         icon.textContent = '▶';
+        if (header) header.setAttribute('aria-expanded', 'false');
     } else {
         container.classList.remove('collapsed');
+        container.setAttribute('aria-hidden', 'false');
         icon.textContent = '▼';
+        if (header) header.setAttribute('aria-expanded', 'true');
     }
 }
 
@@ -1089,13 +1094,18 @@ function toggleOverviewSection() {
     overviewSectionCollapsed = !overviewSectionCollapsed;
     const container = document.getElementById('overview-section-content');
     const icon = document.getElementById('overview-toggle-icon');
+    const header = container.previousElementSibling;
     
     if (overviewSectionCollapsed) {
         container.classList.add('collapsed');
+        container.setAttribute('aria-hidden', 'true');
         icon.textContent = '▶';
+        if (header) header.setAttribute('aria-expanded', 'false');
     } else {
         container.classList.remove('collapsed');
+        container.setAttribute('aria-hidden', 'false');
         icon.textContent = '▼';
+        if (header) header.setAttribute('aria-expanded', 'true');
     }
 }
 
@@ -1103,13 +1113,18 @@ function toggleMeldungenSection() {
     meldungenSectionCollapsed = !meldungenSectionCollapsed;
     const container = document.getElementById('meldungen-section-content');
     const icon = document.getElementById('meldungen-toggle-icon');
+    const header = container.previousElementSibling;
     
     if (meldungenSectionCollapsed) {
         container.classList.add('collapsed');
+        container.setAttribute('aria-hidden', 'true');
         icon.textContent = '▶';
+        if (header) header.setAttribute('aria-expanded', 'false');
     } else {
         container.classList.remove('collapsed');
+        container.setAttribute('aria-hidden', 'false');
         icon.textContent = '▼';
+        if (header) header.setAttribute('aria-expanded', 'true');
     }
 }
 
@@ -1117,13 +1132,18 @@ function toggleDetailedGamesSection() {
     detailedGamesSectionCollapsed = !detailedGamesSectionCollapsed;
     const container = document.getElementById('detailed-games-section-content');
     const icon = document.getElementById('detailed-games-toggle-icon');
+    const header = container.previousElementSibling;
     
     if (detailedGamesSectionCollapsed) {
         container.classList.add('collapsed');
+        container.setAttribute('aria-hidden', 'true');
         icon.textContent = '▶';
+        if (header) header.setAttribute('aria-expanded', 'false');
     } else {
         container.classList.remove('collapsed');
+        container.setAttribute('aria-hidden', 'false');
         icon.textContent = '▼';
+        if (header) header.setAttribute('aria-expanded', 'true');
     }
 }
 

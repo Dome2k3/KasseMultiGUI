@@ -212,10 +212,10 @@
             <div id="tab-games" class="tab-content">
                 <!-- Games Control Section -->
                 <section class="card">
-                    <h2 class="section-title collapsible" onclick="toggleControlSection()">
+                    <h2 class="section-title collapsible" onclick="toggleControlSection()" role="button" tabindex="0" aria-expanded="false" aria-controls="control-section-content">
                         <span id="control-toggle-icon">▶</span> 🎮 Turnier-Steuerung
                     </h2>
-                    <div class="collapsed" id="control-section-content">
+                    <div class="collapsed" id="control-section-content" aria-hidden="true">
                         <div class="control-buttons">
                             <button class="btn btn-success btn-large" onclick="startTurnier()" title="Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)">▶️ Turnier starten</button>
                             <button class="btn btn-primary" onclick="autoAssignFields()" title="Felder zuweisen: Weist automatisch allen wartenden Spielen (status='geplant') ein freies Feld zu. Nützlich wenn Spiele manuell erstellt wurden.">📍 Felder zuweisen</button>
@@ -228,10 +228,10 @@
 
                 <!-- Games Overview Section -->
                 <section class="card">
-                    <h2 class="section-title collapsible" onclick="toggleOverviewSection()">
+                    <h2 class="section-title collapsible" onclick="toggleOverviewSection()" role="button" tabindex="0" aria-expanded="false" aria-controls="overview-section-content">
                         <span id="overview-toggle-icon">▶</span> 🎯 Spiele-Übersicht
                     </h2>
-                    <div class="collapsed" id="overview-section-content">
+                    <div class="collapsed" id="overview-section-content" aria-hidden="true">
                         <!-- Active Games on Fields -->
                         <div class="games-section">
                             <h3 class="section-title">🏐 Aktive Spiele auf Feldern</h3>
@@ -274,10 +274,10 @@
 
                 <!-- Pending Results Section - Moved above Detailed Games -->
                 <section class="card">
-                    <h2 class="section-title collapsible" onclick="toggleMeldungenSection()">
+                    <h2 class="section-title collapsible" onclick="toggleMeldungenSection()" role="button" tabindex="0" aria-expanded="false" aria-controls="meldungen-section-content">
                         <span id="meldungen-toggle-icon">▶</span> 📝 Gemeldete Ergebnisse
                     </h2>
-                    <div class="collapsed" id="meldungen-section-content">
+                    <div class="collapsed" id="meldungen-section-content" aria-hidden="true">
                         <div id="meldungen-container">
                             <p>Keine offenen Meldungen</p>
                         </div>
@@ -286,10 +286,10 @@
 
                 <!-- Detailed Games Table Section -->
                 <section class="card">
-                    <h2 class="section-title collapsible" onclick="toggleDetailedGamesSection()">
+                    <h2 class="section-title collapsible" onclick="toggleDetailedGamesSection()" role="button" tabindex="0" aria-expanded="false" aria-controls="detailed-games-section-content">
                         <span id="detailed-games-toggle-icon">▶</span> 📋 Alle Spiele (Detailansicht)
                     </h2>
-                    <div class="collapsed" id="detailed-games-section-content">
+                    <div class="collapsed" id="detailed-games-section-content" aria-hidden="true">
                         <div class="filter-row">
                             <select id="spiele-filter-phase" onchange="loadSpiele()">
                                 <option value="">Alle Phasen</option>
