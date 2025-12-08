@@ -471,9 +471,37 @@ async function loadTeams() {
 }
 
 function updateTeamStats() {
-    document.getElementById('team-count').textContent = teams.length;
-    document.getElementById('team-angemeldet').textContent = teams.filter(t => t.status === 'angemeldet').length;
-    document.getElementById('team-bestaetigt').textContent = teams.filter(t => t.status === 'bestaetigt').length;
+    const totalCount = teams.length;
+    const angemeldetCount = teams.filter(t => t.status === 'angemeldet').length;
+    const bestaetigtCount = teams.filter(t => t.status === 'bestaetigt').length;
+    
+    // Count by category
+    const klasseA = teams.filter(t => t.klasse === 'A').length;
+    const klasseB = teams.filter(t => t.klasse === 'B').length;
+    const klasseC = teams.filter(t => t.klasse === 'C').length;
+    const klasseD = teams.filter(t => t.klasse === 'D').length;
+    
+    document.getElementById('team-count').textContent = totalCount;
+    document.getElementById('team-angemeldet').textContent = angemeldetCount;
+    document.getElementById('team-bestaetigt').textContent = bestaetigtCount;
+    document.getElementById('team-klasse-breakdown').textContent = `(A: ${klasseA}, B: ${klasseB}, C: ${klasseC}, D: ${klasseD})`;
+}
+
+function getTeamGameStats(teamId) {
+    // Count games where this team participated
+    const gamesPlayed = spiele.filter(s => 
+        (s.team1_id === teamId || s.team2_id === teamId) && 
+        s.status === 'beendet'
+    ).length;
+    
+    // Count games where this team was referee (schiedsrichter_name matches team name)
+    const team = teams.find(t => t.id === teamId);
+    const refCount = team ? spiele.filter(s => 
+        s.schiedsrichter_name === team.team_name && 
+        s.status === 'beendet'
+    ).length : 0;
+    
+    return { gamesPlayed, refCount };
 }
 
 function renderTeamsTable() {
@@ -492,7 +520,7 @@ function renderTeamsTable() {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Keine Teams gefunden</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="empty-state">Keine Teams gefunden</td></tr>';
         updateTeamsShowMoreButton(0, 0);
         return;
     }
@@ -508,6 +536,8 @@ function renderTeamsTable() {
         const toggleBtnIcon = isAbgemeldet ? '✅' : '🚫';
         const toggleBtnTitle = isAbgemeldet ? 'Wieder anmelden' : 'Abmelden';
         
+        const stats = getTeamGameStats(team.id);
+        
         tr.innerHTML = `
             <td>${idx + 1}</td>
             <td>${escapeHtml(team.team_name)}</td>
@@ -516,6 +546,8 @@ function renderTeamsTable() {
             <td>${escapeHtml(team.verein || '-')}</td>
             <td>${escapeHtml(team.klasse || 'A')}</td>
             <td>${team.setzposition || 0}</td>
+            <td>${stats.gamesPlayed}</td>
+            <td>${stats.refCount}</td>
             <td><span class="status-badge status-${team.status || 'angemeldet'}">${team.status || 'angemeldet'}</span></td>
             <td class="action-btns">
                 <button class="btn btn-small btn-primary" onclick="editTeam(${team.id})">✏️</button>
@@ -874,7 +906,7 @@ function renderGameCards(containerId, games, type) {
                 <div class="game-card-footer">
                     <span>${formatDateTime(game.geplante_zeit)}</span>
                     <div class="game-card-actions">
-                        ${game.status === 'bereit' ? `<button class="btn btn-small btn-success" onclick="markGameAsRunning(${game.id})" title="Spielbogen abgeholt - Spiel läuft">▶️</button>` : ''}
+                        ${(game.status === 'geplant' || game.status === 'bereit') ? `<button class="btn btn-small btn-success" onclick="markGameAsRunning(${game.id})" title="Spielbogen abgeholt - Spiel läuft">▶️</button>` : ''}
                         <button class="btn btn-small btn-primary" onclick="showEditResultModal(${game.id})">✏️</button>
                     </div>
                 </div>
