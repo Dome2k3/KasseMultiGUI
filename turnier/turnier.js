@@ -135,6 +135,85 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
     }
 }
 
+// Helper: Try to create next round games dynamically for Swiss 144
+// This allows Round 2+ games to start as soon as enough Round 1 teams have finished
+// NOTE: This is infrastructure for future implementation. Currently monitors progress
+// but doesn't create games until round completes (safe existing behavior maintained).
+// Full implementation requires: partial round Swiss pairing, score-based matching,
+// and Hobby Cup interleaving logic.
+async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
+    try {
+        const nextRunde = currentRunde + 1;
+        
+        // Check if next round already has games created
+        const [existingNextRound] = await db.query(
+            'SELECT COUNT(*) as count FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = ?',
+            [turnierId, phaseId, nextRunde]
+        );
+        
+        // If next round already exists, skip
+        if (existingNextRound[0].count > 0) {
+            return;
+        }
+        
+        // Count teams that have finished current round
+        const [finishedTeams] = await db.query(
+            `SELECT DISTINCT 
+                CASE 
+                    WHEN s.team1_id IS NOT NULL THEN s.team1_id
+                    WHEN s.team2_id IS NOT NULL THEN s.team2_id
+                END as team_id
+             FROM turnier_spiele s
+             WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ? AND s.status = 'beendet'
+                AND (s.team1_id IS NOT NULL OR s.team2_id IS NOT NULL)`,
+            [turnierId, phaseId, currentRunde]
+        );
+        
+        const teamsReady = finishedTeams.length;
+        
+        // Need at least half the teams to have finished to start creating next round pairings
+        // For 56 pairs (112 teams), we need at least 56 teams finished (50%)
+        const [totalTeamsInRound] = await db.query(
+            `SELECT COUNT(DISTINCT 
+                CASE 
+                    WHEN s.team1_id IS NOT NULL THEN s.team1_id
+                    WHEN s.team2_id IS NOT NULL THEN s.team2_id
+                END) as count
+             FROM turnier_spiele s
+             WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ?`,
+            [turnierId, phaseId, currentRunde]
+        );
+        
+        const totalTeams = totalTeamsInRound[0].count;
+        const threshold = Math.floor(totalTeams * 0.5); // 50% threshold
+        
+        // Debug logging - can be disabled in production via environment variable
+        if (process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Round ${currentRunde}: ${teamsReady}/${totalTeams} teams finished (threshold: ${threshold})`);
+        }
+        
+        // Not enough teams finished yet
+        if (teamsReady < threshold) {
+            return;
+        }
+        
+        if (process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Threshold reached - ready for dynamic pairing (not yet implemented)`);
+        }
+        
+        // TODO: Implement dynamic pairing logic here
+        // Would need to:
+        // 1. Pair finished teams with same score (Swiss pairing rules)
+        // 2. Check opponent history to avoid rematches
+        // 3. Assign to available fields
+        // 4. Create games in database
+        // 5. Potentially interleave Hobby Cup games
+        
+    } catch (err) {
+        console.error(`Error in dynamic Swiss progression for tournament ${turnierId}, phase ${phaseId}, round ${currentRunde}:`, err);
+    }
+}
+
 // Helper: Get next letter in the alphabet
 function getNextPhaseLetter(currentLetter) {
     return String.fromCharCode(currentLetter.charCodeAt(0) + 1);
@@ -221,6 +300,15 @@ async function progressTournamentBracket(turnierId, completedGame, gewinnerId, v
 // Helper: Progress Swiss tournament after a game completes
 async function progressSwissTournament(turnierId, completedGame) {
     try {
+        // Check tournament mode for dynamic progression
+        const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
+        const isSwiss144 = config[0]?.modus === 'swiss_144';
+
+        // For Swiss 144, try dynamic progression after each game
+        if (isSwiss144 && completedGame.runde >= 1) {
+            await tryDynamicSwissProgression(turnierId, completedGame.phase_id, completedGame.runde);
+        }
+
         // Check if this round is complete
         const [roundGames] = await db.query(
             `SELECT COUNT(*) as total, 
@@ -247,7 +335,6 @@ async function progressSwissTournament(turnierId, completedGame) {
             }
 
             // Check if we've reached max rounds (7 for Swiss 144, configurable for others)
-            const [config] = await db.query('SELECT modus FROM turnier_config WHERE id = ?', [turnierId]);
             const maxRounds = config[0]?.modus === 'swiss_144' ? 7 : 5;
 
             if (completedGame.runde >= maxRounds) {
@@ -893,18 +980,19 @@ async function assignRefereeTeam(turnierId, spielId) {
             }
         } else {
             // Mode 2: Use playing teams as referees
-            // Prefer teams that just finished a game (won or lost) and aren't in waiting games
+            // Prefer teams that aren't currently playing (not in 'geplant', 'bereit', or 'laeuft' games)
+            // Teams in 'wartend' games (scheduled but not yet on a field) CAN be referees
             const [availableTeams] = await db.query(
                 `SELECT DISTINCT t.id, t.team_name,
                     MAX(s_finished.bestaetigt_zeit) as last_game_time
                  FROM turnier_teams t
                  LEFT JOIN turnier_spiele s_finished ON (t.id = s_finished.team1_id OR t.id = s_finished.team2_id)
                      AND s_finished.turnier_id = ? AND s_finished.status = 'beendet'
-                 LEFT JOIN turnier_spiele s_waiting ON (t.id = s_waiting.team1_id OR t.id = s_waiting.team2_id)
-                     AND s_waiting.turnier_id = ? AND s_waiting.status IN ('geplant', 'bereit', 'wartend')
+                 LEFT JOIN turnier_spiele s_active ON (t.id = s_active.team1_id OR t.id = s_active.team2_id)
+                     AND s_active.turnier_id = ? AND s_active.status IN ('geplant', 'bereit', 'laeuft')
                  WHERE t.turnier_id = ? 
                      AND t.status IN ('angemeldet', 'bestaetigt')
-                     AND s_waiting.id IS NULL
+                     AND s_active.id IS NULL
                  GROUP BY t.id, t.team_name
                  ORDER BY last_game_time DESC NULLS LAST, RAND()
                  LIMIT 1`,
@@ -1238,6 +1326,18 @@ app.post('/api/turniere/:turnierId/starten', async (req, res) => {
             return res.status(404).json({ error: 'Tournament not found' });
         }
         const config = configRows[0];
+
+        // Check if tournament has already been started
+        const [existingGames] = await db.query(
+            'SELECT COUNT(*) as count FROM turnier_spiele WHERE turnier_id = ?',
+            [turnierId]
+        );
+        
+        if (existingGames[0].count > 0) {
+            return res.status(400).json({ 
+                error: 'Turnier wurde bereits gestartet. Bitte verwenden Sie den Reset-Button, um das Turnier zurückzusetzen.' 
+            });
+        }
 
         // Route to appropriate start function based on mode
         if (config.modus === 'swiss_144') {

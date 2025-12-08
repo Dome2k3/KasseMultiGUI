@@ -10,11 +10,27 @@ let teams = [];
 let spiele = [];
 let phasen = [];
 let currentAdminTab = 'config';
+let meldungenPollInterval = null;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
     loadTurniere();
     createToastContainer();
+    
+    // Poll for new meldungen every 30 seconds
+    meldungenPollInterval = setInterval(() => {
+        if (currentTurnierId) {
+            loadMeldungen();
+        }
+    }, 30000);
+});
+
+// Cleanup polling when page unloads
+window.addEventListener('beforeunload', () => {
+    if (meldungenPollInterval) {
+        clearInterval(meldungenPollInterval);
+        meldungenPollInterval = null;
+    }
 });
 
 // ==========================================
@@ -471,14 +487,67 @@ async function loadTeams() {
 }
 
 function updateTeamStats() {
-    document.getElementById('team-count').textContent = teams.length;
-    document.getElementById('team-angemeldet').textContent = teams.filter(t => t.status === 'angemeldet').length;
-    document.getElementById('team-bestaetigt').textContent = teams.filter(t => t.status === 'bestaetigt').length;
+    const totalCount = teams.length;
+    const angemeldetCount = teams.filter(t => t.status === 'angemeldet').length;
+    const bestaetigtCount = teams.filter(t => t.status === 'bestaetigt').length;
+    
+    // Count by category
+    const klasseA = teams.filter(t => t.klasse === 'A').length;
+    const klasseB = teams.filter(t => t.klasse === 'B').length;
+    const klasseC = teams.filter(t => t.klasse === 'C').length;
+    const klasseD = teams.filter(t => t.klasse === 'D').length;
+    
+    document.getElementById('team-count').textContent = totalCount;
+    document.getElementById('team-angemeldet').textContent = angemeldetCount;
+    document.getElementById('team-bestaetigt').textContent = bestaetigtCount;
+    document.getElementById('team-klasse-breakdown').textContent = `(A: ${klasseA}, B: ${klasseB}, C: ${klasseC}, D: ${klasseD})`;
+}
+
+// Cache for team statistics to avoid recalculation
+let teamStatsCache = {};
+
+function calculateAllTeamStats() {
+    // Reset cache
+    teamStatsCache = {};
+    
+    // Pre-calculate stats for all teams in one pass through games
+    teams.forEach(team => {
+        teamStatsCache[team.id] = { gamesPlayed: 0, refCount: 0 };
+    });
+    
+    // Single pass through games to calculate all statistics
+    spiele.forEach(spiel => {
+        if (spiel.status === 'beendet') {
+            // Count games played
+            if (spiel.team1_id && teamStatsCache[spiel.team1_id]) {
+                teamStatsCache[spiel.team1_id].gamesPlayed++;
+            }
+            if (spiel.team2_id && teamStatsCache[spiel.team2_id]) {
+                teamStatsCache[spiel.team2_id].gamesPlayed++;
+            }
+            
+            // Count referee duties
+            if (spiel.schiedsrichter_name) {
+                const refTeam = teams.find(t => t.team_name === spiel.schiedsrichter_name);
+                if (refTeam && teamStatsCache[refTeam.id]) {
+                    teamStatsCache[refTeam.id].refCount++;
+                }
+            }
+        }
+    });
+}
+
+function getTeamGameStats(teamId) {
+    // Return cached stats or default values
+    return teamStatsCache[teamId] || { gamesPlayed: 0, refCount: 0 };
 }
 
 function renderTeamsTable() {
     const tbody = document.querySelector('#teams-table tbody');
     tbody.innerHTML = '';
+
+    // Recalculate team statistics before rendering
+    calculateAllTeamStats();
 
     const search = document.getElementById('team-search').value.toLowerCase();
     const klasseFilter = document.getElementById('team-filter-klasse').value;
@@ -491,8 +560,11 @@ function renderTeamsTable() {
         return true;
     });
 
+    // Constants for table structure
+    const TEAMS_TABLE_COLUMNS = 11; // #, Team, Ansprechpartner, E-Mail, Verein, Klasse, Setzpos, Spiele, Schiri, Status, Aktionen
+    
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Keine Teams gefunden</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${TEAMS_TABLE_COLUMNS}" class="empty-state">Keine Teams gefunden</td></tr>`;
         updateTeamsShowMoreButton(0, 0);
         return;
     }
@@ -508,6 +580,8 @@ function renderTeamsTable() {
         const toggleBtnIcon = isAbgemeldet ? '✅' : '🚫';
         const toggleBtnTitle = isAbgemeldet ? 'Wieder anmelden' : 'Abmelden';
         
+        const stats = getTeamGameStats(team.id);
+        
         tr.innerHTML = `
             <td>${idx + 1}</td>
             <td>${escapeHtml(team.team_name)}</td>
@@ -516,6 +590,8 @@ function renderTeamsTable() {
             <td>${escapeHtml(team.verein || '-')}</td>
             <td>${escapeHtml(team.klasse || 'A')}</td>
             <td>${team.setzposition || 0}</td>
+            <td>${stats.gamesPlayed}</td>
+            <td>${stats.refCount}</td>
             <td><span class="status-badge status-${team.status || 'angemeldet'}">${team.status || 'angemeldet'}</span></td>
             <td class="action-btns">
                 <button class="btn btn-small btn-primary" onclick="editTeam(${team.id})">✏️</button>
@@ -764,6 +840,7 @@ async function loadSpiele() {
 
         renderGameOverview();
         renderSpieleTable();
+        updateTournamentControls();
     } catch (err) {
         console.error('Error loading games:', err);
     }
@@ -873,7 +950,7 @@ function renderGameCards(containerId, games, type) {
                 <div class="game-card-footer">
                     <span>${formatDateTime(game.geplante_zeit)}</span>
                     <div class="game-card-actions">
-                        ${game.status === 'bereit' ? `<button class="btn btn-small btn-success" onclick="markGameAsRunning(${game.id})" title="Spielbogen abgeholt - Spiel läuft">▶️</button>` : ''}
+                        ${(game.status === 'geplant' || game.status === 'bereit') ? `<button class="btn btn-small btn-success" onclick="markGameAsRunning(${game.id})" title="Spielbogen abgeholt - Spiel läuft">▶️</button>` : ''}
                         <button class="btn btn-small btn-primary" onclick="showEditResultModal(${game.id})">✏️</button>
                     </div>
                 </div>
@@ -1049,6 +1126,29 @@ async function saveResult() {
 // PENDING RESULTS (MELDUNGEN)
 // ==========================================
 
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('result-notification-badge');
+    const countEl = document.getElementById('notification-count');
+    
+    if (count > 0) {
+        countEl.textContent = count;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function showMeldungenTab() {
+    // Switch to games tab (where meldungen section is located)
+    switchAdminTab('games');
+    
+    // Scroll to meldungen section
+    const meldungenSection = document.getElementById('meldungen-container').closest('.card');
+    if (meldungenSection) {
+        meldungenSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
 async function loadMeldungen() {
     if (!currentTurnierId) return;
 
@@ -1057,6 +1157,9 @@ async function loadMeldungen() {
         const meldungen = await res.json();
 
         const container = document.getElementById('meldungen-container');
+        
+        // Update notification badge
+        updateNotificationBadge(meldungen.length);
 
         if (meldungen.length === 0) {
             container.innerHTML = '<p class="empty-state">Keine offenen Meldungen</p>';
@@ -1123,6 +1226,22 @@ async function rejectMeldung(meldungId) {
 // ==========================================
 // TOURNAMENT CONTROL
 // ==========================================
+
+function updateTournamentControls() {
+    // Enable/disable start button based on whether tournament has already started
+    const startBtn = document.querySelector('button[onclick="startTurnier()"]');
+    if (startBtn && spiele.length > 0) {
+        startBtn.disabled = true;
+        startBtn.title = 'Turnier wurde bereits gestartet. Verwenden Sie Reset, um neu zu starten.';
+        startBtn.style.opacity = '0.5';
+        startBtn.style.cursor = 'not-allowed';
+    } else if (startBtn) {
+        startBtn.disabled = false;
+        startBtn.title = 'Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)';
+        startBtn.style.opacity = '1';
+        startBtn.style.cursor = 'pointer';
+    }
+}
 
 async function startTurnier() {
     if (!currentTurnierId) return;
@@ -1239,6 +1358,7 @@ async function resetTurnier() {
             showToast('Turnier zurückgesetzt', 'success');
             await loadSpiele();
             await loadMeldungen();
+            updateTournamentControls(); // Re-enable start button after reset
         } else {
             showToast('Fehler: ' + (data.error || 'Unbekannt'), 'error');
         }
