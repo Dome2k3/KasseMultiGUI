@@ -231,6 +231,7 @@ async function loadTurnier() {
 function showNewTurnierModal() {
     document.getElementById('new-turnier-name').value = '';
     document.getElementById('new-turnier-datum').value = '';
+    document.getElementById('new-turnier-datum-ende').value = '';
     document.getElementById('new-turnier-teams').value = '32';
     document.getElementById('new-turnier-felder').value = '4';
     openModal('new-turnier-modal');
@@ -239,6 +240,7 @@ function showNewTurnierModal() {
 async function createTurnier() {
     const name = document.getElementById('new-turnier-name').value.trim();
     const datum = document.getElementById('new-turnier-datum').value;
+    const datumEnde = document.getElementById('new-turnier-datum-ende').value || null;
     const anzahlTeams = parseInt(document.getElementById('new-turnier-teams').value, 10);
     const anzahlFelder = parseInt(document.getElementById('new-turnier-felder').value, 10);
     const modus = document.getElementById('new-turnier-modus').value;
@@ -256,6 +258,7 @@ async function createTurnier() {
             body: JSON.stringify({
                 turnier_name: name,
                 turnier_datum: datum,
+                turnier_datum_ende: datumEnde,
                 anzahl_teams: anzahlTeams,
                 anzahl_felder: anzahlFelder,
                 modus: modus,
@@ -317,6 +320,68 @@ async function saveConfig() {
     } catch (err) {
         console.error('Error saving config:', err);
         showToast('Fehler beim Speichern', 'error');
+    }
+}
+
+async function deleteTurnier() {
+    if (!currentTurnierId) return;
+
+    const turnier = turniere.find(t => t.id === parseInt(currentTurnierId, 10));
+    const turnierName = turnier ? turnier.turnier_name : 'dieses Turnier';
+
+    if (!confirm(`Möchten Sie ${turnierName} wirklich LÖSCHEN?\n\nDies löscht:\n- Das Turnier\n- Alle Teams\n- Alle Spiele\n- Alle Ergebnisse\n\nDiese Aktion kann nicht rückgängig gemacht werden!`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            showToast('Turnier gelöscht', 'success');
+            currentTurnierId = null;
+            document.getElementById('turnier-select').value = '';
+            document.getElementById('turnier-details').style.display = 'none';
+            await loadTurniere();
+        } else {
+            showToast('Fehler beim Löschen: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error deleting tournament:', err);
+        showToast('Fehler beim Löschen', 'error');
+    }
+}
+
+async function archiveTurnier() {
+    if (!currentTurnierId) return;
+
+    const turnier = turniere.find(t => t.id === parseInt(currentTurnierId, 10));
+    const turnierName = turnier ? turnier.turnier_name : 'dieses Turnier';
+
+    if (!confirm(`Möchten Sie ${turnierName} ARCHIVIEREN?\n\nArchivierte Turniere können nicht mehr bearbeitet werden.\nAlle Daten bleiben erhalten, aber keine Änderungen sind mehr möglich.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/turniere/${currentTurnierId}/archivieren`, {
+            method: 'POST'
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            showToast('Turnier archiviert', 'success');
+            await loadTurniere();
+            await loadTurnier();
+        } else {
+            showToast('Fehler beim Archivieren: ' + (data.error || 'Unbekannt'), 'error');
+        }
+    } catch (err) {
+        console.error('Error archiving tournament:', err);
+        showToast('Fehler beim Archivieren', 'error');
     }
 }
 
@@ -813,6 +878,11 @@ async function loadPhasen() {
 // History and pending collapsed state
 let historyCollapsed = true;
 let pendingCollapsed = true;
+let vorschauCollapsed = true;
+let controlSectionCollapsed = true;
+let overviewSectionCollapsed = true;
+let meldungenSectionCollapsed = true;
+let detailedGamesSectionCollapsed = true;
 let anzahlFelder = 4; // Default, will be loaded from config
 let vorschauGames = []; // Store Vorschau games
 
@@ -979,6 +1049,76 @@ function togglePending() {
     const icon = document.getElementById('pending-toggle-icon');
     
     if (pendingCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
+    }
+}
+
+function toggleVorschau() {
+    vorschauCollapsed = !vorschauCollapsed;
+    const container = document.getElementById('vorschau-games-container');
+    const icon = document.getElementById('vorschau-toggle-icon');
+    
+    if (vorschauCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
+    }
+}
+
+function toggleControlSection() {
+    controlSectionCollapsed = !controlSectionCollapsed;
+    const container = document.getElementById('control-section-content');
+    const icon = document.getElementById('control-toggle-icon');
+    
+    if (controlSectionCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
+    }
+}
+
+function toggleOverviewSection() {
+    overviewSectionCollapsed = !overviewSectionCollapsed;
+    const container = document.getElementById('overview-section-content');
+    const icon = document.getElementById('overview-toggle-icon');
+    
+    if (overviewSectionCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
+    }
+}
+
+function toggleMeldungenSection() {
+    meldungenSectionCollapsed = !meldungenSectionCollapsed;
+    const container = document.getElementById('meldungen-section-content');
+    const icon = document.getElementById('meldungen-toggle-icon');
+    
+    if (meldungenSectionCollapsed) {
+        container.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        container.classList.remove('collapsed');
+        icon.textContent = '▼';
+    }
+}
+
+function toggleDetailedGamesSection() {
+    detailedGamesSectionCollapsed = !detailedGamesSectionCollapsed;
+    const container = document.getElementById('detailed-games-section-content');
+    const icon = document.getElementById('detailed-games-toggle-icon');
+    
+    if (detailedGamesSectionCollapsed) {
         container.classList.add('collapsed');
         icon.textContent = '▶';
     } else {

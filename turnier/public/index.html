@@ -53,7 +53,7 @@
                             <input type="date" id="config-datum">
                         </div>
                         <div class="config-item">
-                            <label>Enddatum (optional, für mehrtägig)</label>
+                            <label>Enddatum</label>
                             <input type="date" id="config-datum-ende">
                         </div>
                         <div class="config-item">
@@ -98,6 +98,8 @@
                     <div class="button-row">
                         <button class="btn btn-primary" onclick="saveConfig()">💾 Speichern</button>
                         <button class="btn btn-info" onclick="showEmailPreviewModal()">📧 E-Mail Vorschau</button>
+                        <button class="btn btn-warning" onclick="archiveTurnier()">📦 Archivieren</button>
+                        <button class="btn btn-danger" onclick="deleteTurnier()">🗑️ Löschen</button>
                     </div>
                 </section>
             </div>
@@ -210,104 +212,121 @@
             <div id="tab-games" class="tab-content">
                 <!-- Games Control Section -->
                 <section class="card">
-                    <h2>🎮 Turnier-Steuerung</h2>
-                    <div class="control-buttons">
-                        <button class="btn btn-success btn-large" onclick="startTurnier()" title="Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)">▶️ Turnier starten</button>
-                        <button class="btn btn-primary" onclick="autoAssignFields()" title="Felder zuweisen: Weist automatisch allen wartenden Spielen (status='geplant') ein freies Feld zu. Nützlich wenn Spiele manuell erstellt wurden.">📍 Felder zuweisen</button>
-                        <button class="btn btn-primary" onclick="calculateRanking()" title="Platzierung berechnen: Berechnet die Zwischenplatzierung nach einer bestimmten Runde basierend auf Siegen und Punktdifferenz">📊 Platzierung berechnen</button>
-                        <button class="btn btn-primary" onclick="calculateFinalRanking()" title="Endplatzierung: Berechnet die finale Platzierung aller Teams nach Abschluss des Turniers">🏆 Endplatzierung</button>
-                        <button class="btn btn-danger" onclick="resetTurnier()" title="Reset: Löscht ALLE Spiele und Ergebnisse des Turniers. Teams bleiben erhalten. Diese Aktion kann nicht rückgängig gemacht werden!">🔄 Reset</button>
+                    <h2 class="section-title collapsible" onclick="toggleControlSection()">
+                        <span id="control-toggle-icon">▶</span> 🎮 Turnier-Steuerung
+                    </h2>
+                    <div class="collapsed" id="control-section-content">
+                        <div class="control-buttons">
+                            <button class="btn btn-success btn-large" onclick="startTurnier()" title="Turnier starten: Erstellt automatisch alle Spiele basierend auf dem gewählten Modus (Bracket oder Swiss System)">▶️ Turnier starten</button>
+                            <button class="btn btn-primary" onclick="autoAssignFields()" title="Felder zuweisen: Weist automatisch allen wartenden Spielen (status='geplant') ein freies Feld zu. Nützlich wenn Spiele manuell erstellt wurden.">📍 Felder zuweisen</button>
+                            <button class="btn btn-primary" onclick="calculateRanking()" title="Platzierung berechnen: Berechnet die Zwischenplatzierung nach einer bestimmten Runde basierend auf Siegen und Punktdifferenz">📊 Platzierung berechnen</button>
+                            <button class="btn btn-primary" onclick="calculateFinalRanking()" title="Endplatzierung: Berechnet die finale Platzierung aller Teams nach Abschluss des Turniers">🏆 Endplatzierung</button>
+                            <button class="btn btn-danger" onclick="resetTurnier()" title="Reset: Löscht ALLE Spiele und Ergebnisse des Turniers. Teams bleiben erhalten. Diese Aktion kann nicht rückgängig gemacht werden!">🔄 Reset</button>
+                        </div>
                     </div>
                 </section>
 
                 <!-- Games Overview Section -->
                 <section class="card">
-                    <h2>🎯 Spiele-Übersicht</h2>
-                    
-                    <!-- Active Games on Fields -->
-                    <div class="games-section">
-                        <h3 class="section-title">🏐 Aktive Spiele auf Feldern</h3>
-                        <div class="games-grid" id="active-games-container">
-                            <p class="empty-state">Keine aktiven Spiele auf Feldern</p>
+                    <h2 class="section-title collapsible" onclick="toggleOverviewSection()">
+                        <span id="overview-toggle-icon">▶</span> 🎯 Spiele-Übersicht
+                    </h2>
+                    <div class="collapsed" id="overview-section-content">
+                        <!-- Active Games on Fields -->
+                        <div class="games-section">
+                            <h3 class="section-title">🏐 Aktive Spiele auf Feldern</h3>
+                            <div class="games-grid" id="active-games-container">
+                                <p class="empty-state">Keine aktiven Spiele auf Feldern</p>
+                            </div>
+                        </div>
+
+                        <!-- Vorschau: Next 10 upcoming games -->
+                        <div class="games-section">
+                            <h3 class="section-title collapsible" onclick="toggleVorschau()">
+                                <span id="vorschau-toggle-icon">▶</span> 👁️ Vorschau - Nächste 10 Spiele
+                            </h3>
+                            <div class="games-grid collapsed" id="vorschau-games-container">
+                                <p class="empty-state">Keine Vorschau-Spiele verfügbar</p>
+                            </div>
+                        </div>
+
+                        <!-- Pending Games (without field, waiting for teams) -->
+                        <div class="games-section">
+                            <h3 class="section-title collapsible" onclick="togglePending()">
+                                <span id="pending-toggle-icon">▶</span> ⏳ Wartende Spiele (noch ohne Team)
+                            </h3>
+                            <div class="games-grid collapsed" id="pending-games-container">
+                                <p class="empty-state">Keine wartenden Spiele</p>
+                            </div>
+                        </div>
+
+                        <!-- Completed Games History (collapsible) -->
+                        <div class="games-section">
+                            <h3 class="section-title collapsible" onclick="toggleHistory()">
+                                <span id="history-toggle-icon">▶</span> 📜 Abgeschlossene Spiele (Historie)
+                            </h3>
+                            <div class="games-grid collapsed" id="history-games-container">
+                                <p class="empty-state">Keine abgeschlossenen Spiele</p>
+                            </div>
                         </div>
                     </div>
+                </section>
 
-                    <!-- Vorschau: Next 10 upcoming games -->
-                    <div class="games-section">
-                        <h3 class="section-title">👁️ Vorschau - Nächste 10 Spiele</h3>
-                        <div class="games-grid" id="vorschau-games-container">
-                            <p class="empty-state">Keine Vorschau-Spiele verfügbar</p>
-                        </div>
-                    </div>
-
-                    <!-- Pending Games (without field, waiting for teams) -->
-                    <div class="games-section">
-                        <h3 class="section-title collapsible" onclick="togglePending()">
-                            <span id="pending-toggle-icon">▶</span> ⏳ Wartende Spiele (noch ohne Team)
-                        </h3>
-                        <div class="games-grid collapsed" id="pending-games-container">
-                            <p class="empty-state">Keine wartenden Spiele</p>
-                        </div>
-                    </div>
-
-                    <!-- Completed Games History (collapsible) -->
-                    <div class="games-section">
-                        <h3 class="section-title collapsible" onclick="toggleHistory()">
-                            <span id="history-toggle-icon">▶</span> 📜 Abgeschlossene Spiele (Historie)
-                        </h3>
-                        <div class="games-grid collapsed" id="history-games-container">
-                            <p class="empty-state">Keine abgeschlossenen Spiele</p>
+                <!-- Pending Results Section - Moved above Detailed Games -->
+                <section class="card">
+                    <h2 class="section-title collapsible" onclick="toggleMeldungenSection()">
+                        <span id="meldungen-toggle-icon">▶</span> 📝 Gemeldete Ergebnisse
+                    </h2>
+                    <div class="collapsed" id="meldungen-section-content">
+                        <div id="meldungen-container">
+                            <p>Keine offenen Meldungen</p>
                         </div>
                     </div>
                 </section>
 
                 <!-- Detailed Games Table Section -->
                 <section class="card">
-                    <h2>📋 Alle Spiele (Detailansicht)</h2>
-                    <div class="filter-row">
-                        <select id="spiele-filter-phase" onchange="loadSpiele()">
-                            <option value="">Alle Phasen</option>
-                        </select>
-                        <select id="spiele-filter-status" onchange="loadSpiele()">
-                            <option value="">Alle Status</option>
-                            <option value="geplant">Geplant</option>
-                            <option value="bereit">Bereit</option>
-                            <option value="laeuft">Läuft</option>
-                            <option value="beendet">Beendet</option>
-                            <option value="wartend_bestaetigung">Warten auf Bestätigung</option>
-                            <option value="wartend">Wartend (kein Feld)</option>
-                        </select>
-                        <input type="text" id="spiele-search" placeholder="Team suchen..." oninput="filterSpiele()">
-                    </div>
-                    <div class="table-container">
-                        <table id="spiele-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Phase</th>
-                                    <th>Runde</th>
-                                    <th>Team 1</th>
-                                    <th>vs</th>
-                                    <th>Team 2</th>
-                                    <th>Feld</th>
-                                    <th>Schiedsrichter</th>
-                                    <th>Zeit</th>
-                                    <th>Ergebnis</th>
-                                    <th>Status</th>
-                                    <th>Bemerkung</th>
-                                    <th>Aktionen</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <!-- Pending Results Section -->
-                <section class="card">
-                    <h2>📝 Gemeldete Ergebnisse</h2>
-                    <div id="meldungen-container">
-                        <p>Keine offenen Meldungen</p>
+                    <h2 class="section-title collapsible" onclick="toggleDetailedGamesSection()">
+                        <span id="detailed-games-toggle-icon">▶</span> 📋 Alle Spiele (Detailansicht)
+                    </h2>
+                    <div class="collapsed" id="detailed-games-section-content">
+                        <div class="filter-row">
+                            <select id="spiele-filter-phase" onchange="loadSpiele()">
+                                <option value="">Alle Phasen</option>
+                            </select>
+                            <select id="spiele-filter-status" onchange="loadSpiele()">
+                                <option value="">Alle Status</option>
+                                <option value="geplant">Geplant</option>
+                                <option value="bereit">Bereit</option>
+                                <option value="laeuft">Läuft</option>
+                                <option value="beendet">Beendet</option>
+                                <option value="wartend_bestaetigung">Warten auf Bestätigung</option>
+                                <option value="wartend">Wartend (kein Feld)</option>
+                            </select>
+                            <input type="text" id="spiele-search" placeholder="Team suchen..." oninput="filterSpiele()">
+                        </div>
+                        <div class="table-container">
+                            <table id="spiele-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Phase</th>
+                                        <th>Runde</th>
+                                        <th>Team 1</th>
+                                        <th>vs</th>
+                                        <th>Team 2</th>
+                                        <th>Feld</th>
+                                        <th>Schiedsrichter</th>
+                                        <th>Zeit</th>
+                                        <th>Ergebnis</th>
+                                        <th>Status</th>
+                                        <th>Bemerkung</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -323,8 +342,12 @@
                 <input type="text" id="new-turnier-name" placeholder="z.B. BVT 37">
             </div>
             <div class="form-group">
-                <label>Datum</label>
+                <label>Startdatum</label>
                 <input type="date" id="new-turnier-datum">
+            </div>
+            <div class="form-group">
+                <label>Enddatum (optional)</label>
+                <input type="date" id="new-turnier-datum-ende">
             </div>
             <div class="form-group">
                 <label>Anzahl Teams</label>

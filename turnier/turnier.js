@@ -640,10 +640,31 @@ app.put('/api/turniere/:id', async (req, res) => {
 // Delete tournament
 app.delete('/api/turniere/:id', async (req, res) => {
     try {
+        // ON DELETE CASCADE will automatically delete:
+        // - turnier_teams
+        // - turnier_felder
+        // - turnier_phasen
+        // - turnier_spiele
+        // - turnier_ergebnisse
+        // - turnier_schiedsrichter
+        // - turnier_platzierungen
+        // - turnier_audit_log
         await db.query('DELETE FROM turnier_config WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
         console.error('DELETE /api/turniere/:id error:', err);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// Archive tournament (make read-only)
+app.post('/api/turniere/:id/archivieren', async (req, res) => {
+    try {
+        await db.query('UPDATE turnier_config SET aktiv = FALSE WHERE id = ?', [req.params.id]);
+        await logAudit(req.params.id, 'UPDATE', 'turnier_config', req.params.id, null, { aktiv: false, action: 'archiviert' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('POST /api/turniere/:id/archivieren error:', err);
         res.status(500).json({ error: 'Database error' });
     }
 });
