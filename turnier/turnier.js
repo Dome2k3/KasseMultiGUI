@@ -140,34 +140,36 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
 // Helper: Get teams that have finished their game in the current round
 async function getReadyTeamsForRound(turnierId, phaseId, currentRunde) {
     const [finishedTeams] = await db.query(
-        `SELECT DISTINCT 
-            CASE 
-                WHEN s.team1_id IS NOT NULL THEN s.team1_id
-                WHEN s.team2_id IS NOT NULL THEN s.team2_id
-            END as team_id
-         FROM turnier_spiele s
-         WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ? AND s.status = 'beendet'
-            AND (s.team1_id IS NOT NULL OR s.team2_id IS NOT NULL)`,
-        [turnierId, phaseId, currentRunde]
+        `SELECT DISTINCT team1_id as team_id
+         FROM turnier_spiele
+         WHERE turnier_id = ? AND phase_id = ? AND runde = ? AND status = 'beendet'
+            AND team1_id IS NOT NULL
+         UNION
+         SELECT DISTINCT team2_id as team_id
+         FROM turnier_spiele
+         WHERE turnier_id = ? AND phase_id = ? AND runde = ? AND status = 'beendet'
+            AND team2_id IS NOT NULL`,
+        [turnierId, phaseId, currentRunde, turnierId, phaseId, currentRunde]
     );
-    return finishedTeams.map(t => t.team_id).filter(id => id !== null);
+    return finishedTeams.map(t => t.team_id);
 }
 
 // Helper: Get teams that don't have a game yet in the next round
 async function getUnpairedTeamsInRound(turnierId, phaseId, nextRunde) {
     const [pairedTeams] = await db.query(
-        `SELECT DISTINCT 
-            CASE 
-                WHEN s.team1_id IS NOT NULL THEN s.team1_id
-                WHEN s.team2_id IS NOT NULL THEN s.team2_id
-            END as team_id
-         FROM turnier_spiele s
-         WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ?
-            AND (s.team1_id IS NOT NULL OR s.team2_id IS NOT NULL)`,
-        [turnierId, phaseId, nextRunde]
+        `SELECT DISTINCT team1_id as team_id
+         FROM turnier_spiele
+         WHERE turnier_id = ? AND phase_id = ? AND runde = ?
+            AND team1_id IS NOT NULL
+         UNION
+         SELECT DISTINCT team2_id as team_id
+         FROM turnier_spiele
+         WHERE turnier_id = ? AND phase_id = ? AND runde = ?
+            AND team2_id IS NOT NULL`,
+        [turnierId, phaseId, nextRunde, turnierId, phaseId, nextRunde]
     );
     
-    const pairedSet = new Set(pairedTeams.map(t => t.team_id).filter(id => id !== null));
+    const pairedSet = new Set(pairedTeams.map(t => t.team_id));
     return pairedSet;
 }
 
@@ -286,14 +288,18 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
         
         // Get total teams in current round
         const [totalTeamsInRound] = await db.query(
-            `SELECT COUNT(DISTINCT 
-                CASE 
-                    WHEN s.team1_id IS NOT NULL THEN s.team1_id
-                    WHEN s.team2_id IS NOT NULL THEN s.team2_id
-                END) as count
-             FROM turnier_spiele s
-             WHERE s.turnier_id = ? AND s.phase_id = ? AND s.runde = ?`,
-            [turnierId, phaseId, currentRunde]
+            `SELECT COUNT(DISTINCT team_id) as count FROM (
+                SELECT team1_id as team_id
+                FROM turnier_spiele
+                WHERE turnier_id = ? AND phase_id = ? AND runde = ?
+                    AND team1_id IS NOT NULL
+                UNION
+                SELECT team2_id as team_id
+                FROM turnier_spiele
+                WHERE turnier_id = ? AND phase_id = ? AND runde = ?
+                    AND team2_id IS NOT NULL
+             ) AS all_teams`,
+            [turnierId, phaseId, currentRunde, turnierId, phaseId, currentRunde]
         );
         
         const totalTeams = totalTeamsInRound[0].count;
@@ -679,44 +685,49 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                 const hobbyCupPhaseId = hobbyCupPhase[0].id;
                 
                 // Get loser teams with their standings
-                const [loserTeams] = await db.query(
-                    'SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (?) ORDER BY initial_seed ASC',
-                    [turnierId, losers]
-                );
-                
-                // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
-                const hobbyCupPairs = [];
-                for (let i = 0; i < loserTeams.length; i += 2) {
-                    if (i + 1 < loserTeams.length) {
-                        hobbyCupPairs.push({
-                            teamA: loserTeams[i],
-                            teamB: loserTeams[i + 1],
-                            isBye: false
-                        });
-                    } else {
-                        // Odd number - give bye to last team
-                        hobbyCupPairs.push({
-                            teamA: loserTeams[i],
-                            teamB: null,
-                            isBye: true
-                        });
+                if (losers.length === 0) {
+                    console.log('No losers to pair for Hobby Cup');
+                } else {
+                    const placeholders = losers.map(() => '?').join(',');
+                    const [loserTeams] = await db.query(
+                        `SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (${placeholders}) ORDER BY initial_seed ASC`,
+                        [turnierId, ...losers]
+                    );
+                    
+                    // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
+                    const hobbyCupPairs = [];
+                    for (let i = 0; i < loserTeams.length; i += 2) {
+                        if (i + 1 < loserTeams.length) {
+                            hobbyCupPairs.push({
+                                teamA: loserTeams[i],
+                                teamB: loserTeams[i + 1],
+                                isBye: false
+                            });
+                        } else {
+                            // Odd number - give bye to last team
+                            hobbyCupPairs.push({
+                                teamA: loserTeams[i],
+                                teamB: null,
+                                isBye: true
+                            });
+                        }
                     }
+                    
+                    // Get available fields
+                    const [felder] = await db.query(
+                        'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+                        [turnierId]
+                    );
+                    
+                    // Create Hobby Cup games with field assignments
+                    const hobbyCupGames = await createSwissGames(turnierId, hobbyCupPhaseId, 1, hobbyCupPairs, felder);
+                    
+                    if (process.env.DEBUG_SWISS === 'true') {
+                        console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
+                    }
+                    
+                    console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
                 }
-                
-                // Get available fields
-                const [felder] = await db.query(
-                    'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
-                    [turnierId]
-                );
-                
-                // Create Hobby Cup games with field assignments
-                const hobbyCupGames = await createSwissGames(turnierId, hobbyCupPhaseId, 1, hobbyCupPairs, felder);
-                
-                if (process.env.DEBUG_SWISS === 'true') {
-                    console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
-                }
-                
-                console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
             } else {
                 console.log('Note: Hobby Cup phase not found - losers not paired');
             }
