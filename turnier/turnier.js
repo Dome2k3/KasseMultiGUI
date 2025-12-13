@@ -704,6 +704,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners`);
         
         // Get winner teams to pair them
+        // Safe: Creating placeholders for IN clause, actual values passed as parameters
         const placeholders = winners.map(() => '?').join(',');
         const [winnerTeams] = await db.query(
             `SELECT * FROM turnier_teams 
@@ -717,7 +718,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             id: t.id,
             score: 0,
             buchholz: 0,
-            initialSeed: t.initial_seed || 999,
+            initialSeed: t.initial_seed || t.setzposition || 999,  // Standardized fallback
             opponents: []
         }));
         
@@ -1952,12 +1953,12 @@ async function startSwiss144Tournament(turnierId, config, res) {
             // Assign field to first 11 matches
             let feldId = null;
             let geplante_zeit = null;
-            let status = 'wartend';
+            let gameStatus = 'wartend';
             
             if (i < remainingFields.length) {
                 feldId = remainingFields[i].id;
                 geplante_zeit = new Date(currentTime);
-                status = 'geplant';
+                gameStatus = 'geplant';
             }
             
             spiele.push({
@@ -1969,7 +1970,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
                 team2_id: pair.teamB ? pair.teamB.id : null,
                 feld_id: feldId,
                 geplante_zeit,
-                status: pair.isBye ? 'beendet' : status,
+                status: pair.isBye ? 'beendet' : gameStatus,
                 bestaetigungs_code: bestCode
             });
         }
