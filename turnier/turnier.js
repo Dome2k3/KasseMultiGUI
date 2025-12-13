@@ -229,6 +229,12 @@ async function createSwissGames(turnierId, phaseId, nextRunde, pairings, felder)
         
         const bestCode = generateConfirmationCode();
         
+        // Validation: Only create games with both teams OR legitimate byes
+        if (!pair.teamB && !pair.isBye) {
+            console.warn(`[createSwissGames] Skipping incomplete pairing: Team ${pair.teamA.id} has no opponent and is not marked as bye`);
+            continue;
+        }
+        
         // Assign field if available
         let feldId = null;
         let geplante_zeit = null;
@@ -337,7 +343,7 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
         await updateSwissStandings(turnierId);
         
         // Get Swiss standings for ready, unpaired teams
-        const allStandings = await getSwissStandings(turnierId);
+        const allStandings = await getSwissStandings(turnierId, phaseId);
         const readyTeams = allStandings.filter(t => unpairedReadyTeamIds.includes(t.id));
         
         // Prepare team objects for pairing engine
@@ -485,11 +491,13 @@ async function progressSwissTournament(turnierId, completedGame) {
         }
 
         // Check if this round is complete
+        // Exclude games with status 'wartend_quali' (placeholder games waiting for qualification)
         const [roundGames] = await db.query(
             `SELECT COUNT(*) as total, 
                     SUM(CASE WHEN status = 'beendet' THEN 1 ELSE 0 END) as completed
              FROM turnier_spiele 
-             WHERE turnier_id = ? AND phase_id = ? AND runde = ?`,
+             WHERE turnier_id = ? AND phase_id = ? AND runde = ?
+             AND status != 'wartend_quali'`,
             [turnierId, completedGame.phase_id, completedGame.runde]
         );
 
@@ -531,7 +539,7 @@ async function progressSwissTournament(turnierId, completedGame) {
                 
                 // Get teams that still need pairing
                 const pairedTeamsSet = await getUnpairedTeamsInRound(turnierId, completedGame.phase_id, nextRunde);
-                const allStandings = await getSwissStandings(turnierId);
+                const allStandings = await getSwissStandings(turnierId, completedGame.phase_id);
                 const unpairedTeams = allStandings.filter(t => !pairedTeamsSet.has(t.id));
                 
                 if (unpairedTeams.length >= 2) {
@@ -568,7 +576,7 @@ async function progressSwissTournament(turnierId, completedGame) {
                 }
             } else {
                 // No dynamic games were created - create full round normally
-                const pairings = await generateNextSwissRound(turnierId, nextRunde);
+                const pairings = await generateNextSwissRound(turnierId, nextRunde, completedGame.phase_id);
 
                 // Get available fields
                 const [felder] = await db.query(
@@ -674,10 +682,75 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
 
         const mainPhaseId = phases[0].id;
 
-        // Note: The 16 qualification winners are already marked as qualified (swiss_qualified = 1)
-        // The main Swiss Round 1 games were already created at tournament start with 112 seeded teams
-        // When Round 1 is generated, it should include all qualified teams (112 + 16 = 128)
-        console.log('Qualification winners marked as qualified - ready for main field');
+        // Get placeholder games (status = 'wartend_quali') that are waiting for qualification winners
+        const [placeholderGames] = await db.query(
+            `SELECT id, spiel_nummer FROM turnier_spiele 
+             WHERE turnier_id = ? AND phase_id = ? AND runde = 1 
+             AND status = 'wartend_quali'
+             ORDER BY spiel_nummer ASC`,
+            [turnierId, mainPhaseId]
+        );
+        
+        if (placeholderGames.length !== 16) {
+            console.error(`Expected 16 placeholder games for qualification winners, found ${placeholderGames.length}`);
+            return;
+        }
+        
+        if (winners.length !== 16) {
+            console.error(`Expected 16 qualification winners, found ${winners.length}`);
+            return;
+        }
+        
+        console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners`);
+        
+        // Get winner teams to pair them
+        // Safe: Creating placeholders for IN clause, actual values passed as parameters
+        const placeholders = winners.map(() => '?').join(',');
+        const [winnerTeams] = await db.query(
+            `SELECT * FROM turnier_teams 
+             WHERE turnier_id = ? AND id IN (${placeholders}) 
+             ORDER BY initial_seed ASC`,
+            [turnierId, ...winners]
+        );
+        
+        // Pair the 16 winners using Dutch system (8 pairs)
+        const winnerPairingTeams = winnerTeams.map(t => ({
+            id: t.id,
+            score: 0,
+            buchholz: 0,
+            initialSeed: t.initial_seed || t.setzposition || 999,  // Standardized fallback
+            opponents: []
+        }));
+        
+        const winnerPairings = swissPairing.pairRound1Dutch(winnerPairingTeams, {});
+        
+        if (winnerPairings.pairs.length !== 8) {
+            console.error(`Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
+        }
+        
+        // Update placeholder games with the winner pairings
+        for (let i = 0; i < Math.min(winnerPairings.pairs.length, placeholderGames.length); i++) {
+            const pair = winnerPairings.pairs[i];
+            const placeholder = placeholderGames[i];
+            
+            await db.query(
+                `UPDATE turnier_spiele 
+                 SET team1_id = ?, team2_id = ?, status = 'wartend', geplante_zeit = NOW()
+                 WHERE id = ?`,
+                [pair.teamA.id, pair.teamB ? pair.teamB.id : null, placeholder.id]
+            );
+            
+            // Record opponents
+            if (pair.teamB) {
+                await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, placeholder.id, 1);
+            }
+            
+            console.log(`Updated placeholder game #${placeholder.spiel_nummer}: Team ${pair.teamA.id} vs Team ${pair.teamB?.id || 'BYE'}`);
+        }
+        
+        console.log(`Successfully filled ${winnerPairings.pairs.length} placeholder games with qualification winners`);
+        console.log('Main Swiss Round 1 now has all 128 teams (56 + 8 winner pairs = 64 games)');
+
 
         // Create Hobby Cup matches for losers with interleaving support
         if (losers.length > 0) {
@@ -1517,15 +1590,43 @@ app.patch('/api/turniere/:turnierId/spiele/:spielId/status', async (req, res) =>
 // ==========================================
 
 // Helper: Get Swiss standings for teams
-async function getSwissStandings(turnierId) {
-    const [teams] = await db.query(
-        `SELECT id, team_name, klasse, setzposition, swiss_score, buchholz, 
-                initial_seed, swiss_qualified, status
-         FROM turnier_teams 
-         WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt")
-         ORDER BY swiss_score DESC, buchholz DESC, initial_seed ASC`,
-        [turnierId]
-    );
+// If phaseId is provided, only returns teams that have games in that phase (for Swiss 144 phase isolation)
+async function getSwissStandings(turnierId, phaseId = null) {
+    let query;
+    let params;
+    
+    if (phaseId) {
+        // For Swiss 144: Get only teams that are part of the specified phase
+        // This is determined by teams that have games in that phase
+        query = `SELECT DISTINCT t.id, t.team_name, t.klasse, t.setzposition, t.swiss_score, t.buchholz, 
+                        t.initial_seed, t.swiss_qualified, t.status
+                 FROM turnier_teams t
+                 WHERE t.turnier_id = ? AND t.status IN ("angemeldet", "bestaetigt")
+                 AND (
+                     EXISTS (
+                         SELECT 1 FROM turnier_spiele s 
+                         WHERE s.turnier_id = ? AND s.phase_id = ? 
+                         AND (s.team1_id = t.id OR s.team2_id = t.id)
+                     )
+                     OR (
+                         -- For Main Swiss before Round 1 is created, include qualified teams
+                         ? IN (SELECT id FROM turnier_phasen WHERE turnier_id = ? AND phase_name = 'Main Swiss')
+                         AND (t.initial_seed <= 112 OR t.swiss_qualified = 1)
+                     )
+                 )
+                 ORDER BY t.swiss_score DESC, t.buchholz DESC, t.initial_seed ASC`;
+        params = [turnierId, turnierId, phaseId, phaseId, turnierId];
+    } else {
+        // Original behavior: Get all teams (for regular Swiss tournaments)
+        query = `SELECT id, team_name, klasse, setzposition, swiss_score, buchholz, 
+                        initial_seed, swiss_qualified, status
+                 FROM turnier_teams 
+                 WHERE turnier_id = ? AND status IN ("angemeldet", "bestaetigt")
+                 ORDER BY swiss_score DESC, buchholz DESC, initial_seed ASC`;
+        params = [turnierId];
+    }
+    
+    const [teams] = await db.query(query, params);
 
     // Get opponents for each team
     const teamsWithOpponents = [];
@@ -1619,10 +1720,10 @@ async function recordOpponent(turnierId, team1Id, team2Id, spielId, runde) {
 }
 
 // Helper: Generate next Swiss round pairings
-async function generateNextSwissRound(turnierId, nextRunde) {
+async function generateNextSwissRound(turnierId, nextRunde, phaseId = null) {
     try {
-        // Get Swiss standings
-        const teams = await getSwissStandings(turnierId);
+        // Get Swiss standings (phase-aware for Swiss 144)
+        const teams = await getSwissStandings(turnierId, phaseId);
 
         // Prepare team objects for pairing engine
         const pairingTeams = teams.map(t => ({
@@ -1804,7 +1905,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
         let spielNummer = 1;
         const spiele = [];
 
-        // Create 16 qualification matches (32 hobby teams)
+        // Create 16 qualification matches (32 hobby teams) on fields 1-16
         const shuffledHobby = shuffleArray([...selectedHobby]);
         for (let i = 0; i < 16; i++) {
             const team1 = shuffledHobby[i * 2];
@@ -1826,41 +1927,40 @@ async function startSwiss144Tournament(turnierId, config, res) {
             });
         }
 
-        // Prepare 112 seeded teams for main field (will add 16 quali winners later)
+        // Parallel optimization: Start Main Swiss Round 1 with 112 seeded teams immediately
+        // The remaining 16 slots will be filled dynamically when qualification completes
         const mainFieldSeeded = [...selectedBundesliga, ...otherTeams.slice(0, 80)];
-
-        // Generate Round 1 pairings for main field using Dutch system
+        
+        // Generate 56 complete pairings from 112 seeded teams using Dutch system
         const pairingTeams = mainFieldSeeded.map(t => ({
             id: t.id,
             score: 0,
             buchholz: 0,
-            initialSeed: t.setzposition || 999,
+            initialSeed: t.initial_seed || t.setzposition || 999,
             opponents: []
         }));
-
+        
         const round1Result = swissPairing.pairRound1Dutch(pairingTeams, {});
         
-        // Create main field games
-        // First 11 fields (indices 16-26, corresponding to field numbers 17-27) get non-waiting matches
-        let gamesOnFields = 0;
-        const remainingFields = felder.slice(16, 27); // Get up to 11 fields (indices 16-26)
-
+        // Create first 56 complete Main Swiss games (112 seeded teams)
+        // Assign first 11 games to fields 17-27, rest are waiting
+        const remainingFields = felder.slice(16, 27); // Fields 17-27 (11 fields)
+        
         for (let i = 0; i < round1Result.pairs.length; i++) {
             const pair = round1Result.pairs[i];
             const bestCode = generateConfirmationCode();
             
-            // Assign field to first 11 matches (fields 17-27)
+            // Assign field to first 11 matches
             let feldId = null;
             let geplante_zeit = null;
-            let status = 'wartend';
+            let gameStatus = 'wartend';
             
-            if (gamesOnFields < remainingFields.length) {
-                feldId = remainingFields[gamesOnFields].id;
+            if (i < remainingFields.length) {
+                feldId = remainingFields[i].id;
                 geplante_zeit = new Date(currentTime);
-                status = 'geplant';
-                gamesOnFields++;
+                gameStatus = 'geplant';
             }
-
+            
             spiele.push({
                 turnier_id: turnierId,
                 phase_id: mainPhase.id,
@@ -1870,10 +1970,31 @@ async function startSwiss144Tournament(turnierId, config, res) {
                 team2_id: pair.teamB ? pair.teamB.id : null,
                 feld_id: feldId,
                 geplante_zeit,
-                status,
+                status: pair.isBye ? 'beendet' : gameStatus,
                 bestaetigungs_code: bestCode
             });
         }
+        
+        // Create 16 placeholder games for qualification winners (will be filled dynamically)
+        // These will be filled in handleQualificationComplete() with the 16 winners
+        for (let i = 0; i < 16; i++) {
+            const bestCode = generateConfirmationCode();
+            
+            spiele.push({
+                turnier_id: turnierId,
+                phase_id: mainPhase.id,
+                runde: 1,
+                spiel_nummer: spielNummer++,
+                team1_id: null, // Placeholder - will be filled by qualification winner
+                team2_id: null, // Placeholder - will be filled by qualification winner
+                feld_id: null,
+                geplante_zeit: null,
+                status: 'wartend_quali', // Special status for qualification-dependent games
+                bestaetigungs_code: bestCode
+            });
+        }
+        
+        console.log(`Swiss 144 tournament initialized: 16 quali games + ${round1Result.pairs.length} main games + 16 placeholder games for quali winners`);
 
         // Insert games into database
         for (const spiel of spiele) {
@@ -1900,8 +2021,9 @@ async function startSwiss144Tournament(turnierId, config, res) {
         await logAudit(turnierId, 'START_SWISS_144', 'turnier_spiele', null, null, { 
             total_games: spiele.length,
             quali_games: 16,
-            main_field_games: round1Result.pairs.length,
-            fields_used: 27
+            main_swiss_seeded_games: round1Result.pairs.length,
+            main_swiss_placeholder_games: 16,
+            note: 'Parallel start: Quali + Main Swiss (112 teams) + 16 placeholders for quali winners'
         });
 
         res.json({ 
@@ -1909,7 +2031,9 @@ async function startSwiss144Tournament(turnierId, config, res) {
             modus: 'swiss_144',
             spiele_erstellt: spiele.length,
             quali_spiele: 16,
-            hauptfeld_spiele: round1Result.pairs.length
+            hauptfeld_spiele: round1Result.pairs.length,
+            placeholder_spiele: 16,
+            note: 'Tournament started with parallel Qualification and Main Swiss Round 1'
         });
     } catch (err) {
         console.error('Start Swiss 144 error:', err);
