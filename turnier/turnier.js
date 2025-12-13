@@ -728,7 +728,9 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         if (winnerPairings.pairs.length !== 8) {
             console.error(`CRITICAL ERROR: Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
-            console.error(`This indicates a problem with the pairing algorithm or winner data`);
+            console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games: ${placeholderGames.length}`);
+            console.error(`Troubleshooting: Check that all 16 qualification games have valid gewinner_id values`);
+            console.error(`Troubleshooting: Verify swissPairing.pairRound1Dutch() is working correctly with the winner data`);
             // Return to prevent creating inconsistent game state
             return;
         }
@@ -736,7 +738,8 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         console.log(`Generated ${winnerPairings.pairs.length} pairings from ${winners.length} qualification winners`);
         
         // Update placeholder games with the winner pairings
-        // Safety check: ensure we don't exceed array bounds
+        // Note: Math.min is defensive programming in case of data inconsistency
+        // Both arrays should have length 8 due to validations above, but this prevents crashes if violated
         const pairCount = Math.min(winnerPairings.pairs.length, placeholderGames.length);
         for (let i = 0; i < pairCount; i++) {
             const pair = winnerPairings.pairs[i];
@@ -820,7 +823,8 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                     console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
                 }
             } else {
-                console.error('ERROR: Hobby Cup phase not found - losers cannot be paired!');
+                console.error(`ERROR: Hobby Cup phase not found for tournament ${turnierId} - losers cannot be paired!`);
+                console.error(`Please create a Hobby Cup phase: INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (${turnierId}, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers')`);
             }
         } else {
             console.log('No losers to process for Hobby Cup');
