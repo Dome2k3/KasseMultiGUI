@@ -119,7 +119,7 @@ GROUP BY tc.id, tc.turnier_name, tp.phase_name;
 -- 1. For new tournaments (with parallel optimization):
 --    - Will create 16 qualification games
 --    - Will create 56 Main Swiss games with 112 seeded teams
---    - Will create 16 placeholder games with status 'wartend_quali'
+--    - Will create 8 placeholder games with status 'wartend_quali'
 --    - When qualification completes, placeholders are filled with 16 winners (8 pairs)
 -- 
 -- 2. For tournaments where qualification is already complete:
@@ -144,7 +144,7 @@ GROUP BY tc.id, tc.turnier_name, tp.phase_name;
 --      WHERE ts.turnier_id = ? AND tp.phase_name = 'Main Swiss' AND runde = 1
 --      GROUP BY status;
 --    
---    - Before qualification: Should show 56 games (various status) + 16 'wartend_quali'
+--    - Before qualification: Should show 56 games (various status) + 8 'wartend_quali'
 --    - After qualification: Should show 64 games (no 'wartend_quali'), all with teams
 -- 
 -- ============================================

@@ -19,7 +19,7 @@ Diese Optimierung ermöglicht den parallelen Start von Qualification und Main Sw
    - 56 Spiele mit 112 geseedeten Teams
    - 11 Spiele sofort auf Feldern 17-27
    - 45 Spiele wartend
-   - 16 Platzhalter-Spiele mit Status `wartend_quali`
+   - 8 Platzhalter-Spiele mit Status `wartend_quali` (für 16 Gewinner → 8 Paare)
 3. **Qualification abgeschlossen**: 
    - 16 Gewinner werden zu 8 Paarungen
    - Platzhalter-Spiele werden mit diesen 8 Paarungen gefüllt
@@ -69,8 +69,8 @@ for (let i = 0; i < pairings.length; i++) {
     });
 }
 
-// 3. Platzhalter für Qualification-Gewinner (16 Spiele = 8 Paare)
-for (let i = 0; i < 16; i++) {
+// 3. Platzhalter für Qualification-Gewinner (8 Spiele = 8 Paare für 16 Gewinner)
+for (let i = 0; i < 8; i++) {
     spiele.push({
         phase_id: mainPhase.id,
         runde: 1,
@@ -94,6 +94,7 @@ const [placeholders] = await db.query(
      WHERE phase_id = ? AND runde = 1 AND status = 'wartend_quali'`,
     [mainPhaseId]
 );
+// Erwartung: 8 Platzhalter für 16 Gewinner → 8 Paare
 
 // 3. Paare die 16 Gewinner zu 8 Spielen
 const winnerPairings = swissPairing.pairRound1Dutch(winners); // 8 Paare
@@ -181,10 +182,10 @@ if (winners.length !== 16) {
 }
 ```
 
-### Szenario: Weniger als 16 Platzhalter
+### Szenario: Weniger als 8 Platzhalter
 ```javascript
-if (placeholders.length !== 16) {
-    console.error(`Expected 16 placeholders, got ${placeholders.length}`);
+if (placeholders.length !== 8) {
+    console.error(`Expected 8 placeholders, got ${placeholders.length}`);
     return; // Abbruch, manuelle Intervention nötig
 }
 ```
@@ -203,7 +204,7 @@ if (winnerPairings.pairs.length !== 8) {
 ### Test-Szenario 1: Normaler Ablauf
 1. Erstelle Swiss 144 Turnier mit 144 Teams
 2. Starte Turnier
-3. Verifiziere: 16 Quali-Spiele + 56 Main-Spiele + 16 Platzhalter
+3. Verifiziere: 16 Quali-Spiele + 56 Main-Spiele + 8 Platzhalter
 4. Schließe alle Qualification-Spiele ab
 5. Verifiziere: Platzhalter sind gefüllt, Hobby Cup existiert
 
