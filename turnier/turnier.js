@@ -806,8 +806,10 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             
             // Defensive check: Verify we got the expected number of teams
             if (loserTeams.length !== losers.length) {
+                const loserTeamIds = new Set(loserTeams.map(t => t.id));
+                const missing = losers.filter(id => !loserTeamIds.has(id));
                 console.error(`ERROR: Expected ${losers.length} loser teams but only found ${loserTeams.length} in database`);
-                console.error(`Missing team IDs: ${losers.filter(id => !loserTeams.find(t => t.id === id))}`);
+                console.error(`Missing team IDs: ${missing.join(', ')}`);
             }
             if (loserTeams.length === 0) {
                 console.error(`ERROR: No loser teams found in database for Hobby Cup pairing!`);
