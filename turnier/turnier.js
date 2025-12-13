@@ -646,7 +646,7 @@ async function progressSwissTournament(turnierId, completedGame) {
 // Helper: Handle qualification round completion (Swiss 144)
 async function handleQualificationComplete(turnierId, qualiPhaseId) {
     try {
-        console.log('Qualification round complete - processing winners and losers');
+        console.log('=== Qualification round complete - processing winners and losers ===');
 
         // Get qualification games
         const [qualiGames] = await db.query(
@@ -667,7 +667,9 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             await db.query('UPDATE turnier_teams SET swiss_qualified = 1 WHERE id = ?', [winnerId]);
         }
 
-        console.log(`Qualification: ${winners.length} winners qualify for main field, ${losers.length} go to Hobby Cup`);
+        console.log(`Qualification complete: ${qualiGames.length} games finished`);
+        console.log(`  - Winners (advancing to Main Swiss): ${winners.length} teams -> ${winners.join(', ')}`);
+        console.log(`  - Losers (going to Hobby Cup): ${losers.length} teams -> ${losers.join(', ')}`);
 
         // Get main Swiss phase
         const [phases] = await db.query(
@@ -691,8 +693,8 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             [turnierId, mainPhaseId]
         );
         
-        if (placeholderGames.length !== 16) {
-            console.error(`Expected 16 placeholder games for qualification winners, found ${placeholderGames.length}`);
+        if (placeholderGames.length !== 8) {
+            console.error(`Expected 8 placeholder games for qualification winners (16 winners -> 8 pairs), found ${placeholderGames.length}`);
             return;
         }
         
@@ -701,7 +703,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             return;
         }
         
-        console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners`);
+        console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
         
         // Get winner teams to pair them
         // Safe: Creating placeholders for IN clause, actual values passed as parameters
@@ -725,11 +727,21 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         const winnerPairings = swissPairing.pairRound1Dutch(winnerPairingTeams, {});
         
         if (winnerPairings.pairs.length !== 8) {
-            console.error(`Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
+            console.error(`CRITICAL ERROR: Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
+            console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games: ${placeholderGames.length}`);
+            console.error(`Troubleshooting: Check that all 16 qualification games have valid gewinner_id values`);
+            console.error(`Troubleshooting: Verify swissPairing.pairRound1Dutch() is working correctly with the winner data`);
+            // Return to prevent creating inconsistent game state
+            return;
         }
         
+        console.log(`Generated ${winnerPairings.pairs.length} pairings from ${winners.length} qualification winners`);
+        
         // Update placeholder games with the winner pairings
-        for (let i = 0; i < Math.min(winnerPairings.pairs.length, placeholderGames.length); i++) {
+        // Note: Math.min is defensive programming in case of data inconsistency
+        // Both arrays should have length 8 due to validations above, but this prevents crashes if violated
+        const pairCount = Math.min(winnerPairings.pairs.length, placeholderGames.length);
+        for (let i = 0; i < pairCount; i++) {
             const pair = winnerPairings.pairs[i];
             const placeholder = placeholderGames[i];
             
@@ -748,12 +760,14 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             console.log(`Updated placeholder game #${placeholder.spiel_nummer}: Team ${pair.teamA.id} vs Team ${pair.teamB?.id || 'BYE'}`);
         }
         
-        console.log(`Successfully filled ${winnerPairings.pairs.length} placeholder games with qualification winners`);
-        console.log('Main Swiss Round 1 now has all 128 teams (56 + 8 winner pairs = 64 games)');
+        console.log(`Successfully filled ${pairCount} placeholder games with qualification winners`);
+        console.log(`Main Swiss Round 1 now has all 128 teams (56 seeded pairs + 8 winner pairs = 64 games total)`);
 
 
         // Create Hobby Cup matches for losers with interleaving support
         if (losers.length > 0) {
+            console.log(`\n=== Creating Hobby Cup for ${losers.length} qualification losers ===`);
+            
             // Check if Hobby Cup phase exists
             const [hobbyCupPhase] = await db.query(
                 'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Hobby Cup"',
@@ -772,6 +786,8 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                         `SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (${placeholders}) ORDER BY initial_seed ASC`,
                         [turnierId, ...losers]
                     );
+                    
+                    console.log(`Retrieved ${loserTeams.length} loser teams for Hobby Cup pairing`);
                     
                     // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
                     const hobbyCupPairs = [];
@@ -792,6 +808,8 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                         }
                     }
                     
+                    console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings`);
+                    
                     // Get available fields
                     const [felder] = await db.query(
                         'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
@@ -801,16 +819,18 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                     // Create Hobby Cup games with field assignments
                     const hobbyCupGames = await createSwissGames(turnierId, hobbyCupPhaseId, 1, hobbyCupPairs, felder);
                     
-                    if (process.env.DEBUG_SWISS === 'true') {
-                        console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
-                    }
-                    
+                    console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
                     console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
                 }
             } else {
-                console.log('Note: Hobby Cup phase not found - losers not paired');
+                console.error(`ERROR: Hobby Cup phase not found for tournament ${turnierId} - losers cannot be paired!`);
+                console.error(`Please create a Hobby Cup phase: INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (${turnierId}, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers')`);
             }
+        } else {
+            console.log('No losers to process for Hobby Cup');
         }
+
+        console.log('=== Qualification processing complete ===\n');
 
     } catch (err) {
         console.error('Error handling qualification completion:', err);
@@ -1975,9 +1995,9 @@ async function startSwiss144Tournament(turnierId, config, res) {
             });
         }
         
-        // Create 16 placeholder games for qualification winners (will be filled dynamically)
-        // These will be filled in handleQualificationComplete() with the 16 winners
-        for (let i = 0; i < 16; i++) {
+        // Create 8 placeholder games for qualification winners (16 winners = 8 pairs = 8 games)
+        // These will be filled in handleQualificationComplete() with the 16 winners paired into 8 games
+        for (let i = 0; i < 8; i++) {
             const bestCode = generateConfirmationCode();
             
             spiele.push({
@@ -1994,7 +2014,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
             });
         }
         
-        console.log(`Swiss 144 tournament initialized: 16 quali games + ${round1Result.pairs.length} main games + 16 placeholder games for quali winners`);
+        console.log(`Swiss 144 tournament initialized: 16 quali games + ${round1Result.pairs.length} main games + 8 placeholder games for quali winners (16 winners -> 8 pairs)`);
 
         // Insert games into database
         for (const spiel of spiele) {
@@ -2022,8 +2042,8 @@ async function startSwiss144Tournament(turnierId, config, res) {
             total_games: spiele.length,
             quali_games: 16,
             main_swiss_seeded_games: round1Result.pairs.length,
-            main_swiss_placeholder_games: 16,
-            note: 'Parallel start: Quali + Main Swiss (112 teams) + 16 placeholders for quali winners'
+            main_swiss_placeholder_games: 8,
+            note: 'Parallel start: Quali + Main Swiss (112 teams) + 8 placeholders for quali winners (16 winners -> 8 pairs)'
         });
 
         res.json({ 
@@ -2032,8 +2052,8 @@ async function startSwiss144Tournament(turnierId, config, res) {
             spiele_erstellt: spiele.length,
             quali_spiele: 16,
             hauptfeld_spiele: round1Result.pairs.length,
-            placeholder_spiele: 16,
-            note: 'Tournament started with parallel Qualification and Main Swiss Round 1'
+            placeholder_spiele: 8,
+            note: 'Tournament started with parallel Qualification and Main Swiss Round 1 (8 placeholders for 16 winners)'
         });
     } catch (err) {
         console.error('Start Swiss 144 error:', err);
