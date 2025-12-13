@@ -768,63 +768,66 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         if (losers.length > 0) {
             console.log(`\n=== Creating Hobby Cup for ${losers.length} qualification losers ===`);
             
-            // Check if Hobby Cup phase exists
-            const [hobbyCupPhase] = await db.query(
+            // Check if Hobby Cup phase exists, create if not
+            let [hobbyCupPhase] = await db.query(
                 'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Hobby Cup"',
                 [turnierId]
             );
             
+            // Create Hobby Cup phase if it doesn't exist
+            if (hobbyCupPhase.length === 0) {
+                console.log(`Hobby Cup phase not found - creating it now`);
+                const [result] = await db.query(
+                    'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
+                    [turnierId, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers']
+                );
+                hobbyCupPhase = [{ id: result.insertId, phase_name: 'Hobby Cup' }];
+                console.log(`Created Hobby Cup phase with ID ${result.insertId}`);
+            }
+            
             if (hobbyCupPhase.length > 0) {
                 const hobbyCupPhaseId = hobbyCupPhase[0].id;
                 
-                // Get loser teams with their standings
-                if (losers.length === 0) {
-                    console.log('No losers to pair for Hobby Cup');
-                } else {
-                    const placeholders = losers.map(() => '?').join(',');
-                    const [loserTeams] = await db.query(
-                        `SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (${placeholders}) ORDER BY initial_seed ASC`,
-                        [turnierId, ...losers]
-                    );
-                    
-                    console.log(`Retrieved ${loserTeams.length} loser teams for Hobby Cup pairing`);
-                    
-                    // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
-                    const hobbyCupPairs = [];
-                    for (let i = 0; i < loserTeams.length; i += 2) {
-                        if (i + 1 < loserTeams.length) {
-                            hobbyCupPairs.push({
-                                teamA: loserTeams[i],
-                                teamB: loserTeams[i + 1],
-                                isBye: false
-                            });
-                        } else {
-                            // Odd number - give bye to last team
-                            hobbyCupPairs.push({
-                                teamA: loserTeams[i],
-                                teamB: null,
-                                isBye: true
-                            });
-                        }
+                const placeholders = losers.map(() => '?').join(',');
+                const [loserTeams] = await db.query(
+                    `SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (${placeholders}) ORDER BY initial_seed ASC`,
+                    [turnierId, ...losers]
+                );
+                
+                console.log(`Retrieved ${loserTeams.length} loser teams for Hobby Cup pairing`);
+                
+                // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
+                const hobbyCupPairs = [];
+                for (let i = 0; i < loserTeams.length; i += 2) {
+                    if (i + 1 < loserTeams.length) {
+                        hobbyCupPairs.push({
+                            teamA: loserTeams[i],
+                            teamB: loserTeams[i + 1],
+                            isBye: false
+                        });
+                    } else {
+                        // Odd number - give bye to last team
+                        hobbyCupPairs.push({
+                            teamA: loserTeams[i],
+                            teamB: null,
+                            isBye: true
+                        });
                     }
-                    
-                    console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings`);
-                    
-                    // Get available fields
-                    const [felder] = await db.query(
-                        'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
-                        [turnierId]
-                    );
-                    
-                    // Create Hobby Cup games with field assignments
-                    const hobbyCupGames = await createSwissGames(turnierId, hobbyCupPhaseId, 1, hobbyCupPairs, felder);
-                    
-                    console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
-                    console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
                 }
-            } else {
-                console.error(`ERROR: Hobby Cup phase not found for tournament ${turnierId} - losers cannot be paired!`);
-                console.error(`Please create a Hobby Cup phase: INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (${turnierId}, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers')`);
+                
+                console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings`);
+                
+                // Get available fields
+                const [felder] = await db.query(
+                    'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+                    [turnierId]
+                );
+                
+                // Create Hobby Cup games with field assignments
+                const hobbyCupGames = await createSwissGames(turnierId, hobbyCupPhaseId, 1, hobbyCupPairs, felder);
+                
+                console.log(`[Hobby Cup] Generated ${hobbyCupGames.length} games, assigned ${hobbyCupGames.filter(g => g.feldId).length} to fields`);
+                console.log(`Created ${hobbyCupPairs.length} Hobby Cup pairings for ${losers.length} teams`);
             }
         } else {
             console.log('No losers to process for Hobby Cup');
