@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS turnier_spiele (
     satz3_team2 INT DEFAULT NULL,
     gewinner_id INT DEFAULT NULL,
     verlierer_id INT DEFAULT NULL,
-    status ENUM('geplant', 'bereit', 'laeuft', 'beendet', 'abgesagt', 'wartend_bestaetigung', 'wartend') DEFAULT 'geplant',
+    status ENUM('geplant', 'bereit', 'laeuft', 'beendet', 'abgesagt', 'wartend_bestaetigung', 'wartend', 'wartend_quali') DEFAULT 'geplant',
     naechstes_spiel_gewinner_id INT DEFAULT NULL,
     naechstes_spiel_verlierer_id INT DEFAULT NULL,
     schiedsrichter_name VARCHAR(255) DEFAULT NULL,
