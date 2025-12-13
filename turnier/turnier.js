@@ -661,16 +661,24 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             if (game.gewinner_id) winners.push(game.gewinner_id);
             if (game.verlierer_id) losers.push(game.verlierer_id);
         }
+        
+        console.log(`Qualification complete: ${qualiGames.length} games finished`);
+        console.log(`  - Winners (advancing to Main Swiss): ${winners.length} teams -> ${winners.join(', ')}`);
+        console.log(`  - Losers (going to Hobby Cup): ${losers.length} teams -> ${losers.join(', ')}`);
+        
+        // Defensive check: Verify we have the expected number of winners and losers
+        if (winners.length === 0 && losers.length === 0) {
+            console.error(`WARNING: No winners or losers found in qualification games! This might indicate that gewinner_id and verlierer_id are not set.`);
+            console.error(`Please verify that the batch complete function is setting both gewinner_id and verlierer_id fields.`);
+        }
+        if (winners.length !== losers.length) {
+            console.warn(`WARNING: Winners (${winners.length}) and losers (${losers.length}) counts don't match. Expected equal counts.`);
+        }
 
         // Mark winners as qualified for main Swiss
         for (const winnerId of winners) {
             await db.query('UPDATE turnier_teams SET swiss_qualified = 1 WHERE id = ?', [winnerId]);
         }
-
-        console.log(`Qualification complete: ${qualiGames.length} games finished`);
-        console.log(`  - Winners (advancing to Main Swiss): ${winners.length} teams -> ${winners.join(', ')}`);
-        console.log(`  - Losers (going to Hobby Cup): ${losers.length} teams -> ${losers.join(', ')}`);
-
         // Get main Swiss phase
         const [phases] = await db.query(
             'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Main Swiss"',
@@ -796,6 +804,17 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             
             console.log(`Retrieved ${loserTeams.length} loser teams for Hobby Cup pairing`);
             
+            // Defensive check: Verify we got the expected number of teams
+            if (loserTeams.length !== losers.length) {
+                console.error(`ERROR: Expected ${losers.length} loser teams but only found ${loserTeams.length} in database`);
+                console.error(`Missing team IDs: ${losers.filter(id => !loserTeams.find(t => t.id === id))}`);
+            }
+            if (loserTeams.length === 0) {
+                console.error(`ERROR: No loser teams found in database for Hobby Cup pairing!`);
+                console.error(`Loser IDs queried: ${losers.join(', ')}`);
+                return; // Don't create empty games
+            }
+            
             // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
             const hobbyCupPairs = [];
             for (let i = 0; i < loserTeams.length; i += 2) {
@@ -805,6 +824,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                         teamB: loserTeams[i + 1],
                         isBye: false
                     });
+                    console.log(`Paired: ${loserTeams[i].team_name} (ID ${loserTeams[i].id}) vs ${loserTeams[i + 1].team_name} (ID ${loserTeams[i + 1].id})`);
                 } else {
                     // Odd number - give bye to last team
                     hobbyCupPairs.push({
@@ -812,6 +832,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                         teamB: null,
                         isBye: true
                     });
+                    console.log(`Paired: ${loserTeams[i].team_name} (ID ${loserTeams[i].id}) gets bye`);
                 }
             }
             
