@@ -727,14 +727,18 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         const winnerPairings = swissPairing.pairRound1Dutch(winnerPairingTeams, {});
         
         if (winnerPairings.pairs.length !== 8) {
-            console.error(`Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
-            // Don't return - try to use what we have
+            console.error(`CRITICAL ERROR: Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
+            console.error(`This indicates a problem with the pairing algorithm or winner data`);
+            // Return to prevent creating inconsistent game state
+            return;
         }
         
         console.log(`Generated ${winnerPairings.pairs.length} pairings from ${winners.length} qualification winners`);
         
         // Update placeholder games with the winner pairings
-        for (let i = 0; i < winnerPairings.pairs.length; i++) {
+        // Safety check: ensure we don't exceed array bounds
+        const pairCount = Math.min(winnerPairings.pairs.length, placeholderGames.length);
+        for (let i = 0; i < pairCount; i++) {
             const pair = winnerPairings.pairs[i];
             const placeholder = placeholderGames[i];
             
@@ -753,7 +757,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             console.log(`Updated placeholder game #${placeholder.spiel_nummer}: Team ${pair.teamA.id} vs Team ${pair.teamB?.id || 'BYE'}`);
         }
         
-        console.log(`Successfully filled ${winnerPairings.pairs.length} placeholder games with qualification winners`);
+        console.log(`Successfully filled ${pairCount} placeholder games with qualification winners`);
         console.log(`Main Swiss Round 1 now has all 128 teams (56 seeded pairs + 8 winner pairs = 64 games total)`);
 
 
