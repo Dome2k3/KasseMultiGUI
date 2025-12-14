@@ -648,38 +648,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
     try {
         console.log('=== Qualification round complete - processing winners and losers ===');
 
-        // Get qualification games
-        const [qualiGames] = await db.query(
-            'SELECT * FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 AND status = "beendet"',
-            [turnierId, qualiPhaseId]
-        );
-
-        const winners = [];
-        const losers = [];
-
-        for (const game of qualiGames) {
-            if (game.gewinner_id) winners.push(game.gewinner_id);
-            if (game.verlierer_id) losers.push(game.verlierer_id);
-        }
-        
-        console.log(`Qualification complete: ${qualiGames.length} games finished`);
-        console.log(`  - Winners (advancing to Main Swiss): ${winners.length} teams -> ${winners.join(', ')}`);
-        console.log(`  - Losers (going to Hobby Cup): ${losers.length} teams -> ${losers.join(', ')}`);
-        
-        // Defensive check: Verify we have the expected number of winners and losers
-        if (winners.length === 0 && losers.length === 0) {
-            console.error(`WARNING: No winners or losers found in qualification games! This might indicate that gewinner_id and verlierer_id are not set.`);
-            console.error(`Please verify that the batch complete function is setting both gewinner_id and verlierer_id fields.`);
-        }
-        if (winners.length !== losers.length) {
-            console.warn(`WARNING: Winners (${winners.length}) and losers (${losers.length}) counts don't match. Expected equal counts.`);
-        }
-
-        // Mark winners as qualified for main Swiss
-        for (const winnerId of winners) {
-            await db.query('UPDATE turnier_teams SET swiss_qualified = 1 WHERE id = ?', [winnerId]);
-        }
-        // Get main Swiss phase
+        // Get Main Swiss phase first to check if qualification has already been processed
         const [phases] = await db.query(
             'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Main Swiss"',
             [turnierId]
@@ -691,6 +660,89 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         }
 
         const mainPhaseId = phases[0].id;
+
+        // Check if qualification has already been processed by looking for filled placeholder games
+        const [alreadyProcessed] = await db.query(
+            `SELECT COUNT(*) as filled_count FROM turnier_spiele 
+             WHERE turnier_id = ? AND phase_id = ? AND runde = 1 
+             AND status = 'wartend' AND team1_id IS NOT NULL AND team2_id IS NOT NULL
+             AND spiel_nummer > (
+                 SELECT MAX(spiel_nummer) FROM turnier_spiele 
+                 WHERE turnier_id = ? AND phase_id = ? AND runde = 1 AND status != 'wartend_quali'
+             )`,
+            [turnierId, mainPhaseId, turnierId, mainPhaseId]
+        );
+
+        if (alreadyProcessed[0].filled_count >= 8) {
+            console.log('Qualification has already been processed (placeholder games are filled). Skipping...');
+            return;
+        }
+
+        // Get qualification games
+        const [qualiGames] = await db.query(
+            'SELECT * FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 AND status = "beendet"',
+            [turnierId, qualiPhaseId]
+        );
+
+        // Validate that we have the expected number of games
+        if (qualiGames.length !== 16) {
+            console.error(`ERROR: Expected 16 qualification games, but found ${qualiGames.length}`);
+            console.error(`Cannot process qualification completion with incorrect game count.`);
+            return;
+        }
+
+        const winners = [];
+        const losers = [];
+        const gamesWithMissingData = [];
+
+        for (const game of qualiGames) {
+            if (game.gewinner_id) {
+                winners.push(game.gewinner_id);
+            }
+            if (game.verlierer_id) {
+                losers.push(game.verlierer_id);
+            }
+            // Track games that are missing gewinner_id or verlierer_id
+            if (!game.gewinner_id || !game.verlierer_id) {
+                gamesWithMissingData.push({
+                    id: game.id,
+                    spiel_nummer: game.spiel_nummer,
+                    team1_id: game.team1_id,
+                    team2_id: game.team2_id,
+                    gewinner_id: game.gewinner_id,
+                    verlierer_id: game.verlierer_id
+                });
+            }
+        }
+        
+        console.log(`Qualification complete: ${qualiGames.length} games finished`);
+        console.log(`  - Winners (advancing to Main Swiss): ${winners.length} teams -> ${winners.join(', ')}`);
+        console.log(`  - Losers (going to Hobby Cup): ${losers.length} teams -> ${losers.join(', ')}`);
+        
+        // Critical validation: Check for missing data
+        if (gamesWithMissingData.length > 0) {
+            console.error(`ERROR: ${gamesWithMissingData.length} qualification games are missing gewinner_id or verlierer_id:`);
+            for (const game of gamesWithMissingData) {
+                console.error(`  Game #${game.spiel_nummer} (ID: ${game.id}): gewinner_id=${game.gewinner_id}, verlierer_id=${game.verlierer_id}`);
+            }
+            console.error(`Cannot proceed with qualification completion until all games have winners and losers assigned.`);
+            console.error(`Please ensure all game results are properly confirmed.`);
+            return;
+        }
+        
+        // Defensive check: Verify we have the expected number of winners and losers
+        if (winners.length !== 16 || losers.length !== 16) {
+            console.error(`ERROR: Expected 16 winners and 16 losers, but found ${winners.length} winners and ${losers.length} losers`);
+            console.error(`Cannot proceed with qualification completion.`);
+            return;
+        }
+
+        // Mark winners as qualified for main Swiss
+        console.log('Marking winners as qualified for Main Swiss...');
+        for (const winnerId of winners) {
+            await db.query('UPDATE turnier_teams SET swiss_qualified = 1 WHERE id = ?', [winnerId]);
+        }
+        console.log(`Successfully marked ${winners.length} winners as qualified`);
 
         // Get placeholder games (status = 'wartend_quali') that are waiting for qualification winners
         const [placeholderGames] = await db.query(
@@ -3183,6 +3235,212 @@ app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) 
         });
     } catch (err) {
         console.error('POST test/batch-complete-games error:', err);
+        res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+});
+
+// Manual trigger for qualification completion (Swiss 144)
+// Useful for recovery if qualification completion failed or needs to be re-run
+app.post('/api/turniere/:turnierId/trigger-qualification-complete', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        // Verify tournament exists and is Swiss 144 mode
+        const [tournamentCheck] = await db.query(
+            'SELECT id, modus FROM turnier_config WHERE id = ?',
+            [turnierId]
+        );
+        
+        if (tournamentCheck.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+        
+        if (tournamentCheck[0].modus !== 'swiss_144') {
+            return res.status(400).json({ error: 'This endpoint is only for Swiss 144 tournaments' });
+        }
+
+        // Get qualification phase
+        const [qualiPhase] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Qualification"',
+            [turnierId]
+        );
+
+        if (qualiPhase.length === 0) {
+            return res.status(404).json({ error: 'Qualification phase not found' });
+        }
+
+        const qualiPhaseId = qualiPhase[0].id;
+
+        // Check if all qualification games are complete
+        const [gameStatus] = await db.query(
+            `SELECT COUNT(*) as total, 
+                    SUM(CASE WHEN status = 'beendet' THEN 1 ELSE 0 END) as completed
+             FROM turnier_spiele 
+             WHERE turnier_id = ? AND phase_id = ? AND runde = 0`,
+            [turnierId, qualiPhaseId]
+        );
+
+        if (gameStatus[0].total === 0) {
+            return res.status(400).json({ error: 'No qualification games found' });
+        }
+
+        if (gameStatus[0].completed < gameStatus[0].total) {
+            return res.status(400).json({ 
+                error: 'Not all qualification games are complete',
+                total: gameStatus[0].total,
+                completed: gameStatus[0].completed
+            });
+        }
+
+        // Trigger qualification completion
+        console.log(`Manual trigger: Processing qualification completion for tournament ${turnierId}`);
+        await handleQualificationComplete(turnierId, qualiPhaseId);
+
+        res.json({ 
+            success: true, 
+            message: 'Qualification completion triggered successfully',
+            games_processed: gameStatus[0].completed
+        });
+    } catch (err) {
+        console.error('POST trigger-qualification-complete error:', err);
+        res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+});
+
+// Diagnostic endpoint for qualification status (Swiss 144)
+// Helps debug qualification completion issues
+app.get('/api/turniere/:turnierId/qualification-status', async (req, res) => {
+    try {
+        const turnierId = req.params.turnierId;
+
+        // Verify tournament exists
+        const [tournamentCheck] = await db.query(
+            'SELECT id, modus FROM turnier_config WHERE id = ?',
+            [turnierId]
+        );
+        
+        if (tournamentCheck.length === 0) {
+            return res.status(404).json({ error: 'Tournament not found' });
+        }
+
+        const modus = tournamentCheck[0].modus;
+
+        // Get qualification phase
+        const [qualiPhase] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Qualification"',
+            [turnierId]
+        );
+
+        if (qualiPhase.length === 0) {
+            return res.json({ 
+                has_qualification: false,
+                message: 'No qualification phase found (this is normal for non-Swiss 144 tournaments)'
+            });
+        }
+
+        const qualiPhaseId = qualiPhase[0].id;
+
+        // Get qualification games status
+        const [games] = await db.query(
+            `SELECT id, spiel_nummer, status, team1_id, team2_id, gewinner_id, verlierer_id,
+                    ergebnis_team1, ergebnis_team2
+             FROM turnier_spiele 
+             WHERE turnier_id = ? AND phase_id = ? AND runde = 0
+             ORDER BY spiel_nummer`,
+            [turnierId, qualiPhaseId]
+        );
+
+        // Analyze games
+        const total = games.length;
+        const completed = games.filter(g => g.status === 'beendet').length;
+        const withWinner = games.filter(g => g.gewinner_id !== null).length;
+        const withLoser = games.filter(g => g.verlierer_id !== null).length;
+        const missingData = games.filter(g => g.status === 'beendet' && (!g.gewinner_id || !g.verlierer_id));
+
+        // Get Main Swiss placeholder status
+        const [mainPhase] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Main Swiss"',
+            [turnierId]
+        );
+
+        let placeholderStatus = null;
+        if (mainPhase.length > 0) {
+            const [placeholders] = await db.query(
+                `SELECT COUNT(*) as total,
+                        SUM(CASE WHEN status = 'wartend_quali' THEN 1 ELSE 0 END) as waiting,
+                        SUM(CASE WHEN status = 'wartend' AND team1_id IS NOT NULL AND team2_id IS NOT NULL THEN 1 ELSE 0 END) as filled
+                 FROM turnier_spiele 
+                 WHERE turnier_id = ? AND phase_id = ? AND runde = 1
+                 AND spiel_nummer > (
+                     SELECT COALESCE(MAX(spiel_nummer), 0) FROM turnier_spiele 
+                     WHERE turnier_id = ? AND phase_id = ? AND runde = 1 AND status != 'wartend_quali'
+                 )`,
+                [turnierId, mainPhase[0].id, turnierId, mainPhase[0].id]
+            );
+            placeholderStatus = placeholders[0];
+        }
+
+        // Get Hobby Cup status
+        const [hobbyCupPhase] = await db.query(
+            'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Hobby Cup"',
+            [turnierId]
+        );
+
+        let hobbyCupStatus = null;
+        if (hobbyCupPhase.length > 0) {
+            const [hobbyCupGames] = await db.query(
+                `SELECT COUNT(*) as total,
+                        COUNT(DISTINCT team1_id) + COUNT(DISTINCT team2_id) as teams_count
+                 FROM turnier_spiele 
+                 WHERE turnier_id = ? AND phase_id = ? AND runde = 1`,
+                [turnierId, hobbyCupPhase[0].id]
+            );
+            hobbyCupStatus = hobbyCupGames[0];
+        }
+
+        const isComplete = completed === total;
+        const isReadyForProcessing = isComplete && withWinner === total && withLoser === total;
+        const hasBeenProcessed = placeholderStatus && placeholderStatus.filled >= 8;
+
+        res.json({
+            modus,
+            has_qualification: true,
+            qualification_phase_id: qualiPhaseId,
+            games: {
+                total,
+                completed,
+                pending: total - completed,
+                with_winner: withWinner,
+                with_loser: withLoser
+            },
+            status: {
+                is_complete: isComplete,
+                is_ready_for_processing: isReadyForProcessing,
+                has_been_processed: hasBeenProcessed,
+                message: isReadyForProcessing 
+                    ? (hasBeenProcessed ? 'Qualification has been processed' : 'Ready to process qualification completion')
+                    : 'Qualification not yet complete or missing data'
+            },
+            issues: missingData.length > 0 ? {
+                games_missing_winner_or_loser: missingData.length,
+                details: missingData.map(g => ({
+                    spiel_nummer: g.spiel_nummer,
+                    id: g.id,
+                    has_winner: g.gewinner_id !== null,
+                    has_loser: g.verlierer_id !== null
+                }))
+            } : null,
+            placeholder_games: placeholderStatus,
+            hobby_cup: hobbyCupStatus ? {
+                phase_exists: true,
+                games: hobbyCupStatus.total,
+                estimated_teams: hobbyCupStatus.teams_count
+            } : {
+                phase_exists: false
+            }
+        });
+    } catch (err) {
+        console.error('GET qualification-status error:', err);
         res.status(500).json({ error: 'Database error: ' + err.message });
     }
 });
