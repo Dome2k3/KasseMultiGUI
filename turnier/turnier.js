@@ -524,6 +524,14 @@ async function progressSwissTournament(turnierId, completedGame) {
                 return;
             }
 
+            // Special handling for Round 6 completion - next is Round 7 (finals)
+            // In Round 7, create finals and placement matches based on standings
+            if (completedGame.runde === 6 && config[0]?.modus === 'swiss_144') {
+                console.log('Round 6 complete - creating Round 7 finals and placement matches');
+                await createFinalsRound(turnierId, completedGame.phase_id);
+                return;
+            }
+
             // Check if we've reached max rounds (7 for Swiss 144, configurable for others)
             const maxRounds = config[0]?.modus === 'swiss_144' ? 7 : 5;
 
@@ -870,7 +878,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                 console.log(`Hobby Cup phase not found - creating it now`);
                 const [result] = await db.query(
                     'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
-                    [turnierId, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers']
+                    [turnierId, 'Hobby Cup', 'trostrunde', 80, 'Hobby Cup for Qualification Losers']
                 );
                 hobbyCupPhase = [{ id: result.insertId, phase_name: 'Hobby Cup' }];
                 console.log(`Created Hobby Cup phase with ID ${result.insertId}`);
@@ -943,6 +951,128 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
 
     } catch (err) {
         console.error('Error handling qualification completion:', err);
+    }
+}
+
+// Helper: Create finals and placement matches for Round 7
+async function createFinalsRound(turnierId, phaseId) {
+    try {
+        console.log('=== Creating Round 7 finals and placement matches ===');
+
+        // Update Swiss standings to get final rankings after Round 6
+        await updateSwissStandings(turnierId);
+        
+        // Get final standings
+        const standings = await getSwissStandings(turnierId, phaseId);
+        
+        if (standings.length < 2) {
+            console.error('Not enough teams for finals');
+            return;
+        }
+        
+        // Get available fields
+        const [felder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+        
+        // Get max spiel_nummer
+        const [maxSpielResult] = await db.query(
+            'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+            [turnierId]
+        );
+        let spielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+        
+        // Create finals pairings for top placements
+        // 1st vs 2nd (Final)
+        // 3rd vs 4th (3rd place match)
+        // Additional placement matches as needed
+        const finalsPairs = [];
+        
+        // Final (1st vs 2nd)
+        if (standings.length >= 2) {
+            finalsPairs.push({
+                teamA: { id: standings[0].id, team_name: standings[0].team_name },
+                teamB: { id: standings[1].id, team_name: standings[1].team_name },
+                isBye: false,
+                description: 'Final (1st vs 2nd)'
+            });
+        }
+        
+        // 3rd place match (3rd vs 4th)
+        if (standings.length >= 4) {
+            finalsPairs.push({
+                teamA: { id: standings[2].id, team_name: standings[2].team_name },
+                teamB: { id: standings[3].id, team_name: standings[3].team_name },
+                isBye: false,
+                description: '3rd place (3rd vs 4th)'
+            });
+        }
+        
+        // 5th place match (5th vs 6th)
+        if (standings.length >= 6) {
+            finalsPairs.push({
+                teamA: { id: standings[4].id, team_name: standings[4].team_name },
+                teamB: { id: standings[5].id, team_name: standings[5].team_name },
+                isBye: false,
+                description: '5th place (5th vs 6th)'
+            });
+        }
+        
+        // 7th place match (7th vs 8th)
+        if (standings.length >= 8) {
+            finalsPairs.push({
+                teamA: { id: standings[6].id, team_name: standings[6].team_name },
+                teamB: { id: standings[7].id, team_name: standings[7].team_name },
+                isBye: false,
+                description: '7th place (7th vs 8th)'
+            });
+        }
+        
+        console.log(`Creating ${finalsPairs.length} finals/placement matches for Round 7`);
+        
+        // Create the finals games
+        for (let i = 0; i < finalsPairs.length; i++) {
+            const pair = finalsPairs[i];
+            const bestCode = generateConfirmationCode();
+            
+            // Assign field if available
+            let feldId = null;
+            let geplante_zeit = null;
+            let status = 'wartend';
+            
+            if (i < felder.length) {
+                feldId = felder[i].id;
+                geplante_zeit = new Date();
+                status = 'geplant';
+            }
+            
+            const [result] = await db.query(
+                `INSERT INTO turnier_spiele 
+                (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [turnierId, phaseId, 7, spielNummer++,
+                 pair.teamA.id, pair.teamB.id,
+                 feldId, geplante_zeit, status, bestCode]
+            );
+            
+            const spielId = result.insertId;
+            
+            // Assign referee team to this game if it has a field
+            if (feldId) {
+                await assignRefereeTeam(turnierId, spielId);
+            }
+            
+            // Record opponent relationship
+            await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, spielId, 7);
+            
+            console.log(`Created ${pair.description}: ${pair.teamA.team_name} vs ${pair.teamB.team_name}`);
+        }
+        
+        console.log('=== Round 7 finals creation complete ===\n');
+        
+    } catch (err) {
+        console.error('Error creating finals round:', err);
     }
 }
 
@@ -1507,7 +1637,7 @@ async function assignRefereeTeam(turnierId, spielId) {
             
             // Build exclusion clause and parameters safely
             let excludeClause = '';
-            const queryParams = [turnierId, turnierId, turnierId, turnierId, turnierId];
+            const queryParams = [turnierId, turnierId, turnierId, turnierId, turnierId, turnierId];
             
             if (excludedTeamIds.length > 0) {
                 // Use parameterized placeholders for excluded team IDs
@@ -1520,10 +1650,12 @@ async function assignRefereeTeam(turnierId, spielId) {
             // - Playing (geplant, bereit, laeuft status)
             // - Assigned as referees for active games
             // - Part of the current game
+            // Prioritize teams that have been referee less often for better balance
             const [availableTeams] = await db.query(
                 `SELECT DISTINCT t.id, t.team_name,
                     MAX(s_finished.bestaetigt_zeit) as last_game_time,
-                    COUNT(DISTINCT s_waiting.id) as waiting_games_count
+                    COUNT(DISTINCT s_waiting.id) as waiting_games_count,
+                    COUNT(DISTINCT s_ref_completed.id) as referee_count
                  FROM turnier_teams t
                  LEFT JOIN turnier_spiele s_finished ON (t.id = s_finished.team1_id OR t.id = s_finished.team2_id)
                      AND s_finished.turnier_id = ? AND s_finished.status = 'beendet'
@@ -1533,13 +1665,15 @@ async function assignRefereeTeam(turnierId, spielId) {
                      AND s_waiting.turnier_id = ? AND s_waiting.status = 'wartend'
                  LEFT JOIN turnier_spiele s_ref ON t.team_name = s_ref.schiedsrichter_name
                      AND s_ref.turnier_id = ? AND s_ref.status IN ('geplant', 'bereit', 'laeuft')
+                 LEFT JOIN turnier_spiele s_ref_completed ON t.team_name = s_ref_completed.schiedsrichter_name
+                     AND s_ref_completed.turnier_id = ? AND s_ref_completed.status = 'beendet'
                  WHERE t.turnier_id = ? 
                      AND t.status IN ('angemeldet', 'bestaetigt')
                      AND s_active.id IS NULL
                      AND s_ref.id IS NULL
                      ${excludeClause}
                  GROUP BY t.id, t.team_name
-                 ORDER BY waiting_games_count ASC, MAX(s_finished.bestaetigt_zeit) IS NULL, MAX(s_finished.bestaetigt_zeit) DESC, RAND()
+                 ORDER BY referee_count ASC, waiting_games_count ASC, MAX(s_finished.bestaetigt_zeit) IS NULL, MAX(s_finished.bestaetigt_zeit) DESC, RAND()
                  LIMIT 1`,
                 queryParams
             );
@@ -2025,7 +2159,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
         if (!hobbyCupPhase) {
             const [result] = await db.query(
                 'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
-                [turnierId, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers']
+                [turnierId, 'Hobby Cup', 'trostrunde', 80, 'Hobby Cup for Qualification Losers']
             );
             hobbyCupPhase = { id: result.insertId, phase_name: 'Hobby Cup' };
         }
