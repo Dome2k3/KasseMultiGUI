@@ -662,6 +662,7 @@ async function progressSwissTournament(turnierId, completedGame) {
 async function handleQualificationComplete(turnierId, qualiPhaseId) {
     try {
         console.log('=== Qualification round complete - processing winners and losers ===');
+        console.log(`Tournament ID: ${turnierId}, Qualification Phase ID: ${qualiPhaseId}`);
 
         // Get Main Swiss phase first to check if qualification has already been processed
         const [mainSwissPhases] = await db.query(
@@ -670,11 +671,13 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         );
 
         if (mainSwissPhases.length === 0) {
-            console.error('Main Swiss phase not found');
+            console.error('CRITICAL ERROR: Main Swiss phase not found - cannot process qualification');
+            console.error('This tournament may not be properly initialized for Swiss 144 mode');
             return;
         }
 
         const mainPhaseId = mainSwissPhases[0].id;
+        console.log(`Main Swiss Phase ID: ${mainPhaseId}`);
 
         // Check if qualification has already been processed by looking for filled placeholder games
         const [alreadyProcessed] = await db.query(
@@ -689,20 +692,33 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         );
 
         if (alreadyProcessed[0].filled_count >= 8) {
-            console.log('Qualification has already been processed (placeholder games are filled). Skipping...');
+            console.log('⚠️ Qualification has already been processed (placeholder games are filled). Skipping...');
+            console.log(`Found ${alreadyProcessed[0].filled_count} filled placeholder games in Main Swiss Round 1`);
             return;
         }
 
         // Get qualification games
+        console.log(`Fetching qualification games for phase ${qualiPhaseId}...`);
         const [qualiGames] = await db.query(
             'SELECT * FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 AND status = "beendet"',
             [turnierId, qualiPhaseId]
         );
 
+        console.log(`Found ${qualiGames.length} completed qualification games`);
+
         // Validate that we have the expected number of games
         if (qualiGames.length !== 16) {
-            console.error(`ERROR: Expected 16 qualification games, but found ${qualiGames.length}`);
+            console.error(`❌ ERROR: Expected 16 qualification games, but found ${qualiGames.length}`);
             console.error(`Cannot process qualification completion with incorrect game count.`);
+            console.error(`Please verify that all 16 qualification games (runde = 0) have status = 'beendet'`);
+            
+            // Additional diagnostic query
+            const [allQualiGames] = await db.query(
+                'SELECT id, spiel_nummer, runde, status, gewinner_id, verlierer_id FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0',
+                [turnierId, qualiPhaseId]
+            );
+            console.error(`Total qualification games (all statuses): ${allQualiGames.length}`);
+            console.error('Game statuses:', allQualiGames.map(g => `#${g.spiel_nummer}:${g.status}`).join(', '));
             return;
         }
 
@@ -736,21 +752,25 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         // Critical validation: Check for missing data
         if (gamesWithMissingData.length > 0) {
-            console.error(`ERROR: ${gamesWithMissingData.length} qualification games are missing gewinner_id or verlierer_id:`);
+            console.error(`❌ ERROR: ${gamesWithMissingData.length} qualification games are missing gewinner_id or verlierer_id:`);
             for (const game of gamesWithMissingData) {
-                console.error(`  Game #${game.spiel_nummer} (ID: ${game.id}): gewinner_id=${game.gewinner_id}, verlierer_id=${game.verlierer_id}`);
+                console.error(`  Game #${game.spiel_nummer} (ID: ${game.id}): gewinner_id=${game.gewinner_id || 'NULL'}, verlierer_id=${game.verlierer_id || 'NULL'}`);
             }
             console.error(`Cannot proceed with qualification completion until all games have winners and losers assigned.`);
             console.error(`Please ensure all game results are properly confirmed.`);
+            console.error(`ACTION REQUIRED: Confirm all qualification game results to set gewinner_id and verlierer_id`);
             return;
         }
         
         // Defensive check: Verify we have the expected number of winners and losers
         if (winners.length !== 16 || losers.length !== 16) {
-            console.error(`ERROR: Expected 16 winners and 16 losers, but found ${winners.length} winners and ${losers.length} losers`);
+            console.error(`❌ ERROR: Expected 16 winners and 16 losers, but found ${winners.length} winners and ${losers.length} losers`);
             console.error(`Cannot proceed with qualification completion.`);
+            console.error(`This indicates games may not have gewinner_id/verlierer_id properly set.`);
             return;
         }
+        
+        console.log(`✓ Validation passed: ${winners.length} winners and ${losers.length} losers identified`);
 
         // Mark winners as qualified for main Swiss
         console.log('Marking winners as qualified for Main Swiss...');
@@ -873,15 +893,19 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                 [turnierId]
             );
             
+            console.log(`Hobby Cup phase lookup: found ${hobbyCupPhase.length} phases`);
+            
             // Create Hobby Cup phase if it doesn't exist
             if (hobbyCupPhase.length === 0) {
-                console.log(`Hobby Cup phase not found - creating it now`);
+                console.log(`Hobby Cup phase not found - creating it now with reihenfolge = 80`);
                 const [result] = await db.query(
                     'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
                     [turnierId, 'Hobby Cup', 'trostrunde', 80, 'Hobby Cup for Qualification Losers']
                 );
                 hobbyCupPhase = [{ id: result.insertId, phase_name: 'Hobby Cup' }];
-                console.log(`Created Hobby Cup phase with ID ${result.insertId}`);
+                console.log(`✓ Created Hobby Cup phase with ID ${result.insertId} (reihenfolge: 80)`);
+            } else {
+                console.log(`✓ Found existing Hobby Cup phase with ID ${hobbyCupPhase[0].id}`);
             }
             
             // hobbyCupPhase is guaranteed to exist at this point (either found or created above)
@@ -947,10 +971,15 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             console.log('No losers to process for Hobby Cup');
         }
 
-        console.log('=== Qualification processing complete ===\n');
+        console.log('=== Qualification processing complete ===');
+        console.log(`✓ Filled ${pairCount} Main Swiss Round 1 placeholder games with qualification winners`);
+        console.log(`✓ Created ${hobbyCupPairs.length || 0} Hobby Cup Round 1 games for qualification losers`);
+        console.log(`✓ Main Swiss Round 1 now has 128 teams (${pairCount + 56} games total)`);
+        console.log('');
 
     } catch (err) {
-        console.error('Error handling qualification completion:', err);
+        console.error('❌ CRITICAL ERROR in handleQualificationComplete:', err);
+        console.error('Stack trace:', err.stack);
     }
 }
 
