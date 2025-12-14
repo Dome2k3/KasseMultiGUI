@@ -4,7 +4,31 @@
 
 Dieser Fix behebt drei kritische Fehler, die in den systemd-Logs aufgetreten sind:
 
-### 1. SQL-Syntaxfehler: `NULLS LAST` nicht unterstützt in MariaDB
+### 1. SQL-Fehler: Referenz auf Aggregatfunktion in ORDER BY
+
+**Problem:** 
+```
+Error: Reference 'last_game_time' not supported (reference to group function)
+sqlState: '42S22',
+sqlMessage: "Reference 'last_game_time' not supported (reference to group function)"
+```
+
+**Ursache:** 
+MariaDB mit ONLY_FULL_GROUP_BY-Modus erlaubt keine direkten Referenzen auf Alias von Aggregatfunktionen im ORDER BY.
+
+**Lösung:**
+Die ORDER BY-Klausel wurde geändert von:
+```sql
+ORDER BY waiting_games_count ASC, last_game_time IS NULL, last_game_time DESC, RAND()
+```
+zu:
+```sql
+ORDER BY waiting_games_count ASC, MAX(s_finished.bestaetigt_zeit) IS NULL, MAX(s_finished.bestaetigt_zeit) DESC, RAND()
+```
+
+Statt des Alias wird jetzt direkt die Aggregatfunktion `MAX()` im ORDER BY verwendet.
+
+### 2. SQL-Syntaxfehler: `NULLS LAST` nicht unterstützt in MariaDB
 
 **Problem:** 
 ```
@@ -26,7 +50,7 @@ ORDER BY waiting_games_count ASC, last_game_time IS NULL, last_game_time DESC, R
 
 In MariaDB sortiert `last_game_time IS NULL` NULL-Werte ans Ende (0 für nicht-NULL, 1 für NULL).
 
-### 2. Fehlende Spalte `spiel_id` in der Tabelle `team_opponents`
+### 3. Fehlende Spalte `spiel_id` in der Tabelle `team_opponents`
 
 **Problem:**
 ```
@@ -45,7 +69,26 @@ Eine neue Migrationsdatei wurde erstellt: `MIGRATION-Add-Spiel-ID-Team-Opponents
 mysql -u [username] -p [database_name] < /var/www/html/kasse/turnier/MIGRATION-Add-Spiel-ID-Team-Opponents.sql
 ```
 
-### 3. ValidationError: X-Forwarded-For Header ohne Trust Proxy
+### 3a. Fehlende Spalte `runde` in der Tabelle `team_opponents`
+
+**Problem:**
+```
+Error: Unknown column 'runde' in 'INSERT INTO'
+sqlMessage: "Unknown column 'runde' in 'INSERT INTO'"
+```
+
+**Ursache:**
+Die `runde`-Spalte wurde im SQL-Schema definiert, aber die bestehende Datenbank wurde nicht migriert.
+
+**Lösung:**
+Eine neue Migrationsdatei wurde erstellt: `MIGRATION-Add-Runde-Team-Opponents.sql`
+
+**Um diesen Fix anzuwenden, führen Sie die Migration aus:**
+```bash
+mysql -u [username] -p [database_name] < /var/www/html/kasse/turnier/MIGRATION-Add-Runde-Team-Opponents.sql
+```
+
+### 4. ValidationError: X-Forwarded-For Header ohne Trust Proxy
 
 **Problem:**
 ```
@@ -74,7 +117,11 @@ git pull
 
 ### 2. Migration ausführen (nur einmal nötig)
 ```bash
+# Fügen Sie die spiel_id-Spalte hinzu (falls noch nicht vorhanden)
 mysql -u your_mysql_user -p your_database_name < MIGRATION-Add-Spiel-ID-Team-Opponents.sql
+
+# Fügen Sie die runde-Spalte hinzu (falls noch nicht vorhanden)
+mysql -u your_mysql_user -p your_database_name < MIGRATION-Add-Runde-Team-Opponents.sql
 ```
 
 ### 3. Service neu starten
@@ -90,8 +137,10 @@ sudo journalctl -u turnier -n 50 --follow
 ## Erwartetes Ergebnis
 
 Nach Anwendung dieser Fixes sollten folgende Fehler nicht mehr auftreten:
+- ✅ Keine SQL-Fehler mehr mit "Reference 'last_game_time' not supported"
 - ✅ Keine SQL-Syntaxfehler mehr mit "LIMIT 1' at line 19"
 - ✅ Keine "Unknown column 'spiel_id'" Fehler mehr
+- ✅ Keine "Unknown column 'runde'" Fehler mehr
 - ✅ Keine ValidationError bzgl. X-Forwarded-For mehr
 
 ## Hinweise
