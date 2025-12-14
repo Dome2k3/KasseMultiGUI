@@ -761,9 +761,11 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
         
         // Get winner teams to pair them
-        // Create parameterized IN clause: winners contains only validated team IDs from completed games
-        // This builds a string like "?, ?, ?, ..." with one ? per winner
-        // The actual winner IDs are passed as separate parameters, preventing SQL injection
+        // Create parameterized IN clause: winners[] contains only integer team IDs extracted from
+        // gewinner_id fields of completed games (validated above). Each ID becomes a ? parameter.
+        // Example: [113, 115, 117] becomes "?, ?, ?" with [turnierId, 113, 115, 117] as parameters.
+        // This construction is safe because: (1) template literal contains only '?' characters,
+        // (2) actual values are passed as separate parameters, preventing SQL injection.
         const placeholders = winners.map(() => '?').join(',');
         const [winnerTeams] = await db.query(
             `SELECT * FROM turnier_teams 
@@ -3338,10 +3340,9 @@ app.get('/api/turniere/:turnierId/qualification-status', async (req, res) => {
 
         const qualiPhaseId = qualiPhase[0].id;
 
-        // Get qualification games status
+        // Get qualification games status (only fields needed for analysis)
         const [games] = await db.query(
-            `SELECT id, spiel_nummer, status, team1_id, team2_id, gewinner_id, verlierer_id,
-                    ergebnis_team1, ergebnis_team2
+            `SELECT id, spiel_nummer, status, gewinner_id, verlierer_id
              FROM turnier_spiele 
              WHERE turnier_id = ? AND phase_id = ? AND runde = 0
              ORDER BY spiel_nummer`,
