@@ -513,9 +513,17 @@ async function progressSwissTournament(turnierId, completedGame) {
 
         const roundInfo = roundGames[0];
         console.log(`Round ${completedGame.runde}: ${roundInfo.completed}/${roundInfo.total} games completed`);
+        
+        // Debug logging for qualification round
+        if (completedGame.runde === 0 && modus === 'swiss_144') {
+            console.log(`[DEBUG] Qualification progress: ${roundInfo.completed}/${roundInfo.total} complete`);
+            if (roundInfo.completed === roundInfo.total && roundInfo.total > 0) {
+                console.log(`[DEBUG] ✓ All qualification games complete - triggering handleQualificationComplete`);
+            }
+        }
 
         // If round is complete, generate next round
-        if (roundInfo.completed === roundInfo.total) {
+        if (roundInfo.completed === roundInfo.total && roundInfo.total > 0) {
             console.log(`Round ${completedGame.runde} complete - generating next round`);
 
             // Update Swiss standings
@@ -991,9 +999,10 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
 }
 
 // Helper: Create finals and placement matches for Round 7
+// For Swiss 144: Creates placement matches for ALL 128 teams (64 games)
 async function createFinalsRound(turnierId, phaseId) {
     try {
-        console.log('=== Creating Round 7 finals and placement matches ===');
+        console.log('=== Creating Round 7 placement matches for all teams ===');
 
         // Update Swiss standings to get final rankings after Round 6
         await updateSwissStandings(turnierId);
@@ -1002,13 +1011,13 @@ async function createFinalsRound(turnierId, phaseId) {
         const standings = await getSwissStandings(turnierId, phaseId);
         
         if (standings.length < 2) {
-            console.error('❌ ERROR: Not enough teams for finals');
-            console.error(`Found ${standings.length} teams, need at least 2 for a final match`);
-            console.error(`Expected: At least 128 teams should have participated in Main Swiss`);
+            console.error('❌ ERROR: Not enough teams for Round 7');
+            console.error(`Found ${standings.length} teams, need at least 2`);
+            console.error(`Expected: 128 teams should have participated in Main Swiss`);
             return;
         }
         
-        console.log(`Creating finals from top ${Math.min(8, standings.length)} teams`);
+        console.log(`Creating Round 7 placement matches for ${standings.length} teams`);
         
         // Get available fields
         const [felder] = await db.query(
@@ -1016,103 +1025,44 @@ async function createFinalsRound(turnierId, phaseId) {
             [turnierId]
         );
         
-        // Get max spiel_nummer
-        const [maxSpielResult] = await db.query(
-            'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
-            [turnierId]
-        );
-        let spielNummer = (maxSpielResult[0].max_nr || 0) + 1;
-        
-        // Create finals pairings for top placements
-        // 1st vs 2nd (Final)
-        // 3rd vs 4th (3rd place match)
-        // Additional placement matches as needed
+        // Pair teams by ranking for placement matches
+        // 1st vs 2nd, 3rd vs 4th, 5th vs 6th, etc.
+        // This determines final placements based on Round 6 standings
         const finalsPairs = [];
         
-        // Final (1st vs 2nd)
-        if (standings.length >= 2) {
-            finalsPairs.push({
-                teamA: { id: standings[0].id, team_name: standings[0].team_name },
-                teamB: { id: standings[1].id, team_name: standings[1].team_name },
-                isBye: false,
-                description: 'Final (1st vs 2nd)'
-            });
-        }
-        
-        // 3rd place match (3rd vs 4th)
-        if (standings.length >= 4) {
-            finalsPairs.push({
-                teamA: { id: standings[2].id, team_name: standings[2].team_name },
-                teamB: { id: standings[3].id, team_name: standings[3].team_name },
-                isBye: false,
-                description: '3rd place (3rd vs 4th)'
-            });
-        }
-        
-        // 5th place match (5th vs 6th)
-        if (standings.length >= 6) {
-            finalsPairs.push({
-                teamA: { id: standings[4].id, team_name: standings[4].team_name },
-                teamB: { id: standings[5].id, team_name: standings[5].team_name },
-                isBye: false,
-                description: '5th place (5th vs 6th)'
-            });
-        }
-        
-        // 7th place match (7th vs 8th)
-        if (standings.length >= 8) {
-            finalsPairs.push({
-                teamA: { id: standings[6].id, team_name: standings[6].team_name },
-                teamB: { id: standings[7].id, team_name: standings[7].team_name },
-                isBye: false,
-                description: '7th place (7th vs 8th)'
-            });
-        }
-        
-        console.log(`Creating ${finalsPairs.length} finals/placement matches for Round 7`);
-        
-        // Create the finals games
-        for (let i = 0; i < finalsPairs.length; i++) {
-            const pair = finalsPairs[i];
-            const bestCode = generateConfirmationCode();
-            
-            // Assign field if available
-            let feldId = null;
-            let geplante_zeit = null;
-            let status = 'wartend';
-            
-            if (i < felder.length) {
-                feldId = felder[i].id;
-                geplante_zeit = new Date();
-                status = 'geplant';
+        for (let i = 0; i < standings.length; i += 2) {
+            if (i + 1 < standings.length) {
+                const rank1 = i + 1;
+                const rank2 = i + 2;
+                finalsPairs.push({
+                    teamA: { id: standings[i].id, team_name: standings[i].team_name },
+                    teamB: { id: standings[i + 1].id, team_name: standings[i + 1].team_name },
+                    isBye: false,
+                    description: `Placement ${rank1} vs ${rank2}`
+                });
+            } else {
+                // Odd number of teams - give bye to last team
+                finalsPairs.push({
+                    teamA: { id: standings[i].id, team_name: standings[i].team_name },
+                    teamB: null,
+                    isBye: true,
+                    description: `Placement ${i + 1} (bye)`
+                });
             }
-            
-            const [result] = await db.query(
-                `INSERT INTO turnier_spiele 
-                (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [turnierId, phaseId, FINALS_ROUND, spielNummer++,
-                 pair.teamA.id, pair.teamB.id,
-                 feldId, geplante_zeit, status, bestCode]
-            );
-            
-            const spielId = result.insertId;
-            
-            // Assign referee team to this game if it has a field
-            if (feldId) {
-                await assignRefereeTeam(turnierId, spielId);
-            }
-            
-            // Record opponent relationship
-            await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, spielId, FINALS_ROUND);
-            
-            console.log(`Created ${pair.description}: ${pair.teamA.team_name} vs ${pair.teamB.team_name}`);
         }
         
-        console.log('=== Round 7 finals creation complete ===\n');
+        console.log(`Creating ${finalsPairs.length} placement matches for Round 7`);
+        
+        // Create the placement games using createSwissGames helper
+        const finalsGames = await createSwissGames(turnierId, phaseId, FINALS_ROUND, finalsPairs, felder);
+        
+        console.log(`✓ Created ${finalsGames.length} Round 7 placement matches`);
+        console.log(`✓ Assigned ${finalsGames.filter(g => g.feldId).length} games to fields`);
+        console.log('=== Round 7 placement matches creation complete ===\n');
         
     } catch (err) {
-        console.error('Error creating finals round:', err);
+        console.error('❌ Error creating finals round:', err);
+        console.error('Stack trace:', err.stack);
     }
 }
 
