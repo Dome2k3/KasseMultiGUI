@@ -755,8 +755,9 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         let placeholdersToFill = placeholderGames;
         if (placeholderGames.length !== 8) {
-            console.warn(`Expected 8 placeholder games for qualification winners (16 winners -> 8 pairs), found ${placeholderGames.length}. Proceeding with first ${Math.min(8, placeholderGames.length)} placeholders.`);
-            placeholdersToFill = placeholderGames.slice(0, 8);
+            const placeholderLimit = Math.min(8, placeholderGames.length);
+            console.warn(`Expected 8 placeholder games for qualification winners (16 winners -> 8 pairs), found ${placeholderGames.length}. Proceeding with first ${placeholderLimit} placeholders.`);
+            placeholdersToFill = placeholderGames.slice(0, placeholderLimit);
         }
         
         console.log(`Filling ${placeholdersToFill.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
