@@ -755,35 +755,33 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             [turnierId, mainPhaseId]
         );
         
-        let placeholdersToFill = placeholderGames;
-        if (placeholderGames.length !== EXPECTED_QUALI_PLACEHOLDERS) {
-            const placeholderLimit = Math.min(EXPECTED_QUALI_PLACEHOLDERS, placeholderGames.length);
-            console.warn(`Expected ${EXPECTED_QUALI_PLACEHOLDERS} placeholder games for qualification winners (${EXPECTED_QUALI_PLACEHOLDERS * 2} winners -> ${EXPECTED_QUALI_PLACEHOLDERS} pairs), found ${placeholderGames.length}. Proceeding with first ${placeholderLimit} placeholders.`);
-            placeholdersToFill = placeholderGames.slice(0, placeholderLimit);
+        let placeholdersToFill = placeholderGames.slice(0, EXPECTED_QUALI_PLACEHOLDERS);
+        
+        if (placeholderGames.length > EXPECTED_QUALI_PLACEHOLDERS) {
+            console.warn(`Expected ${EXPECTED_QUALI_PLACEHOLDERS} placeholder games for qualification winners (${EXPECTED_QUALI_PLACEHOLDERS * 2} winners -> ${EXPECTED_QUALI_PLACEHOLDERS} pairs), found ${placeholderGames.length}. Proceeding with first ${placeholdersToFill.length} placeholders.`);
+        } else if (placeholderGames.length < EXPECTED_QUALI_PLACEHOLDERS) {
+            const missing = EXPECTED_QUALI_PLACEHOLDERS - placeholderGames.length;
+            console.warn(`Creating ${missing} missing placeholder games for qualification winners.`);
             
-            if (placeholderGames.length < EXPECTED_QUALI_PLACEHOLDERS) {
-                const missing = EXPECTED_QUALI_PLACEHOLDERS - placeholderGames.length;
-                console.warn(`Creating ${missing} missing placeholder games for qualification winners.`);
-                
-                const [maxSpielResult] = await db.query(
-                    'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
-                    [turnierId]
-                );
-                let nextSpielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+            const [maxSpielResult] = await db.query(
+                'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+                [turnierId]
+            );
+            let nextSpielNummer = (maxSpielResult[0].max_nr || 0) + 1;
 
-                for (let i = 0; i < missing; i++) {
-                    const bestCode = generateConfirmationCode();
-                    const [placeholderInsert] = await db.query(
-                        `INSERT INTO turnier_spiele 
-                        (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
-                        VALUES (?, ?, 1, ?, NULL, NULL, NULL, NULL, 'wartend_quali', ?)`,
-                        [turnierId, mainPhaseId, nextSpielNummer++, bestCode]
-                    );
-                    placeholdersToFill.push({
-                        id: placeholderInsert.insertId,
-                        spiel_nummer: nextSpielNummer - 1
-                    });
-                }
+            for (let i = 0; i < missing; i++) {
+                const bestCode = generateConfirmationCode();
+                const spielNummer = nextSpielNummer++;
+                const [placeholderInsert] = await db.query(
+                    `INSERT INTO turnier_spiele 
+                    (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                    VALUES (?, ?, 1, ?, NULL, NULL, NULL, NULL, 'wartend_quali', ?)`,
+                    [turnierId, mainPhaseId, spielNummer, bestCode]
+                );
+                placeholdersToFill.push({
+                    id: placeholderInsert.insertId,
+                    spiel_nummer: spielNummer
+                });
             }
         }
         
@@ -816,7 +814,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         if (winnerPairings.pairs.length !== EXPECTED_QUALI_PLACEHOLDERS) {
             console.error(`CRITICAL ERROR: Expected ${EXPECTED_QUALI_PLACEHOLDERS} pairs from ${winners.length} winners, got ${winnerPairings.pairs.length}`);
-            console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games: ${placeholderGames.length}`);
+            console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games used: ${placeholdersToFill.length}`);
             console.error(`Troubleshooting: Check that all 16 qualification games have valid gewinner_id values`);
             console.error(`Troubleshooting: Verify swissPairing.pairRound1Dutch() is working correctly with the winner data`);
             // Return to prevent creating inconsistent game state
