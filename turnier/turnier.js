@@ -512,11 +512,16 @@ async function progressSwissTournament(turnierId, completedGame) {
         );
 
         const roundInfo = roundGames[0];
-        console.log(`Round ${completedGame.runde}: ${roundInfo.completed}/${roundInfo.total} games completed`);
+        // Convert to numbers to ensure type consistency
+        const completed = Number(roundInfo.completed) || 0;
+        const total = Number(roundInfo.total) || 0;
+        
+        console.log(`Round ${completedGame.runde}: ${completed}/${total} games completed`);
         
         // Debug logging for qualification round
         if (completedGame.runde === 0 && modus === 'swiss_144') {
-            console.log(`[DEBUG] Qualification progress: ${roundInfo.completed}/${roundInfo.total} complete`);
+            console.log(`[DEBUG] Qualification progress: ${completed}/${total} complete`);
+            console.log(`[DEBUG] Types: completed=${typeof roundInfo.completed} (${roundInfo.completed}), total=${typeof roundInfo.total} (${roundInfo.total})`);
             
             // Additional diagnostic - check what phase we're in
             const [phaseInfo] = await db.query(
@@ -526,14 +531,15 @@ async function progressSwissTournament(turnierId, completedGame) {
             console.log(`[DEBUG] Current phase: ${phaseInfo[0]?.phase_name} (ID: ${completedGame.phase_id})`);
             
             // Check if all 16 qualification games are done
-            if (roundInfo.completed === 16 && roundInfo.total === 16) {
+            if (completed === 16 && total === 16) {
                 console.log(`[DEBUG] ✓✓✓ All 16 qualification games complete - should trigger handleQualificationComplete`);
             }
             
-            if (roundInfo.completed === roundInfo.total && roundInfo.total > 0) {
-                console.log(`[DEBUG] ✓ Condition met: completed (${roundInfo.completed}) === total (${roundInfo.total}) - triggering handleQualificationComplete`);
-            } else if (roundInfo.completed >= 16) {
-                console.log(`[DEBUG] ⚠️ Warning: completed=${roundInfo.completed}, total=${roundInfo.total}, but condition not met!`);
+            if (completed === total && total > 0) {
+                console.log(`[DEBUG] ✓ Condition met: completed (${completed}) === total (${total}) - triggering handleQualificationComplete`);
+            } else if (completed >= 16) {
+                console.log(`[DEBUG] ⚠️ Warning: completed=${completed}, total=${total}, but condition not met!`);
+                console.log(`[DEBUG] Strict comparison: ${completed} === ${total} is ${completed === total}`);
                 // Query all games to understand the state
                 const [allQualiGames] = await db.query(
                     'SELECT id, spiel_nummer, status FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 ORDER BY spiel_nummer',
@@ -545,7 +551,7 @@ async function progressSwissTournament(turnierId, completedGame) {
         }
 
         // If round is complete, generate next round
-        if (roundInfo.completed === roundInfo.total && roundInfo.total > 0) {
+        if (completed === total && total > 0) {
             console.log(`Round ${completedGame.runde} complete - generating next round`);
 
             // Update Swiss standings
