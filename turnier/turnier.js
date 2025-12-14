@@ -801,7 +801,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             [turnierId, ...winners]
         );
         
-        // Pair the 16 winners using Dutch system (8 pairs)
+        // Pair the qualification winners using Dutch system (expected pairs = EXPECTED_QUALI_PLACEHOLDERS)
         const winnerPairingTeams = winnerTeams.map(t => ({
             id: t.id,
             score: 0,
@@ -815,7 +815,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         if (winnerPairings.pairs.length !== EXPECTED_QUALI_PLACEHOLDERS) {
             console.error(`CRITICAL ERROR: Expected ${EXPECTED_QUALI_PLACEHOLDERS} pairs from ${winners.length} winners, got ${winnerPairings.pairs.length}`);
             console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games used: ${placeholdersToFill.length}`);
-            console.error(`Troubleshooting: Check that all 16 qualification games have valid gewinner_id values`);
+            console.error(`Troubleshooting: Check that all ${EXPECTED_QUALI_PLACEHOLDERS * 2} qualification games have valid gewinner_id values`);
             console.error(`Troubleshooting: Verify swissPairing.pairRound1Dutch() is working correctly with the winner data`);
             // Return to prevent creating inconsistent game state
             return;
