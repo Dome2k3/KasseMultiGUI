@@ -666,10 +666,10 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             `SELECT COUNT(*) as filled_count FROM turnier_spiele 
              WHERE turnier_id = ? AND phase_id = ? AND runde = 1 
              AND status = 'wartend' AND team1_id IS NOT NULL AND team2_id IS NOT NULL
-             AND spiel_nummer > (
+             AND spiel_nummer > COALESCE((
                  SELECT MAX(spiel_nummer) FROM turnier_spiele 
                  WHERE turnier_id = ? AND phase_id = ? AND runde = 1 AND status != 'wartend_quali'
-             )`,
+             ), 0)`,
             [turnierId, mainPhaseId, turnierId, mainPhaseId]
         );
 
@@ -758,15 +758,12 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             return;
         }
         
-        if (winners.length !== 16) {
-            console.error(`Expected 16 qualification winners, found ${winners.length}`);
-            return;
-        }
-        
         console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
         
         // Get winner teams to pair them
-        // Safe: Creating placeholders for IN clause, actual values passed as parameters
+        // Create parameterized IN clause: winners contains only validated team IDs from completed games
+        // This builds a string like "?, ?, ?, ..." with one ? per winner
+        // The actual winner IDs are passed as separate parameters, preventing SQL injection
         const placeholders = winners.map(() => '?').join(',');
         const [winnerTeams] = await db.query(
             `SELECT * FROM turnier_teams 
@@ -848,6 +845,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             // hobbyCupPhase is guaranteed to exist at this point (either found or created above)
             const hobbyCupPhaseId = hobbyCupPhase[0].id;
             
+            // Create parameterized IN clause for losers (same safe pattern as winners above)
             const placeholders = losers.map(() => '?').join(',');
             const [loserTeams] = await db.query(
                 `SELECT * FROM turnier_teams WHERE turnier_id = ? AND id IN (${placeholders}) ORDER BY initial_seed ASC`,
