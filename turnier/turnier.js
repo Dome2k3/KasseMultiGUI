@@ -753,12 +753,13 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             [turnierId, mainPhaseId]
         );
         
+        let placeholdersToFill = placeholderGames;
         if (placeholderGames.length !== 8) {
-            console.error(`Expected 8 placeholder games for qualification winners (16 winners -> 8 pairs), found ${placeholderGames.length}`);
-            return;
+            console.warn(`Expected 8 placeholder games for qualification winners (16 winners -> 8 pairs), found ${placeholderGames.length}. Proceeding with first ${Math.min(8, placeholderGames.length)} placeholders.`);
+            placeholdersToFill = placeholderGames.slice(0, 8);
         }
         
-        console.log(`Filling ${placeholderGames.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
+        console.log(`Filling ${placeholdersToFill.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
         
         // Get winner teams to pair them
         // Create parameterized IN clause: winners[] contains only integer team IDs extracted from
@@ -799,10 +800,10 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         // Update placeholder games with the winner pairings
         // Note: Math.min is defensive programming in case of data inconsistency
         // Both arrays should have length 8 due to validations above, but this prevents crashes if violated
-        const pairCount = Math.min(winnerPairings.pairs.length, placeholderGames.length);
+        const pairCount = Math.min(winnerPairings.pairs.length, placeholdersToFill.length);
         for (let i = 0; i < pairCount; i++) {
             const pair = winnerPairings.pairs[i];
-            const placeholder = placeholderGames[i];
+            const placeholder = placeholdersToFill[i];
             
             await db.query(
                 `UPDATE turnier_spiele 
