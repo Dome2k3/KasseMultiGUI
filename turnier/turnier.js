@@ -517,8 +517,30 @@ async function progressSwissTournament(turnierId, completedGame) {
         // Debug logging for qualification round
         if (completedGame.runde === 0 && modus === 'swiss_144') {
             console.log(`[DEBUG] Qualification progress: ${roundInfo.completed}/${roundInfo.total} complete`);
+            
+            // Additional diagnostic - check what phase we're in
+            const [phaseInfo] = await db.query(
+                'SELECT id, phase_name FROM turnier_phasen WHERE id = ?',
+                [completedGame.phase_id]
+            );
+            console.log(`[DEBUG] Current phase: ${phaseInfo[0]?.phase_name} (ID: ${completedGame.phase_id})`);
+            
+            // Check if all 16 qualification games are done
+            if (roundInfo.completed === 16 && roundInfo.total === 16) {
+                console.log(`[DEBUG] ✓✓✓ All 16 qualification games complete - should trigger handleQualificationComplete`);
+            }
+            
             if (roundInfo.completed === roundInfo.total && roundInfo.total > 0) {
-                console.log(`[DEBUG] ✓ All qualification games complete - triggering handleQualificationComplete`);
+                console.log(`[DEBUG] ✓ Condition met: completed (${roundInfo.completed}) === total (${roundInfo.total}) - triggering handleQualificationComplete`);
+            } else if (roundInfo.completed >= 16) {
+                console.log(`[DEBUG] ⚠️ Warning: completed=${roundInfo.completed}, total=${roundInfo.total}, but condition not met!`);
+                // Query all games to understand the state
+                const [allQualiGames] = await db.query(
+                    'SELECT id, spiel_nummer, status FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 ORDER BY spiel_nummer',
+                    [turnierId, completedGame.phase_id]
+                );
+                console.log(`[DEBUG] Total qualification games in DB: ${allQualiGames.length}`);
+                console.log(`[DEBUG] Game statuses: ${allQualiGames.map(g => `#${g.spiel_nummer}:${g.status}`).join(', ')}`);
             }
         }
 
