@@ -12,6 +12,11 @@ const swissPairing = require('./swiss-pairing');
 const EXPECTED_QUALI_PLACEHOLDERS = 8;
 
 const app = express();
+
+// Trust proxy - needed when behind reverse proxy (nginx, etc.)
+// This allows express-rate-limit to correctly identify client IPs from X-Forwarded-For header
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
@@ -1534,7 +1539,7 @@ async function assignRefereeTeam(turnierId, spielId) {
                      AND s_ref.id IS NULL
                      ${excludeClause}
                  GROUP BY t.id, t.team_name
-                 ORDER BY waiting_games_count ASC, last_game_time DESC NULLS LAST, RAND()
+                 ORDER BY waiting_games_count ASC, last_game_time IS NULL, last_game_time DESC, RAND()
                  LIMIT 1`,
                 queryParams
             );
