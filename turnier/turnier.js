@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const swissPairing = require('./swiss-pairing');
 
 const EXPECTED_QUALI_PLACEHOLDERS = 8;
+const HOBBY_CUP_REIHENFOLGE = 80;  // Phase order for Hobby Cup
 
 const app = express();
 
@@ -673,6 +674,10 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         if (mainSwissPhases.length === 0) {
             console.error('CRITICAL ERROR: Main Swiss phase not found - cannot process qualification');
             console.error('This tournament may not be properly initialized for Swiss 144 mode');
+            console.error('ACTION REQUIRED:');
+            console.error('1. Verify tournament was created with modus = "swiss_144"');
+            console.error('2. Check that startSwiss144Tournament endpoint was called');
+            console.error('3. Verify turnier_phasen table has "Main Swiss" phase for this tournament');
             return;
         }
 
@@ -897,13 +902,13 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             
             // Create Hobby Cup phase if it doesn't exist
             if (hobbyCupPhase.length === 0) {
-                console.log(`Hobby Cup phase not found - creating it now with reihenfolge = 80`);
+                console.log(`Hobby Cup phase not found - creating it now with reihenfolge = ${HOBBY_CUP_REIHENFOLGE}`);
                 const [result] = await db.query(
                     'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
-                    [turnierId, 'Hobby Cup', 'trostrunde', 80, 'Hobby Cup for Qualification Losers']
+                    [turnierId, 'Hobby Cup', 'trostrunde', HOBBY_CUP_REIHENFOLGE, 'Hobby Cup for Qualification Losers']
                 );
                 hobbyCupPhase = [{ id: result.insertId, phase_name: 'Hobby Cup' }];
-                console.log(`✓ Created Hobby Cup phase with ID ${result.insertId} (reihenfolge: 80)`);
+                console.log(`✓ Created Hobby Cup phase with ID ${result.insertId} (reihenfolge: ${HOBBY_CUP_REIHENFOLGE})`);
             } else {
                 console.log(`✓ Found existing Hobby Cup phase with ID ${hobbyCupPhase[0].id}`);
             }
@@ -995,9 +1000,13 @@ async function createFinalsRound(turnierId, phaseId) {
         const standings = await getSwissStandings(turnierId, phaseId);
         
         if (standings.length < 2) {
-            console.error('Not enough teams for finals');
+            console.error('❌ ERROR: Not enough teams for finals');
+            console.error(`Found ${standings.length} teams, need at least 2 for a final match`);
+            console.error(`Expected: At least 128 teams should have participated in Main Swiss`);
             return;
         }
+        
+        console.log(`Creating finals from top ${Math.min(8, standings.length)} teams`);
         
         // Get available fields
         const [felder] = await db.query(
@@ -1666,7 +1675,7 @@ async function assignRefereeTeam(turnierId, spielId) {
             
             // Build exclusion clause and parameters safely
             let excludeClause = '';
-            const queryParams = [turnierId, turnierId, turnierId, turnierId, turnierId, turnierId];
+            const queryParams = Array(6).fill(turnierId);
             
             if (excludedTeamIds.length > 0) {
                 // Use parameterized placeholders for excluded team IDs
@@ -2188,7 +2197,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
         if (!hobbyCupPhase) {
             const [result] = await db.query(
                 'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
-                [turnierId, 'Hobby Cup', 'trostrunde', 80, 'Hobby Cup for Qualification Losers']
+                [turnierId, 'Hobby Cup', 'trostrunde', HOBBY_CUP_REIHENFOLGE, 'Hobby Cup for Qualification Losers']
             );
             hobbyCupPhase = { id: result.insertId, phase_name: 'Hobby Cup' };
         }
