@@ -744,6 +744,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         }
         console.log(`Successfully marked ${winners.length} winners as qualified`);
 
+        const EXPECTED_QUALI_PLACEHOLDERS = 8;
         // Get placeholder games (status = 'wartend_quali') that are waiting for qualification winners
         const [placeholderGames] = await db.query(
             `SELECT id, spiel_nummer FROM turnier_spiele 
@@ -754,13 +755,13 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         );
         
         let placeholdersToFill = placeholderGames;
-        if (placeholderGames.length !== 8) {
-            const placeholderLimit = Math.min(8, placeholderGames.length);
-            console.warn(`Expected 8 placeholder games for qualification winners (16 winners -> 8 pairs), found ${placeholderGames.length}. Proceeding with first ${placeholderLimit} placeholders.`);
+        if (placeholderGames.length !== EXPECTED_QUALI_PLACEHOLDERS) {
+            const placeholderLimit = Math.min(EXPECTED_QUALI_PLACEHOLDERS, placeholderGames.length);
+            console.warn(`Expected ${EXPECTED_QUALI_PLACEHOLDERS} placeholder games for qualification winners (${EXPECTED_QUALI_PLACEHOLDERS * 2} winners -> ${EXPECTED_QUALI_PLACEHOLDERS} pairs), found ${placeholderGames.length}. Proceeding with first ${placeholderLimit} placeholders.`);
             placeholdersToFill = placeholderGames.slice(0, placeholderLimit);
         }
         
-        console.log(`Filling ${placeholdersToFill.length} placeholder games with ${winners.length} qualification winners (16 winners -> 8 pairs)`);
+        console.log(`Filling ${placeholdersToFill.length} placeholder games with ${winners.length} qualification winners (${EXPECTED_QUALI_PLACEHOLDERS * 2} winners -> ${EXPECTED_QUALI_PLACEHOLDERS} pairs)`);
         
         // Get winner teams to pair them
         // Create parameterized IN clause: winners[] contains only integer team IDs extracted from
@@ -787,8 +788,8 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         const winnerPairings = swissPairing.pairRound1Dutch(winnerPairingTeams, {});
         
-        if (winnerPairings.pairs.length !== 8) {
-            console.error(`CRITICAL ERROR: Expected 8 pairs from 16 winners, got ${winnerPairings.pairs.length}`);
+        if (winnerPairings.pairs.length !== EXPECTED_QUALI_PLACEHOLDERS) {
+            console.error(`CRITICAL ERROR: Expected ${EXPECTED_QUALI_PLACEHOLDERS} pairs from ${EXPECTED_QUALI_PLACEHOLDERS * 2} winners, got ${winnerPairings.pairs.length}`);
             console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games: ${placeholderGames.length}`);
             console.error(`Troubleshooting: Check that all 16 qualification games have valid gewinner_id values`);
             console.error(`Troubleshooting: Verify swissPairing.pairRound1Dutch() is working correctly with the winner data`);
