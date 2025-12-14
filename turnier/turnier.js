@@ -11,6 +11,8 @@ const swissPairing = require('./swiss-pairing');
 
 const EXPECTED_QUALI_PLACEHOLDERS = 8;
 const HOBBY_CUP_REIHENFOLGE = 80;  // Phase order for Hobby Cup
+const FINALS_ROUND = 7;  // Final round for Swiss 144 tournaments
+const MAX_ROUNDS_SWISS_144 = 7;  // Maximum rounds for Swiss 144 tournaments
 
 const app = express();
 
@@ -528,13 +530,13 @@ async function progressSwissTournament(turnierId, completedGame) {
             // Special handling for Round 6 completion - next is Round 7 (finals)
             // In Round 7, create finals and placement matches based on standings
             if (completedGame.runde === 6 && config[0]?.modus === 'swiss_144') {
-                console.log('Round 6 complete - creating Round 7 finals and placement matches');
+                console.log(`Round 6 complete - creating Round ${FINALS_ROUND} finals and placement matches`);
                 await createFinalsRound(turnierId, completedGame.phase_id);
                 return;
             }
 
             // Check if we've reached max rounds (7 for Swiss 144, configurable for others)
-            const maxRounds = config[0]?.modus === 'swiss_144' ? 7 : 5;
+            const maxRounds = config[0]?.modus === 'swiss_144' ? MAX_ROUNDS_SWISS_144 : 5;
 
             if (completedGame.runde >= maxRounds) {
                 console.log(`Tournament complete - max rounds (${maxRounds}) reached`);
@@ -1089,7 +1091,7 @@ async function createFinalsRound(turnierId, phaseId) {
                 `INSERT INTO turnier_spiele 
                 (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [turnierId, phaseId, 7, spielNummer++,
+                [turnierId, phaseId, FINALS_ROUND, spielNummer++,
                  pair.teamA.id, pair.teamB.id,
                  feldId, geplante_zeit, status, bestCode]
             );
@@ -1102,7 +1104,7 @@ async function createFinalsRound(turnierId, phaseId) {
             }
             
             // Record opponent relationship
-            await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, spielId, 7);
+            await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, spielId, FINALS_ROUND);
             
             console.log(`Created ${pair.description}: ${pair.teamA.team_name} vs ${pair.teamB.team_name}`);
         }
@@ -1674,8 +1676,10 @@ async function assignRefereeTeam(turnierId, spielId) {
             }
             
             // Build exclusion clause and parameters safely
+            // Query uses 6 turnier_id placeholders (s_finished, s_active, s_waiting, s_ref, s_ref_completed, WHERE)
+            const TURNIER_ID_PARAM_COUNT = 6;
             let excludeClause = '';
-            const queryParams = Array(6).fill(turnierId);
+            const queryParams = Array(TURNIER_ID_PARAM_COUNT).fill(turnierId);
             
             if (excludedTeamIds.length > 0) {
                 // Use parameterized placeholders for excluded team IDs
