@@ -1539,7 +1539,7 @@ async function assignRefereeTeam(turnierId, spielId) {
                      AND s_ref.id IS NULL
                      ${excludeClause}
                  GROUP BY t.id, t.team_name
-                 ORDER BY waiting_games_count ASC, last_game_time IS NULL, last_game_time DESC, RAND()
+                 ORDER BY waiting_games_count ASC, MAX(s_finished.bestaetigt_zeit) IS NULL, MAX(s_finished.bestaetigt_zeit) DESC, RAND()
                  LIMIT 1`,
                 queryParams
             );
