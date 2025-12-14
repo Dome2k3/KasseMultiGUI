@@ -649,17 +649,17 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         console.log('=== Qualification round complete - processing winners and losers ===');
 
         // Get Main Swiss phase first to check if qualification has already been processed
-        const [phases] = await db.query(
+        const [mainSwissPhases] = await db.query(
             'SELECT * FROM turnier_phasen WHERE turnier_id = ? AND phase_name = "Main Swiss"',
             [turnierId]
         );
 
-        if (phases.length === 0) {
+        if (mainSwissPhases.length === 0) {
             console.error('Main Swiss phase not found');
             return;
         }
 
-        const mainPhaseId = phases[0].id;
+        const mainPhaseId = mainSwissPhases[0].id;
 
         // Check if qualification has already been processed by looking for filled placeholder games
         const [alreadyProcessed] = await db.query(
@@ -3389,13 +3389,29 @@ app.get('/api/turniere/:turnierId/qualification-status', async (req, res) => {
         let hobbyCupStatus = null;
         if (hobbyCupPhase.length > 0) {
             const [hobbyCupGames] = await db.query(
-                `SELECT COUNT(*) as total,
-                        COUNT(DISTINCT team1_id) + COUNT(DISTINCT team2_id) as teams_count
+                `SELECT COUNT(*) as total
                  FROM turnier_spiele 
                  WHERE turnier_id = ? AND phase_id = ? AND runde = 1`,
                 [turnierId, hobbyCupPhase[0].id]
             );
-            hobbyCupStatus = hobbyCupGames[0];
+            
+            // Count unique teams participating in Hobby Cup
+            const [hobbyCupTeams] = await db.query(
+                `SELECT COUNT(DISTINCT team_id) as teams_count
+                 FROM (
+                     SELECT team1_id as team_id FROM turnier_spiele
+                     WHERE turnier_id = ? AND phase_id = ? AND runde = 1 AND team1_id IS NOT NULL
+                     UNION
+                     SELECT team2_id as team_id FROM turnier_spiele
+                     WHERE turnier_id = ? AND phase_id = ? AND runde = 1 AND team2_id IS NOT NULL
+                 ) AS all_teams`,
+                [turnierId, hobbyCupPhase[0].id, turnierId, hobbyCupPhase[0].id]
+            );
+            
+            hobbyCupStatus = {
+                total: hobbyCupGames[0].total,
+                teams_count: hobbyCupTeams[0].teams_count
+            };
         }
 
         const isComplete = completed === total;
