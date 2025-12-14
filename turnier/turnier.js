@@ -9,6 +9,8 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const swissPairing = require('./swiss-pairing');
 
+const EXPECTED_QUALI_PLACEHOLDERS = 8;
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -744,7 +746,6 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         }
         console.log(`Successfully marked ${winners.length} winners as qualified`);
 
-        const EXPECTED_QUALI_PLACEHOLDERS = 8;
         // Get placeholder games (status = 'wartend_quali') that are waiting for qualification winners
         const [placeholderGames] = await db.query(
             `SELECT id, spiel_nummer FROM turnier_spiele 
@@ -759,9 +760,34 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             const placeholderLimit = Math.min(EXPECTED_QUALI_PLACEHOLDERS, placeholderGames.length);
             console.warn(`Expected ${EXPECTED_QUALI_PLACEHOLDERS} placeholder games for qualification winners (${EXPECTED_QUALI_PLACEHOLDERS * 2} winners -> ${EXPECTED_QUALI_PLACEHOLDERS} pairs), found ${placeholderGames.length}. Proceeding with first ${placeholderLimit} placeholders.`);
             placeholdersToFill = placeholderGames.slice(0, placeholderLimit);
+            
+            if (placeholderGames.length < EXPECTED_QUALI_PLACEHOLDERS) {
+                const missing = EXPECTED_QUALI_PLACEHOLDERS - placeholderGames.length;
+                console.warn(`Creating ${missing} missing placeholder games for qualification winners.`);
+                
+                const [maxSpielResult] = await db.query(
+                    'SELECT MAX(spiel_nummer) as max_nr FROM turnier_spiele WHERE turnier_id = ?',
+                    [turnierId]
+                );
+                let nextSpielNummer = (maxSpielResult[0].max_nr || 0) + 1;
+
+                for (let i = 0; i < missing; i++) {
+                    const bestCode = generateConfirmationCode();
+                    const [placeholderInsert] = await db.query(
+                        `INSERT INTO turnier_spiele 
+                        (turnier_id, phase_id, runde, spiel_nummer, team1_id, team2_id, feld_id, geplante_zeit, status, bestaetigungs_code) 
+                        VALUES (?, ?, 1, ?, NULL, NULL, NULL, NULL, 'wartend_quali', ?)`,
+                        [turnierId, mainPhaseId, nextSpielNummer++, bestCode]
+                    );
+                    placeholdersToFill.push({
+                        id: placeholderInsert.insertId,
+                        spiel_nummer: nextSpielNummer - 1
+                    });
+                }
+            }
         }
         
-        console.log(`Filling ${placeholdersToFill.length} placeholder games with ${winners.length} qualification winners (${EXPECTED_QUALI_PLACEHOLDERS * 2} winners -> ${EXPECTED_QUALI_PLACEHOLDERS} pairs)`);
+        console.log(`Filling ${placeholdersToFill.length} placeholder games with ${winners.length} qualification winners (expected ${EXPECTED_QUALI_PLACEHOLDERS} pairs)`);
         
         // Get winner teams to pair them
         // Create parameterized IN clause: winners[] contains only integer team IDs extracted from
@@ -789,7 +815,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         const winnerPairings = swissPairing.pairRound1Dutch(winnerPairingTeams, {});
         
         if (winnerPairings.pairs.length !== EXPECTED_QUALI_PLACEHOLDERS) {
-            console.error(`CRITICAL ERROR: Expected ${EXPECTED_QUALI_PLACEHOLDERS} pairs from ${EXPECTED_QUALI_PLACEHOLDERS * 2} winners, got ${winnerPairings.pairs.length}`);
+            console.error(`CRITICAL ERROR: Expected ${EXPECTED_QUALI_PLACEHOLDERS} pairs from ${winners.length} winners, got ${winnerPairings.pairs.length}`);
             console.error(`Tournament ID: ${turnierId}, Winners found: ${winners.length}, Placeholder games: ${placeholderGames.length}`);
             console.error(`Troubleshooting: Check that all 16 qualification games have valid gewinner_id values`);
             console.error(`Troubleshooting: Verify swissPairing.pairRound1Dutch() is working correctly with the winner data`);
