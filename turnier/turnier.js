@@ -1814,8 +1814,11 @@ async function assignRefereeTeam(turnierId, spielId) {
 async function ensureGameHasFieldAndReferee(turnierId, game) {
     try {
         let currentGame = game;
-        if (!currentGame || currentGame.feld_id === undefined) {
-            const [rows] = await db.query('SELECT * FROM turnier_spiele WHERE id = ? AND turnier_id = ?', [game?.id || 0, turnierId]);
+        if (!currentGame || currentGame.feld_id == null || (currentGame.schiedsrichter_team_id == null && !currentGame.schiedsrichter_name)) {
+            const [rows] = await db.query(
+                'SELECT id, spiel_nummer, feld_id, schiedsrichter_team_id, schiedsrichter_name, status, geplante_zeit FROM turnier_spiele WHERE id = ? AND turnier_id = ?',
+                [game?.id || 0, turnierId]
+            );
             currentGame = rows[0];
         }
 
@@ -1827,6 +1830,7 @@ async function ensureGameHasFieldAndReferee(turnierId, game) {
             const freeFelder = await getFreeFields(turnierId);
             if (freeFelder.length > 0) {
                 const chosenField = freeFelder[0];
+                // Only promote wartend -> bereit here; other statuses remain unchanged
                 await db.query(
                     `UPDATE turnier_spiele 
                      SET feld_id = ?, geplante_zeit = COALESCE(geplante_zeit, NOW()), status = CASE WHEN status = 'wartend' THEN 'bereit' ELSE status END 
@@ -3084,7 +3088,7 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
 
         await db.query(
             `UPDATE turnier_spiele SET 
-            ergebnis_team1 = ?, ergebnis_team2 = ?,
+             ergebnis_team1 = ?, ergebnis_team2 = ?,
              satz1_team1 = ?, satz1_team2 = ?,
              satz2_team1 = ?, satz2_team2 = ?,
              satz3_team1 = ?, satz3_team2 = ?,
