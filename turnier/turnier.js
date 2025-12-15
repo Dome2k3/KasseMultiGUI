@@ -145,6 +145,69 @@ async function assignNextWaitingGame(turnierId, freedFieldId) {
     }
 }
 
+// Helper: Get currently free fields (not used by geplante/bereit/laeuft games)
+async function getFreeFields(turnierId) {
+    const [felder] = await db.query(
+        'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+        [turnierId]
+    );
+    const [busyFields] = await db.query(
+        `SELECT feld_id FROM turnier_spiele 
+         WHERE turnier_id = ? AND feld_id IS NOT NULL 
+         AND status IN ('geplant', 'bereit', 'laeuft')`,
+        [turnierId]
+    );
+    const busySet = new Set(busyFields.map(f => f.feld_id));
+    return felder.filter(f => !busySet.has(f.id));
+}
+
+// Helper: Immediately assign free fields to waiting games that already have both teams
+async function assignWaitingGamesToFreeFields(turnierId, phaseId = null, runde = null) {
+    const freeFelder = await getFreeFields(turnierId);
+    if (freeFelder.length === 0) {
+        return 0;
+    }
+
+    let query = `
+        SELECT id, spiel_nummer FROM turnier_spiele
+        WHERE turnier_id = ? AND status = 'wartend'
+          AND feld_id IS NULL AND team1_id IS NOT NULL AND team2_id IS NOT NULL`;
+    const params = [turnierId];
+
+    if (phaseId) {
+        query += ' AND phase_id = ?';
+        params.push(phaseId);
+    }
+    if (runde !== null) {
+        query += ' AND runde = ?';
+        params.push(runde);
+    }
+
+    query += ' ORDER BY spiel_nummer ASC';
+
+    const [waitingGames] = await db.query(query, params);
+    const assignCount = Math.min(waitingGames.length, freeFelder.length);
+
+    for (let i = 0; i < assignCount; i++) {
+        const game = waitingGames[i];
+        const feld = freeFelder[i];
+        await db.query(
+            `UPDATE turnier_spiele 
+             SET feld_id = ?, geplante_zeit = COALESCE(geplante_zeit, NOW()), status = 'geplant' 
+             WHERE id = ?`,
+            [feld.id, game.id]
+        );
+        await assignRefereeTeam(turnierId, game.id);
+        console.log(`[FieldAssignment] ✓ Game #${game.spiel_nummer} moved to field ${feld.id}`);
+    }
+
+    if (assignCount < waitingGames.length) {
+        console.log(`[FieldAssignment] ${waitingGames.length - assignCount} waiting games remain without free fields`);
+    }
+
+    return assignCount;
+}
+
 // Helper: Try to create next round games dynamically for Swiss 144
 // This allows Round 2+ games to start as soon as enough Round 1 teams have finished
 // Helper: Get teams that have finished their game in the current round
@@ -301,6 +364,12 @@ async function tryDynamicSwissProgression(turnierId, phaseId, currentRunde) {
         
         // Get ready teams (finished current round)
         const readyTeamIds = await getReadyTeamsForRound(turnierId, phaseId, currentRunde);
+        
+        // Proactively move waiting games with both teams onto free fields for this round
+        const autoAssignedWaiting = await assignWaitingGamesToFreeFields(turnierId, phaseId, currentRunde);
+        if (autoAssignedWaiting > 0 && process.env.DEBUG_SWISS === 'true') {
+            console.log(`[Dynamic Swiss] Auto-assigned ${autoAssignedWaiting} waiting games in round ${currentRunde} to free fields`);
+        }
         
         // Get total teams in current round
         const [totalTeamsInRound] = await db.query(
@@ -944,6 +1013,10 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         }
         
         console.log(`Successfully filled ${pairCount} placeholder games with qualification winners`);
+        const autoAssigned = await assignWaitingGamesToFreeFields(turnierId, mainPhaseId, 1);
+        if (autoAssigned === 0) {
+            console.log('[FieldAssignment] No immediate fields free for qualification winner games; will assign dynamically as fields free up.');
+        }
         console.log(`Main Swiss Round 1 now has all 128 teams (56 seeded pairs + 8 winner pairs = 64 games total)`);
 
 
@@ -1734,6 +1807,53 @@ async function assignRefereeTeam(turnierId, spielId) {
     } catch (err) {
         console.error('Error assigning referee team:', err);
         return null;
+    }
+}
+
+// Helper: Ensure a game has both a field and a referee before finalizing
+async function ensureGameHasFieldAndReferee(turnierId, game) {
+    try {
+        let currentGame = game;
+        if (!currentGame || currentGame.feld_id == null || (currentGame.schiedsrichter_team_id == null && !currentGame.schiedsrichter_name)) {
+            const [rows] = await db.query(
+                'SELECT id, spiel_nummer, feld_id, schiedsrichter_team_id, schiedsrichter_name, status, geplante_zeit FROM turnier_spiele WHERE id = ? AND turnier_id = ?',
+                [game?.id || 0, turnierId]
+            );
+            currentGame = rows[0];
+        }
+
+        if (!currentGame) {
+            return;
+        }
+
+        if (!currentGame.feld_id) {
+            const freeFelder = await getFreeFields(turnierId);
+            if (freeFelder.length > 0) {
+                const chosenField = freeFelder[0];
+                // Only promote wartend -> bereit here; other statuses remain unchanged
+                await db.query(
+                    `UPDATE turnier_spiele 
+                     SET feld_id = ?, geplante_zeit = COALESCE(geplante_zeit, NOW()), status = CASE WHEN status = 'wartend' THEN 'bereit' ELSE status END 
+                     WHERE id = ?`,
+                    [chosenField.id, currentGame.id]
+                );
+                currentGame.feld_id = chosenField.id;
+                console.warn(`[Integrity] Game #${currentGame.spiel_nummer || currentGame.id} was missing a field – auto-assigned field ${chosenField.id}`);
+            } else {
+                console.warn(`[Integrity] No free field available for game #${currentGame.spiel_nummer || currentGame.id} (still missing field)`);
+            }
+        }
+
+        if (!currentGame.schiedsrichter_team_id && !currentGame.schiedsrichter_name) {
+            const refId = await assignRefereeTeam(turnierId, currentGame.id);
+            if (refId) {
+                console.warn(`[Integrity] Game #${currentGame.spiel_nummer || currentGame.id} was missing a referee – auto-assigned (ref team id: ${refId})`);
+            } else {
+                console.warn(`[Integrity] Unable to assign referee for game #${currentGame.spiel_nummer || currentGame.id}`);
+            }
+        }
+    } catch (err) {
+        console.error('Error ensuring field/referee assignment:', err);
     }
 }
 
@@ -2715,6 +2835,8 @@ app.post('/api/turniere/:turnierId/spiele/:spielId/bestaetigen', strictLimiter, 
             return res.status(403).json({ error: 'Invalid confirmation code' });
         }
 
+        await ensureGameHasFieldAndReferee(turnierId, game);
+
         // Use the reported result for updating the game
         const meldung = reportedResult;
 
@@ -2861,6 +2983,8 @@ app.post('/api/turniere/:turnierId/meldungen/:meldungId/genehmigen', async (req,
             return res.status(400).json({ error: 'Tie games are not allowed' });
         }
 
+        await ensureGameHasFieldAndReferee(turnierId, game);
+
         // Update game
         await db.query(
             `UPDATE turnier_spiele SET 
@@ -2959,6 +3083,8 @@ app.put('/api/turniere/:turnierId/spiele/:spielId/admin-ergebnis', async (req, r
         if (!finalBemerkung.endsWith(adminNote)) {
             finalBemerkung = finalBemerkung ? `${finalBemerkung} | ${adminNote}` : adminNote;
         }
+
+        await ensureGameHasFieldAndReferee(turnierId, game);
 
         await db.query(
             `UPDATE turnier_spiele SET 
@@ -3384,6 +3510,8 @@ app.post('/api/turniere/:turnierId/test/batch-complete-games', async (req, res) 
             const ergebnis_team2 = 0;
             const gewinnerId = game.team1_id;
             const verliererId = game.team2_id;
+
+            await ensureGameHasFieldAndReferee(turnierId, game);
 
             // Update game with test result
             await db.query(

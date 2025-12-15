@@ -130,6 +130,21 @@ This document summarizes the improvements made to the tournament system based on
 
 ---
 
+### 5. Swiss 144 Qualification Winners Flow Hardening ✅
+**Problem:** Qualification winners could remain in Round 1 as `wartend`, leading to BYEs in Round 2 and games without fields/referees.
+
+**Solution:**
+- Added immediate field/referee assignment for waiting games when free fields exist.
+- Hardened result processing to auto-assign missing fields/referees and log integrity warnings.
+- Sorted detailed game view by `spiel_nummer` and removed unused control buttons to reduce confusion.
+
+**Files Changed:**
+- `turnier/turnier.js`
+- `turnier/public/turnier-admin.js`
+- `turnier/public/index.html`
+
+---
+
 ## Database Schema (No Changes Required)
 
 All improvements work with existing database schema:
