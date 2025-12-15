@@ -480,8 +480,8 @@ function pairWithinGroupIterative(teamList, opts) {
     // Handle odd group - select one team as floater
     let workingList = teamList;
     if (n % 2 === 1) {
-        // Select floater based on options (weakest by default)
-        const ranked = rankFloaterCandidates(teamList, opts.floaterSelection || 'weakest');
+        // Select floater based on options
+        const ranked = rankFloaterCandidates(teamList, opts.floaterSelection || DEFAULT_OPTIONS.floaterSelection);
         floater = ranked[0]; // Take the first (weakest or strongest based on selection)
         workingList = teamList.filter(t => t.id !== floater.id);
     }
