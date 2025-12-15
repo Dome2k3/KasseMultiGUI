@@ -10,6 +10,9 @@ const rateLimit = require('express-rate-limit');
 const swissPairing = require('./swiss-pairing');
 
 const EXPECTED_QUALI_PLACEHOLDERS = 8;
+const HOBBY_CUP_REIHENFOLGE = 80;  // Phase order for Hobby Cup
+const FINALS_ROUND = 7;  // Final round for Swiss 144 tournaments
+const MAX_ROUNDS_SWISS_144 = 7;  // Maximum rounds for Swiss 144 tournaments
 
 const app = express();
 
@@ -509,10 +512,46 @@ async function progressSwissTournament(turnierId, completedGame) {
         );
 
         const roundInfo = roundGames[0];
-        console.log(`Round ${completedGame.runde}: ${roundInfo.completed}/${roundInfo.total} games completed`);
+        // Convert to numbers to ensure type consistency
+        const completed = Number(roundInfo.completed) || 0;
+        const total = Number(roundInfo.total) || 0;
+        
+        console.log(`Round ${completedGame.runde}: ${completed}/${total} games completed`);
+        
+        // Debug logging for qualification round
+        if (completedGame.runde === 0 && modus === 'swiss_144') {
+            console.log(`[DEBUG] Qualification progress: ${completed}/${total} complete`);
+            console.log(`[DEBUG] Types: completed=${typeof roundInfo.completed} (${roundInfo.completed}), total=${typeof roundInfo.total} (${roundInfo.total})`);
+            
+            // Additional diagnostic - check what phase we're in
+            const [phaseInfo] = await db.query(
+                'SELECT id, phase_name FROM turnier_phasen WHERE id = ?',
+                [completedGame.phase_id]
+            );
+            console.log(`[DEBUG] Current phase: ${phaseInfo[0]?.phase_name} (ID: ${completedGame.phase_id})`);
+            
+            // Check if all 16 qualification games are done
+            if (completed === 16 && total === 16) {
+                console.log(`[DEBUG] ✓✓✓ All 16 qualification games complete - should trigger handleQualificationComplete`);
+            }
+            
+            if (completed === total && total > 0) {
+                console.log(`[DEBUG] ✓ Condition met: completed (${completed}) === total (${total}) - triggering handleQualificationComplete`);
+            } else if (completed >= 16) {
+                console.log(`[DEBUG] ⚠️ Warning: completed=${completed}, total=${total}, but condition not met!`);
+                console.log(`[DEBUG] Strict comparison: ${completed} === ${total} is ${completed === total}`);
+                // Query all games to understand the state
+                const [allQualiGames] = await db.query(
+                    'SELECT id, spiel_nummer, status FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 ORDER BY spiel_nummer',
+                    [turnierId, completedGame.phase_id]
+                );
+                console.log(`[DEBUG] Total qualification games in DB: ${allQualiGames.length}`);
+                console.log(`[DEBUG] Game statuses: ${allQualiGames.map(g => `#${g.spiel_nummer}:${g.status}`).join(', ')}`);
+            }
+        }
 
         // If round is complete, generate next round
-        if (roundInfo.completed === roundInfo.total) {
+        if (completed === total && total > 0) {
             console.log(`Round ${completedGame.runde} complete - generating next round`);
 
             // Update Swiss standings
@@ -524,8 +563,16 @@ async function progressSwissTournament(turnierId, completedGame) {
                 return;
             }
 
+            // Special handling for Round 6 completion - next is Round 7 (finals)
+            // In Round 7, create finals and placement matches based on standings
+            if (completedGame.runde === 6 && config[0]?.modus === 'swiss_144') {
+                console.log(`Round 6 complete - creating Round ${FINALS_ROUND} finals and placement matches`);
+                await createFinalsRound(turnierId, completedGame.phase_id);
+                return;
+            }
+
             // Check if we've reached max rounds (7 for Swiss 144, configurable for others)
-            const maxRounds = config[0]?.modus === 'swiss_144' ? 7 : 5;
+            const maxRounds = config[0]?.modus === 'swiss_144' ? MAX_ROUNDS_SWISS_144 : 5;
 
             if (completedGame.runde >= maxRounds) {
                 console.log(`Tournament complete - max rounds (${maxRounds}) reached`);
@@ -654,6 +701,7 @@ async function progressSwissTournament(turnierId, completedGame) {
 async function handleQualificationComplete(turnierId, qualiPhaseId) {
     try {
         console.log('=== Qualification round complete - processing winners and losers ===');
+        console.log(`Tournament ID: ${turnierId}, Qualification Phase ID: ${qualiPhaseId}`);
 
         // Get Main Swiss phase first to check if qualification has already been processed
         const [mainSwissPhases] = await db.query(
@@ -662,11 +710,17 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         );
 
         if (mainSwissPhases.length === 0) {
-            console.error('Main Swiss phase not found');
+            console.error('CRITICAL ERROR: Main Swiss phase not found - cannot process qualification');
+            console.error('This tournament may not be properly initialized for Swiss 144 mode');
+            console.error('ACTION REQUIRED:');
+            console.error('1. Verify tournament was created with modus = "swiss_144"');
+            console.error('2. Check that startSwiss144Tournament endpoint was called');
+            console.error('3. Verify turnier_phasen table has "Main Swiss" phase for this tournament');
             return;
         }
 
         const mainPhaseId = mainSwissPhases[0].id;
+        console.log(`Main Swiss Phase ID: ${mainPhaseId}`);
 
         // Check if qualification has already been processed by looking for filled placeholder games
         const [alreadyProcessed] = await db.query(
@@ -681,20 +735,33 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         );
 
         if (alreadyProcessed[0].filled_count >= 8) {
-            console.log('Qualification has already been processed (placeholder games are filled). Skipping...');
+            console.log('⚠️ Qualification has already been processed (placeholder games are filled). Skipping...');
+            console.log(`Found ${alreadyProcessed[0].filled_count} filled placeholder games in Main Swiss Round 1`);
             return;
         }
 
         // Get qualification games
+        console.log(`Fetching qualification games for phase ${qualiPhaseId}...`);
         const [qualiGames] = await db.query(
             'SELECT * FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0 AND status = "beendet"',
             [turnierId, qualiPhaseId]
         );
 
+        console.log(`Found ${qualiGames.length} completed qualification games`);
+
         // Validate that we have the expected number of games
         if (qualiGames.length !== 16) {
-            console.error(`ERROR: Expected 16 qualification games, but found ${qualiGames.length}`);
+            console.error(`❌ ERROR: Expected 16 qualification games, but found ${qualiGames.length}`);
             console.error(`Cannot process qualification completion with incorrect game count.`);
+            console.error(`Please verify that all 16 qualification games (runde = 0) have status = 'beendet'`);
+            
+            // Additional diagnostic query
+            const [allQualiGames] = await db.query(
+                'SELECT id, spiel_nummer, runde, status, gewinner_id, verlierer_id FROM turnier_spiele WHERE turnier_id = ? AND phase_id = ? AND runde = 0',
+                [turnierId, qualiPhaseId]
+            );
+            console.error(`Total qualification games (all statuses): ${allQualiGames.length}`);
+            console.error('Game statuses:', allQualiGames.map(g => `#${g.spiel_nummer}:${g.status}`).join(', '));
             return;
         }
 
@@ -728,21 +795,25 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         // Critical validation: Check for missing data
         if (gamesWithMissingData.length > 0) {
-            console.error(`ERROR: ${gamesWithMissingData.length} qualification games are missing gewinner_id or verlierer_id:`);
+            console.error(`❌ ERROR: ${gamesWithMissingData.length} qualification games are missing gewinner_id or verlierer_id:`);
             for (const game of gamesWithMissingData) {
-                console.error(`  Game #${game.spiel_nummer} (ID: ${game.id}): gewinner_id=${game.gewinner_id}, verlierer_id=${game.verlierer_id}`);
+                console.error(`  Game #${game.spiel_nummer} (ID: ${game.id}): gewinner_id=${game.gewinner_id || 'NULL'}, verlierer_id=${game.verlierer_id || 'NULL'}`);
             }
             console.error(`Cannot proceed with qualification completion until all games have winners and losers assigned.`);
             console.error(`Please ensure all game results are properly confirmed.`);
+            console.error(`ACTION REQUIRED: Confirm all qualification game results to set gewinner_id and verlierer_id`);
             return;
         }
         
         // Defensive check: Verify we have the expected number of winners and losers
         if (winners.length !== 16 || losers.length !== 16) {
-            console.error(`ERROR: Expected 16 winners and 16 losers, but found ${winners.length} winners and ${losers.length} losers`);
+            console.error(`❌ ERROR: Expected 16 winners and 16 losers, but found ${winners.length} winners and ${losers.length} losers`);
             console.error(`Cannot proceed with qualification completion.`);
+            console.error(`This indicates games may not have gewinner_id/verlierer_id properly set.`);
             return;
         }
+        
+        console.log(`✓ Validation passed: ${winners.length} winners and ${losers.length} losers identified`);
 
         // Mark winners as qualified for main Swiss
         console.log('Marking winners as qualified for Main Swiss...');
@@ -865,15 +936,19 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
                 [turnierId]
             );
             
+            console.log(`Hobby Cup phase lookup: found ${hobbyCupPhase.length} phases`);
+            
             // Create Hobby Cup phase if it doesn't exist
             if (hobbyCupPhase.length === 0) {
-                console.log(`Hobby Cup phase not found - creating it now`);
+                console.log(`Hobby Cup phase not found - creating it now with reihenfolge = ${HOBBY_CUP_REIHENFOLGE}`);
                 const [result] = await db.query(
                     'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
-                    [turnierId, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers']
+                    [turnierId, 'Hobby Cup', 'trostrunde', HOBBY_CUP_REIHENFOLGE, 'Hobby Cup for Qualification Losers']
                 );
                 hobbyCupPhase = [{ id: result.insertId, phase_name: 'Hobby Cup' }];
-                console.log(`Created Hobby Cup phase with ID ${result.insertId}`);
+                console.log(`✓ Created Hobby Cup phase with ID ${result.insertId} (reihenfolge: ${HOBBY_CUP_REIHENFOLGE})`);
+            } else {
+                console.log(`✓ Found existing Hobby Cup phase with ID ${hobbyCupPhase[0].id}`);
             }
             
             // hobbyCupPhase is guaranteed to exist at this point (either found or created above)
@@ -939,10 +1014,83 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             console.log('No losers to process for Hobby Cup');
         }
 
-        console.log('=== Qualification processing complete ===\n');
+        console.log('=== Qualification processing complete ===');
+        console.log(`✓ Filled ${pairCount} Main Swiss Round 1 placeholder games with qualification winners`);
+        console.log(`✓ Created ${hobbyCupPairs.length || 0} Hobby Cup Round 1 games for qualification losers`);
+        console.log(`✓ Main Swiss Round 1 now has 128 teams (${pairCount + 56} games total)`);
+        console.log('');
 
     } catch (err) {
-        console.error('Error handling qualification completion:', err);
+        console.error('❌ CRITICAL ERROR in handleQualificationComplete:', err);
+        console.error('Stack trace:', err.stack);
+    }
+}
+
+// Helper: Create finals and placement matches for Round 7
+// For Swiss 144: Creates placement matches for ALL 128 teams (64 games)
+async function createFinalsRound(turnierId, phaseId) {
+    try {
+        console.log('=== Creating Round 7 placement matches for all teams ===');
+
+        // Update Swiss standings to get final rankings after Round 6
+        await updateSwissStandings(turnierId);
+        
+        // Get final standings
+        const standings = await getSwissStandings(turnierId, phaseId);
+        
+        if (standings.length < 2) {
+            console.error('❌ ERROR: Not enough teams for Round 7');
+            console.error(`Found ${standings.length} teams, need at least 2`);
+            console.error(`Expected: 128 teams should have participated in Main Swiss`);
+            return;
+        }
+        
+        console.log(`Creating Round 7 placement matches for ${standings.length} teams`);
+        
+        // Get available fields
+        const [felder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+        
+        // Pair teams by ranking for placement matches
+        // 1st vs 2nd, 3rd vs 4th, 5th vs 6th, etc.
+        // This determines final placements based on Round 6 standings
+        const finalsPairs = [];
+        
+        for (let i = 0; i < standings.length; i += 2) {
+            if (i + 1 < standings.length) {
+                const rank1 = i + 1;
+                const rank2 = i + 2;
+                finalsPairs.push({
+                    teamA: { id: standings[i].id, team_name: standings[i].team_name },
+                    teamB: { id: standings[i + 1].id, team_name: standings[i + 1].team_name },
+                    isBye: false,
+                    description: `Placement ${rank1} vs ${rank2}`
+                });
+            } else {
+                // Odd number of teams - give bye to last team
+                finalsPairs.push({
+                    teamA: { id: standings[i].id, team_name: standings[i].team_name },
+                    teamB: null,
+                    isBye: true,
+                    description: `Placement ${i + 1} (bye)`
+                });
+            }
+        }
+        
+        console.log(`Creating ${finalsPairs.length} placement matches for Round 7`);
+        
+        // Create the placement games using createSwissGames helper
+        const finalsGames = await createSwissGames(turnierId, phaseId, FINALS_ROUND, finalsPairs, felder);
+        
+        console.log(`✓ Created ${finalsGames.length} Round 7 placement matches`);
+        console.log(`✓ Assigned ${finalsGames.filter(g => g.feldId).length} games to fields`);
+        console.log('=== Round 7 placement matches creation complete ===\n');
+        
+    } catch (err) {
+        console.error('❌ Error creating finals round:', err);
+        console.error('Stack trace:', err.stack);
     }
 }
 
@@ -1506,8 +1654,10 @@ async function assignRefereeTeam(turnierId, spielId) {
             }
             
             // Build exclusion clause and parameters safely
+            // Query uses 6 turnier_id placeholders (s_finished, s_active, s_waiting, s_ref, s_ref_completed, WHERE)
+            const TURNIER_ID_PARAM_COUNT = 6;
             let excludeClause = '';
-            const queryParams = [turnierId, turnierId, turnierId, turnierId, turnierId];
+            const queryParams = Array(TURNIER_ID_PARAM_COUNT).fill(turnierId);
             
             if (excludedTeamIds.length > 0) {
                 // Use parameterized placeholders for excluded team IDs
@@ -1520,10 +1670,12 @@ async function assignRefereeTeam(turnierId, spielId) {
             // - Playing (geplant, bereit, laeuft status)
             // - Assigned as referees for active games
             // - Part of the current game
+            // Prioritize teams that have been referee less often for better balance
             const [availableTeams] = await db.query(
                 `SELECT DISTINCT t.id, t.team_name,
                     MAX(s_finished.bestaetigt_zeit) as last_game_time,
-                    COUNT(DISTINCT s_waiting.id) as waiting_games_count
+                    COUNT(DISTINCT s_waiting.id) as waiting_games_count,
+                    COUNT(DISTINCT s_ref_completed.id) as referee_count
                  FROM turnier_teams t
                  LEFT JOIN turnier_spiele s_finished ON (t.id = s_finished.team1_id OR t.id = s_finished.team2_id)
                      AND s_finished.turnier_id = ? AND s_finished.status = 'beendet'
@@ -1533,13 +1685,15 @@ async function assignRefereeTeam(turnierId, spielId) {
                      AND s_waiting.turnier_id = ? AND s_waiting.status = 'wartend'
                  LEFT JOIN turnier_spiele s_ref ON t.team_name = s_ref.schiedsrichter_name
                      AND s_ref.turnier_id = ? AND s_ref.status IN ('geplant', 'bereit', 'laeuft')
+                 LEFT JOIN turnier_spiele s_ref_completed ON t.team_name = s_ref_completed.schiedsrichter_name
+                     AND s_ref_completed.turnier_id = ? AND s_ref_completed.status = 'beendet'
                  WHERE t.turnier_id = ? 
                      AND t.status IN ('angemeldet', 'bestaetigt')
                      AND s_active.id IS NULL
                      AND s_ref.id IS NULL
                      ${excludeClause}
                  GROUP BY t.id, t.team_name
-                 ORDER BY waiting_games_count ASC, MAX(s_finished.bestaetigt_zeit) IS NULL, MAX(s_finished.bestaetigt_zeit) DESC, RAND()
+                 ORDER BY referee_count ASC, waiting_games_count ASC, MAX(s_finished.bestaetigt_zeit) IS NULL, MAX(s_finished.bestaetigt_zeit) DESC, RAND()
                  LIMIT 1`,
                 queryParams
             );
@@ -2025,7 +2179,7 @@ async function startSwiss144Tournament(turnierId, config, res) {
         if (!hobbyCupPhase) {
             const [result] = await db.query(
                 'INSERT INTO turnier_phasen (turnier_id, phase_name, phase_typ, reihenfolge, beschreibung) VALUES (?, ?, ?, ?, ?)',
-                [turnierId, 'Hobby Cup', 'trostrunde', 3, 'Hobby Cup for Qualification Losers']
+                [turnierId, 'Hobby Cup', 'trostrunde', HOBBY_CUP_REIHENFOLGE, 'Hobby Cup for Qualification Losers']
             );
             hobbyCupPhase = { id: result.insertId, phase_name: 'Hobby Cup' };
         }
