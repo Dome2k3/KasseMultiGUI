@@ -1238,7 +1238,9 @@ function renderSpieleTable() {
         return;
     }
 
-    filtered.forEach(spiel => {
+    const sorted = [...filtered].sort((a, b) => (a.spiel_nummer || 0) - (b.spiel_nummer || 0));
+
+    sorted.forEach(spiel => {
         const tr = document.createElement('tr');
 
         const team1Class = spiel.gewinner_id === spiel.team1_id ? 'winner' : (spiel.gewinner_id === spiel.team2_id ? 'loser' : '');
