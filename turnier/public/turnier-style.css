@@ -339,6 +339,19 @@ th, td {
     border-bottom: 1px solid var(--border);
 }
 
+.action-btns {
+    display: inline-flex;
+    gap: 6px;
+    justify-content: center;
+    align-items: center;
+    min-width: 110px;
+}
+
+th:last-child,
+td.action-btns {
+    text-align: center;
+}
+
 th {
     background: var(--light);
     font-weight: 600;

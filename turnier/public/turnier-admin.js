@@ -136,6 +136,14 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function formatTeamLabel(teamName, teamId, status) {
+    if (teamId === null || teamId === undefined) {
+        return (status === 'wartend_quali' || status === 'wartend') ? 'TBD' : 'BYE';
+    }
+    if (teamName) return teamName;
+    return `Team ${String(teamId).padStart(3, '0')}`;
+}
+
 // Modal functions
 function openModal(modalId) {
     document.getElementById(modalId).classList.add('active');
@@ -1235,6 +1243,8 @@ function renderSpieleTable() {
 
         const team1Class = spiel.gewinner_id === spiel.team1_id ? 'winner' : (spiel.gewinner_id === spiel.team2_id ? 'loser' : '');
         const team2Class = spiel.gewinner_id === spiel.team2_id ? 'winner' : (spiel.gewinner_id === spiel.team1_id ? 'loser' : '');
+        const team1Label = formatTeamLabel(spiel.team1_name, spiel.team1_id, spiel.status);
+        const team2Label = formatTeamLabel(spiel.team2_name, spiel.team2_id, spiel.status);
 
         // Display either dedicated referee team or playing team acting as referee
         const schiriName = spiel.schiedsrichter_team_name || spiel.schiedsrichter_name || '-';
@@ -1243,9 +1253,9 @@ function renderSpieleTable() {
             <td>${spiel.spiel_nummer}</td>
             <td>${escapeHtml(spiel.phase_name || '-')}</td>
             <td>${spiel.runde}</td>
-            <td class="${team1Class}">${escapeHtml(spiel.team1_name || 'TBD')}</td>
+            <td class="${team1Class}">${escapeHtml(team1Label)}</td>
             <td>vs</td>
-            <td class="${team2Class}">${escapeHtml(spiel.team2_name || 'TBD')}</td>
+            <td class="${team2Class}">${escapeHtml(team2Label)}</td>
             <td>${escapeHtml(spiel.feld_name || '-')}</td>
             <td>${escapeHtml(schiriName)}</td>
             <td>${formatDateTime(spiel.geplante_zeit)}</td>
@@ -1270,8 +1280,8 @@ function showEditResultModal(spielId) {
     if (!spiel) return;
 
     document.getElementById('edit-spiel-id').value = spielId;
-    document.getElementById('edit-team1-name').textContent = spiel.team1_name || 'Team 1';
-    document.getElementById('edit-team2-name').textContent = spiel.team2_name || 'Team 2';
+    document.getElementById('edit-team1-name').textContent = formatTeamLabel(spiel.team1_name, spiel.team1_id, spiel.status);
+    document.getElementById('edit-team2-name').textContent = formatTeamLabel(spiel.team2_name, spiel.team2_id, spiel.status);
     document.getElementById('edit-ergebnis-team1').value = spiel.ergebnis_team1 || 0;
     document.getElementById('edit-ergebnis-team2').value = spiel.ergebnis_team2 || 0;
     document.getElementById('edit-satz1-team1').value = spiel.satz1_team1 || '';
