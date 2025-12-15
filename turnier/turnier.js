@@ -899,6 +899,20 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         
         console.log(`Generated ${winnerPairings.pairs.length} pairings from ${winners.length} qualification winners`);
         
+        // Prepare field assignments for qualification winner games
+        const [winnerFelder] = await db.query(
+            'SELECT * FROM turnier_felder WHERE turnier_id = ? AND aktiv = 1 ORDER BY feld_nummer',
+            [turnierId]
+        );
+        const [busyWinnerFields] = await db.query(
+            `SELECT feld_id FROM turnier_spiele 
+             WHERE turnier_id = ? AND feld_id IS NOT NULL 
+             AND status IN ('geplant', 'bereit', 'laeuft')`,
+            [turnierId]
+        );
+        const busyWinnerFieldSet = new Set(busyWinnerFields.map(f => f.feld_id));
+        const freeWinnerFelder = winnerFelder.filter(f => !busyWinnerFieldSet.has(f.id));
+        
         // Update placeholder games with the winner pairings
         // Note: Math.min is defensive programming in case of data inconsistency
         // Both arrays should have length 8 due to validations above, but this prevents crashes if violated
@@ -906,17 +920,24 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
         for (let i = 0; i < pairCount; i++) {
             const pair = winnerPairings.pairs[i];
             const placeholder = placeholdersToFill[i];
+            const feldId = i < freeWinnerFelder.length ? freeWinnerFelder[i].id : null;
+            const status = feldId ? 'geplant' : 'wartend';
             
             await db.query(
                 `UPDATE turnier_spiele 
-                 SET team1_id = ?, team2_id = ?, status = 'wartend', geplante_zeit = NOW()
-                 WHERE id = ?`,
-                [pair.teamA.id, pair.teamB ? pair.teamB.id : null, placeholder.id]
+                 SET team1_id = ?, team2_id = ?, status = ?, feld_id = ?, geplante_zeit = NOW()
+                  WHERE id = ?`,
+                [pair.teamA.id, pair.teamB ? pair.teamB.id : null, status, feldId, placeholder.id]
             );
             
             // Record opponents
             if (pair.teamB) {
                 await recordOpponent(turnierId, pair.teamA.id, pair.teamB.id, placeholder.id, 1);
+            }
+
+            // Assign referee if field is set
+            if (feldId) {
+                await assignRefereeTeam(turnierId, placeholder.id);
             }
             
             console.log(`Updated placeholder game #${placeholder.spiel_nummer}: Team ${pair.teamA.id} vs Team ${pair.teamB?.id || 'BYE'}`);
@@ -927,6 +948,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
 
 
         // Create Hobby Cup matches for losers with interleaving support
+        let hobbyCupPairs = [];
         if (losers.length > 0) {
             console.log(`\n=== Creating Hobby Cup for ${losers.length} qualification losers ===`);
             
@@ -977,7 +999,7 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             }
             
             // Pair losers for Hobby Cup Round 1 (simple Swiss-style pairing by seed)
-            const hobbyCupPairs = [];
+            hobbyCupPairs = [];
             for (let i = 0; i < loserTeams.length; i += 2) {
                 if (i + 1 < loserTeams.length) {
                     hobbyCupPairs.push({
