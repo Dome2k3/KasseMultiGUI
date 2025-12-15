@@ -921,14 +921,13 @@ async function handleQualificationComplete(turnierId, qualiPhaseId) {
             const pair = winnerPairings.pairs[i];
             const placeholder = placeholdersToFill[i];
             const feldId = i < freeWinnerFelder.length ? freeWinnerFelder[i].id : null;
-            const plannedTime = new Date();
             const status = feldId ? 'geplant' : 'wartend';
             
             await db.query(
                 `UPDATE turnier_spiele 
-                 SET team1_id = ?, team2_id = ?, status = ?, feld_id = ?, geplante_zeit = ?
+                 SET team1_id = ?, team2_id = ?, status = ?, feld_id = ?, geplante_zeit = NOW()
                   WHERE id = ?`,
-                [pair.teamA.id, pair.teamB ? pair.teamB.id : null, status, feldId, plannedTime, placeholder.id]
+                [pair.teamA.id, pair.teamB ? pair.teamB.id : null, status, feldId, placeholder.id]
             );
             
             // Record opponents
