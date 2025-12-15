@@ -198,16 +198,31 @@ function pairRound1Dutch(teams, opts) {
 /**
  * Quick greedy pairing with score groups and half-split
  * Prioritizes teams with fewer games played if enabled
+ * Implements Swiss floating: floaters from higher score groups are merged into lower groups
  */
 function quickGreedyPairing(teams, opts) {
     const groups = groupByScore(teams, opts.prioritizeGamesPlayed);
     const pairs = [];
     let rematchCount = 0;
+    let downfloater = null; // Floater from previous (higher score) group
 
-    for (const group of groups) {
-        const groupPairs = pairGroupGreedy(group, opts);
-        pairs.push(...groupPairs.pairs);
-        rematchCount += groupPairs.rematchCount;
+    for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
+        
+        // Merge downfloater into current group if exists
+        const groupWithFloater = downfloater ? [downfloater, ...group] : group;
+        
+        const groupResult = pairGroupGreedy(groupWithFloater, opts);
+        pairs.push(...groupResult.pairs);
+        rematchCount += groupResult.rematchCount;
+        
+        // Pass floater down to next group
+        downfloater = groupResult.floater;
+    }
+
+    // If a floater remains after all groups, assign it a BYE
+    if (downfloater) {
+        pairs.push({ teamA: downfloater, teamB: null, isBye: true });
     }
 
     return {
@@ -222,15 +237,16 @@ function quickGreedyPairing(teams, opts) {
  * Pair a single score group greedily with half-split
  */
 function pairGroupGreedy(group, opts) {
-    if (group.length === 0) return { pairs: [], rematchCount: 0 };
+    if (group.length === 0) return { pairs: [], rematchCount: 0, floater: null };
     if (group.length === 1) {
-        // Floater - should be handled by caller
-        return { pairs: [{ teamA: group[0], teamB: null, isFloater: true }], rematchCount: 0 };
+        // Single team - return as floater to be merged with next group
+        return { pairs: [], rematchCount: 0, floater: group[0] };
     }
 
     const pairs = [];
     const paired = new Set();
     let rematchCount = 0;
+    let floater = null;
 
     // Sort by buchholz and seed
     const sorted = [...group].sort((a, b) => {
@@ -290,7 +306,17 @@ function pairGroupGreedy(group, opts) {
         }
     }
 
-    return { pairs, rematchCount };
+    // Check for unpaired team (floater) - odd group size
+    if (paired.size < n) {
+        for (const team of sorted) {
+            if (!paired.has(team.id)) {
+                floater = team;
+                break;
+            }
+        }
+    }
+
+    return { pairs, rematchCount, floater };
 }
 
 // ==========================================
@@ -384,6 +410,7 @@ function repairPairingsGreedySwap(initialPairs, teamMap, options = {}) {
 /**
  * Iterative DFS pairing with explicit stack (no recursion)
  * Prioritizes teams with fewer games played if enabled
+ * Implements Swiss floating: floaters from higher score groups are merged into lower groups
  */
 function computeSwissPairingsIterative(teams, roundNumber, options = {}) {
     const startTime = Date.now();
@@ -394,19 +421,27 @@ function computeSwissPairingsIterative(teams, roundNumber, options = {}) {
     const allPairs = [];
     let totalRematches = 0;
     let iterations = 0;
+    let downfloater = null; // Floater from previous (higher score) group
 
     // Process each score group
-    for (const group of groups) {
+    for (let i = 0; i < groups.length; i++) {
         if ((Date.now() - startTime) >= timeLimit) break;
 
-        if (group.length === 0) continue;
-        if (group.length === 1) {
-            // Floater - will be merged with next group by caller
-            allPairs.push({ teamA: group[0], teamB: null, isFloater: true });
+        const group = groups[i];
+        
+        // Merge downfloater into current group if exists
+        const groupWithFloater = downfloater ? [downfloater, ...group] : group;
+        
+        if (groupWithFloater.length === 0) {
+            continue;
+        }
+        if (groupWithFloater.length === 1) {
+            // Single team - becomes floater for next group
+            downfloater = groupWithFloater[0];
             continue;
         }
 
-        const groupResult = pairWithinGroupIterative(group, {
+        const groupResult = pairWithinGroupIterative(groupWithFloater, {
             timeLimit: timeLimit - (Date.now() - startTime),
             maxIterations: maxIterations - iterations,
             halfSplit: options.halfSplit
@@ -415,6 +450,14 @@ function computeSwissPairingsIterative(teams, roundNumber, options = {}) {
         allPairs.push(...groupResult.pairs);
         totalRematches += groupResult.rematchCount;
         iterations += groupResult.iterations;
+        
+        // Extract floater if group had odd number
+        downfloater = groupResult.floater || null;
+    }
+
+    // If a floater remains after all groups, assign it a BYE
+    if (downfloater) {
+        allPairs.push({ teamA: downfloater, teamB: null, isBye: true });
     }
 
     return {
@@ -432,9 +475,15 @@ function computeSwissPairingsIterative(teams, roundNumber, options = {}) {
  */
 function pairWithinGroupIterative(teamList, opts) {
     const n = teamList.length;
+    let floater = null;
+    
+    // Handle odd group - select one team as floater
+    let workingList = teamList;
     if (n % 2 === 1) {
-        // Odd group - should not happen here
-        return pairGroupGreedy(teamList, opts);
+        // Select floater based on options
+        const ranked = rankFloaterCandidates(teamList, opts.floaterSelection || DEFAULT_OPTIONS.floaterSelection);
+        floater = ranked[0]; // Take the first (weakest or strongest based on selection)
+        workingList = teamList.filter(t => t.id !== floater.id);
     }
 
     const startTime = Date.now();
@@ -442,7 +491,7 @@ function pairWithinGroupIterative(teamList, opts) {
     const maxIterations = opts.maxIterations || 10000;
 
     // Sort teams by buchholz/seed
-    const sorted = [...teamList].sort((a, b) => {
+    const sorted = [...workingList].sort((a, b) => {
         if (a.buchholz !== b.buchholz) return b.buchholz - a.buchholz;
         return a.initialSeed - b.initialSeed;
     });
@@ -462,7 +511,7 @@ function pairWithinGroupIterative(teamList, opts) {
         const { index, pairs, paired } = state;
 
         // All teams paired?
-        if (paired.size === n) {
+        if (paired.size === workingList.length) {
             const rematchCount = countRematchesInPairs(pairs);
             if (rematchCount < bestRematchCount) {
                 bestRematchCount = rematchCount;
@@ -503,11 +552,17 @@ function pairWithinGroupIterative(teamList, opts) {
 
     // Return best found
     if (bestPairs) {
-        return { pairs: bestPairs, rematchCount: bestRematchCount, iterations };
+        return { pairs: bestPairs, rematchCount: bestRematchCount, iterations, floater };
     }
 
     // Fallback to greedy
-    return pairGroupGreedy(teamList, opts);
+    const greedyResult = pairGroupGreedy(workingList, opts);
+    return { 
+        pairs: greedyResult.pairs, 
+        rematchCount: greedyResult.rematchCount, 
+        iterations,
+        floater: floater || greedyResult.floater
+    };
 }
 
 // ==========================================
