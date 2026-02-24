@@ -11,10 +11,11 @@ const bodyParser = require("body-parser");
 // Drucker
 const { SerialPort } = require('serialport'); // Für den SerialPort weiterhin CommonJS
 const esc = '\x1B'; // ESC-Zeichen für Steuerbefehle
-const setEncoding = esc + '\x1B\x74' + '\x02'; // CP850 aktivieren (falls benötigt)
+const INIT = esc + '\x40'; // ESC @: Drucker initialisieren
+const setEncoding = esc + '\x74' + '\x02'; // ESC t 2: CP850 aktivieren
 const FEED = '\x1B\x64\x03'; // ESC d 3: Papierzufuhr (weiterer Abstand)
 // ESC/POS-Befehl für den Abschneider
-const CUT = '\x1B\x69'; // ESC i: Befehl zum Abschneiden
+const CUT = '\x1D\x56\x42\x00'; // GS V 66 0: Partieller Abschnitt (Standard für Epson TM)
 
 const app = express();
 app.use(express.json());
@@ -123,19 +124,29 @@ app.get('/items', (req, res) => {
 //app.listen(3000, () => console.log("Server läuft auf http://localhost:3000"));
 
 // SerialPort zum Drucken
-const port = new SerialPort({
-    path: 'COM4',
-    baudRate: 9600
-});
-
+const PRINTER_PATH = process.env.PRINTER_PATH || '/dev/usb/lp0';
+const PRINTER_BAUD = parseInt(process.env.PRINTER_BAUD || '9600', 10);
+let port = null;
 let isPortOpen = false;
-port.on('open', () => {
-    console.log('Port COM4 geöffnet');
-    isPortOpen = true;
-});
-port.on('error', (err) => {
-    console.error('Fehler:', err.message);
-});
+
+try {
+    port = new SerialPort({
+        path: PRINTER_PATH,
+        baudRate: PRINTER_BAUD
+    });
+
+    port.on('open', () => {
+        console.log(`Drucker-Port ${PRINTER_PATH} geöffnet`);
+        isPortOpen = true;
+    });
+    port.on('error', (err) => {
+        console.error('Drucker-Fehler:', err.message);
+        isPortOpen = false;
+    });
+} catch (err) {
+    console.error(`Drucker-Port ${PRINTER_PATH} konnte nicht geöffnet werden:`, err.message);
+    console.warn('Physischer Bondruck ist deaktiviert. PDF-Druck funktioniert weiterhin.');
+}
 
 // Sleep-Funktion, um eine Verzögerung zu erzeugen (in Millisekunden)
 function sleep(ms) {
@@ -156,6 +167,9 @@ function replaceSpecialChars(text) {
 // Hilfsfunktion: Daten schreiben und auf drain warten
 function writeData(data) {
     return new Promise((resolve, reject) => {
+        if (!port) {
+            return reject(new Error('Kein Drucker-Port konfiguriert'));
+        }
         port.write(data, (err) => {
             if (err) {
                 return reject(err);
@@ -189,7 +203,6 @@ ${bonDetails.items.map((item, index) => {
         const priceMatch = item.match(/€(\d+\.\d+)/);
         const price = priceMatch ? priceMatch[1] : '0.00';
         let itemText = `${index + 1}. ${item.replace(/^\d+\.\s*/, '')}`;
-        // Hier den Preis nur einmal anzeigen – falls nötig, kannst du den Preis-Teil anpassen
         return `${itemText}`;
     }).join('\n')}
 
@@ -197,17 +210,19 @@ ${bonDetails.items.map((item, index) => {
 Gesamt: €${bonDetails.total}
 --------------------------
 
-Der Foerderverein dankt dir fuer 
-deinen Einkauf!Save the Date:
+Der Foerderverein dankt dir fuer
+deinen Einkauf!
+Save the Date:
 BVT 38 - 3.-5. Juli 2026!
 \n
 `;
     receiptText = replaceSpecialChars(receiptText);
     try {
+        await writeData(INIT + setEncoding);
         await writeData(receiptText);
         console.log("Kassenbon erfolgreich gesendet");
         await writeData(FEED);
-        console.log("Papierzufuhr für Küchenbon durchgeführt");
+        console.log("Papierzufuhr fuer Kassenbon durchgefuehrt");
         await writeData(CUT);
         console.log("Kassenbon abgeschnitten");
     } catch (err) {
@@ -236,6 +251,7 @@ ${kitchenItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 `;
     kitchenReceipt = replaceSpecialChars(kitchenReceipt);
     try {
+        await writeData(INIT + setEncoding);
         await writeData(kitchenReceipt);
         console.log("Küchenbon erfolgreich gesendet");
         // Papierzufuhr (Leerraum) hinzufügen
@@ -286,6 +302,7 @@ ${flammkuchenItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 `;
         flammkuchenReceipt = replaceSpecialChars(flammkuchenReceipt);
         try {
+            await writeData(INIT + setEncoding);
             await writeData(flammkuchenReceipt);
             console.log("Flammkuchenbon erfolgreich gesendet");
             // Papierzufuhr (Leerraum) hinzufügen
