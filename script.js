@@ -431,6 +431,70 @@ function sendPrintRequest(bonDetails) {
         return;  // Stoppt die Funktion, wenn die Checkbox nicht aktiviert ist
     }
     console.log("Bon Details zum Drucken:", bonDetails);  // Logge die Bon-Daten zur Überprüfung
+
+    // PDF mit jsPDF generieren
+    try {
+        const { jsPDF } = window.jspdf;
+        // Höhe dynamisch berechnen: Kopf (~40mm) + Artikel + Fuß (~25mm)
+        const pageHeight = Math.max(100, 40 + bonDetails.items.length * 5 + 25);
+        const doc = new jsPDF({ unit: 'mm', format: [80, pageHeight] });
+        const left = 5;
+        const right = 75;
+        const center = 40;
+        let y = 10;
+
+        doc.setFontSize(14);
+        doc.text('*** Kassenbon ***', center, y, { align: 'center' });
+        y += 8;
+
+        doc.setFontSize(9);
+        doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
+        y += 5;
+        doc.text(bonDetails.timestamp, left, y);
+        y += 5;
+        doc.line(left, y, right, y);
+        y += 5;
+
+        doc.text('Artikel', left, y);
+        doc.text('Preis', right, y, { align: 'right' });
+        y += 2;
+        doc.line(left, y, right, y);
+        y += 5;
+
+        bonDetails.items.forEach((item, i) => {
+            // Entferne das "×" am Ende (vom Löschen-Button)
+            const cleanItem = item.replace(/×$/, '').trim();
+            // Preis rechtsbündig, Artikelname linksbündig
+            const lastDash = cleanItem.lastIndexOf(' - ');
+            if (lastDash !== -1) {
+                const name = `${i + 1}. ${cleanItem.slice(0, lastDash).trim()}`;
+                const price = cleanItem.slice(lastDash + 3).trim();
+                doc.text(name, left, y);
+                doc.text(price, right, y, { align: 'right' });
+            } else {
+                doc.text(`${i + 1}. ${cleanItem}`, left, y);
+            }
+            y += 5;
+        });
+
+        doc.line(left, y, right, y);
+        y += 6;
+        doc.setFontSize(11);
+        doc.text(`Gesamt: €${bonDetails.total}`, left, y);
+        y += 8;
+
+        doc.setFontSize(9);
+        doc.text('Der Förderverein dankt dir für', center, y, { align: 'center' });
+        y += 5;
+        doc.text('deinen Einkauf!', center, y, { align: 'center' });
+
+        doc.save(`Bon-${bonDetails.id}.pdf`);
+        console.log("PDF erfolgreich erstellt");
+    } catch (e) {
+        console.error("Fehler bei der PDF-Erstellung:", e);
+    }
+
+    // Auch an den Server senden (für physischen Drucker)
     fetch(`${window.API_URL}/print`, {
         method: 'POST',
         headers: {

@@ -217,6 +217,10 @@ BVT 38 - 3.-5. Juli 2026!
 
 // Funktion zum Drucken und Schneiden des Küchenbons
 async function printKitchenReceipt(bonDetails, kitchenItems) {
+    if (!isPortOpen) {
+        console.error('Port ist nicht geöffnet!');
+        return;
+    }
     let kitchenReceipt = `
 *** KÜCHE ***
 
