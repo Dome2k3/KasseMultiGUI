@@ -21,15 +21,6 @@ app.use(express.json());
 app.use(cors());
 app.use(bodyParser.json());
 
-// // 🔹 MySQL-Verbindung
-// const db = mysql.createConnection({
-//     host: "localhost",
-//     user: "Kasse",
-//     password: "Kasse",
-//     database: "kasse"
-// });
-
-
 const db = mysql.createConnection({
     host: process.env.MYSQL_HOST,
     port:process.env.MYSQL_PORT,
@@ -869,6 +860,7 @@ app.delete('/config-gebinde/:id', (req, res) => {
         res.json({ success: true });
     });
 });
+
 
 
 app.listen(3000, () => console.log("Statistik-Server läuft auf http://localhost:3000"));
