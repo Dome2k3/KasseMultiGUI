@@ -271,10 +271,6 @@ function finalizeBon() {
             total: parseFloat(total).toFixed(2) // Gesamtbetrag als Zahl mit 2 Dezimalstellen
         };
 
-        // In History aufnehmen
-        history.push(bonDetails);
-        updateHistory();
-
         // Formatierte Items erstellen
         const formattedItems = formatItems(bonDetails.items);
 
@@ -289,13 +285,22 @@ function finalizeBon() {
             return;
         }
 
-        // Daten an MySQL senden
-        sendReceiptsToServer({ totalAmount: totalAmount, items: formattedItems });
+        // Erst in DB speichern, dann mit DB-ID drucken
+        sendReceiptsToServer({ totalAmount: totalAmount, items: formattedItems }, function(dbId) {
+            // Bon-ID aus der Datenbank verwenden
+            if (dbId) {
+                bonDetails.id = dbId;
+            }
 
-        // Bon drucken
-        sendPrintRequest(bonDetails);
+            // In History aufnehmen
+            history.push(bonDetails);
+            updateHistory();
 
-        // Nächste Bon-ID
+            // Bon drucken (PDF + physischer Drucker)
+            sendPrintRequest(bonDetails);
+        });
+
+        // Nächste Bon-ID (Fallback-Zähler)
         receiptCount++;
 
         // Bon zurücksetzen
@@ -426,72 +431,166 @@ function updateHistory() {
 function sendPrintRequest(bonDetails) {
     // Prüfen, ob der Benutzer die PDF-Erstellung aktiviert hat
     const isPdfEnabled = document.getElementById('generate-pdf').checked;
-    if (!isPdfEnabled) {
-        console.log("PDF-Erstellung ist deaktiviert.");
-        return;  // Stoppt die Funktion, wenn die Checkbox nicht aktiviert ist
-    }
-    console.log("Bon Details zum Drucken:", bonDetails);  // Logge die Bon-Daten zur Überprüfung
+    console.log("Bon Details zum Drucken:", bonDetails);
 
-    // PDF mit jsPDF generieren
-    try {
-        const { jsPDF } = window.jspdf;
-        // Höhe dynamisch berechnen: Kopf (~40mm) + Artikel + Fuß (~25mm)
-        const pageHeight = Math.max(100, 40 + bonDetails.items.length * 5 + 25);
-        const doc = new jsPDF({ unit: 'mm', format: [80, pageHeight] });
-        const left = 5;
-        const right = 75;
-        const center = 40;
-        let y = 10;
+    // Artikel aufteilen: Flammkuchen vs. Küche (wie in server.js)
+    const allItems = bonDetails.items.map(item => {
+        const cleanItem = item.replace(/×$/, '').trim();
+        return cleanItem;
+    });
+    const flammkuchenItems = allItems.filter(item => item.includes('Flammkuchen'));
+    const kitchenItems = allItems.filter(item => !item.includes('Flammkuchen'));
 
-        doc.setFontSize(14);
-        doc.text('*** Kassenbon ***', center, y, { align: 'center' });
-        y += 8;
+    if (isPdfEnabled) {
+        // 1. Kassenbon-PDF (Kundenbon) – immer
+        try {
+            const { jsPDF } = window.jspdf;
+            const pageHeight = Math.max(100, 40 + allItems.length * 5 + 40);
+            const doc = new jsPDF({ unit: 'mm', format: [80, pageHeight] });
+            const left = 5;
+            const right = 75;
+            const center = 40;
+            let y = 10;
 
-        doc.setFontSize(9);
-        doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
-        y += 5;
-        doc.text(bonDetails.timestamp, left, y);
-        y += 5;
-        doc.line(left, y, right, y);
-        y += 5;
+            doc.setFontSize(14);
+            doc.text('*** Kassenbon ***', center, y, { align: 'center' });
+            y += 8;
 
-        doc.text('Artikel', left, y);
-        doc.text('Preis', right, y, { align: 'right' });
-        y += 2;
-        doc.line(left, y, right, y);
-        y += 5;
-
-        bonDetails.items.forEach((item, i) => {
-            // Entferne das "×" am Ende (vom Löschen-Button)
-            const cleanItem = item.replace(/×$/, '').trim();
-            // Preis rechtsbündig, Artikelname linksbündig
-            const lastDash = cleanItem.lastIndexOf(' - ');
-            if (lastDash !== -1) {
-                const name = `${i + 1}. ${cleanItem.slice(0, lastDash).trim()}`;
-                const price = cleanItem.slice(lastDash + 3).trim();
-                doc.text(name, left, y);
-                doc.text(price, right, y, { align: 'right' });
-            } else {
-                doc.text(`${i + 1}. ${cleanItem}`, left, y);
-            }
+            doc.setFontSize(9);
+            doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
             y += 5;
-        });
+            doc.text(bonDetails.timestamp, left, y);
+            y += 5;
+            doc.line(left, y, right, y);
+            y += 5;
 
-        doc.line(left, y, right, y);
-        y += 6;
-        doc.setFontSize(11);
-        doc.text(`Gesamt: €${bonDetails.total}`, left, y);
-        y += 8;
+            doc.text('Artikel', left, y);
+            doc.text('Preis', right, y, { align: 'right' });
+            y += 2;
+            doc.line(left, y, right, y);
+            y += 5;
 
-        doc.setFontSize(9);
-        doc.text('Der Förderverein dankt dir für', center, y, { align: 'center' });
-        y += 5;
-        doc.text('deinen Einkauf!', center, y, { align: 'center' });
+            allItems.forEach((cleanItem, i) => {
+                const lastDash = cleanItem.lastIndexOf(' - ');
+                if (lastDash !== -1) {
+                    const name = `${i + 1}. ${cleanItem.slice(0, lastDash).trim()}`;
+                    const price = cleanItem.slice(lastDash + 3).trim();
+                    doc.text(name, left, y);
+                    doc.text(price, right, y, { align: 'right' });
+                } else {
+                    doc.text(`${i + 1}. ${cleanItem}`, left, y);
+                }
+                y += 5;
+            });
 
-        doc.save(`Bon-${bonDetails.id}.pdf`);
-        console.log("PDF erfolgreich erstellt");
-    } catch (e) {
-        console.error("Fehler bei der PDF-Erstellung:", e);
+            doc.line(left, y, right, y);
+            y += 6;
+            doc.setFontSize(11);
+            doc.text(`Gesamt: \u20AC${bonDetails.total}`, left, y);
+            y += 8;
+
+            doc.setFontSize(9);
+            doc.text('Der F\u00F6rderverein dankt dir f\u00FCr', center, y, { align: 'center' });
+            y += 5;
+            doc.text('deinen Einkauf!', center, y, { align: 'center' });
+            y += 5;
+            doc.text('Save the Date:', center, y, { align: 'center' });
+            y += 5;
+            doc.text('BVT 38 - 3.-5. Juli 2026!', center, y, { align: 'center' });
+
+            doc.save(`Bon-${bonDetails.id}.pdf`);
+            console.log("Kassenbon-PDF erfolgreich erstellt");
+        } catch (e) {
+            console.error("Fehler bei der Kassenbon-PDF-Erstellung:", e);
+        }
+
+        // 2. Küchenbon-PDF – wenn Nicht-Flammkuchen-Artikel vorhanden
+        if (kitchenItems.length > 0) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const pageHeight = Math.max(80, 40 + kitchenItems.length * 5 + 15);
+                const doc = new jsPDF({ unit: 'mm', format: [80, pageHeight] });
+                const left = 5;
+                const right = 75;
+                const center = 40;
+                let y = 10;
+
+                doc.setFontSize(14);
+                doc.text('*** K\u00DCCHE ***', center, y, { align: 'center' });
+                y += 8;
+
+                doc.setFontSize(9);
+                doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
+                y += 5;
+                doc.text(bonDetails.timestamp, left, y);
+                y += 5;
+                doc.line(left, y, right, y);
+                y += 5;
+
+                doc.text('Artikel', left, y);
+                y += 2;
+                doc.line(left, y, right, y);
+                y += 5;
+
+                kitchenItems.forEach((item, i) => {
+                    const lastDash = item.lastIndexOf(' - ');
+                    const name = lastDash !== -1 ? item.slice(0, lastDash).trim() : item;
+                    doc.text(`${i + 1}. ${name}`, left, y);
+                    y += 5;
+                });
+
+                doc.line(left, y, right, y);
+
+                doc.save(`Kueche-${bonDetails.id}.pdf`);
+                console.log("K\u00FCchenbon-PDF erfolgreich erstellt");
+            } catch (e) {
+                console.error("Fehler bei der K\u00FCchenbon-PDF-Erstellung:", e);
+            }
+        }
+
+        // 3. Flammkuchenbon-PDF – nur wenn Flammkuchen bestellt
+        if (flammkuchenItems.length > 0) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const pageHeight = Math.max(80, 40 + flammkuchenItems.length * 5 + 15);
+                const doc = new jsPDF({ unit: 'mm', format: [80, pageHeight] });
+                const left = 5;
+                const right = 75;
+                const center = 40;
+                let y = 10;
+
+                doc.setFontSize(14);
+                doc.text('*** FLAMMKUCHEN ***', center, y, { align: 'center' });
+                y += 8;
+
+                doc.setFontSize(9);
+                doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
+                y += 5;
+                doc.text(bonDetails.timestamp, left, y);
+                y += 5;
+                doc.line(left, y, right, y);
+                y += 5;
+
+                doc.text('Flammkuchen', left, y);
+                y += 2;
+                doc.line(left, y, right, y);
+                y += 5;
+
+                flammkuchenItems.forEach((item, i) => {
+                    const lastDash = item.lastIndexOf(' - ');
+                    const name = lastDash !== -1 ? item.slice(0, lastDash).trim() : item;
+                    doc.text(`${i + 1}. ${name}`, left, y);
+                    y += 5;
+                });
+
+                doc.line(left, y, right, y);
+
+                doc.save(`Flammkuchen-${bonDetails.id}.pdf`);
+                console.log("Flammkuchenbon-PDF erfolgreich erstellt");
+            } catch (e) {
+                console.error("Fehler bei der Flammkuchenbon-PDF-Erstellung:", e);
+            }
+        }
     }
 
     // Auch an den Server senden (für physischen Drucker)
@@ -501,7 +600,7 @@ function sendPrintRequest(bonDetails) {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            bonDetails: bonDetails, // Hier übergibst du bonDetails im Request
+            bonDetails: bonDetails,
         }),
     })
         .then(response => response.json())
@@ -558,7 +657,7 @@ const bonData = {
 };
 
 // --- Funktion zum Senden des Bons an den Server ---
-function sendReceiptsToServer(bonDetails) {
+function sendReceiptsToServer(bonDetails, callback) {
     console.log("Bon Details zum Speichern:", bonDetails);
 
     // GUI mitschicken (wird in z.B. essen.html gesetzt)
@@ -575,12 +674,17 @@ function sendReceiptsToServer(bonDetails) {
                 console.log("Daten erfolgreich gespeichert:", data);
 
                 if (data.success) {
+                    // Callback mit DB-ID aufrufen
+                    if (callback) callback(data.id);
                     // Nach dem Speichern: Historie aus der DB neu laden für diese GUI
                     loadRecentBons();
+                } else {
+                    if (callback) callback(null);
                 }
             })
             .catch(error => {
                 console.error("Fehler beim Speichern des Bons:", error);
+                if (callback) callback(null);
             });
     } else {
         console.error("Bon-Daten sind leer oder ungültig.");
