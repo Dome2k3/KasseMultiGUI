@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let allShifts = []; // cached shift array from server; used to find shift ids
     let allowedTimeBlocks = {}; // {activityId: [{start, end}, ...]}
     let currentUser = null; // Current authenticated user
+    let currentActivity = null; // Activity associated with the currently open modal
 
     // --- Helpers ---
     function hourIndexToDate(index) {
@@ -225,6 +226,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (logoutBtn) {
                 logoutBtn.style.display = 'none';
             }
+        }
+
+        // Show "Turnier-Admin" nav link only for admins
+        const navTurniAdmin = document.getElementById('nav-turnier-admin');
+        if (navTurniAdmin) {
+            navTurniAdmin.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
         }
     }
 
@@ -819,11 +826,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         currentSlot = slot;
+        currentActivity = activity;
         const startIso = currentSlot.dataset.startTime || hourIndexToDate(parseInt(currentSlot.dataset.hourIndex)).toISOString();
         const startTime = new Date(startIso);
 
         modalTitle.textContent = `${activity.name}`;
         modalSubtitle.textContent = `${startTime.toLocaleString('de-DE', { weekday:'long', hour:'2-digit', minute:'2-digit' })} Uhr`;
+
+        // Show role requirement hint
+        const roleHint = document.getElementById('modal-role-hint');
+        if (roleHint) {
+            const roleReq = activity.role_requirement || 'Alle';
+            if (roleReq === 'Alle') {
+                roleHint.style.display = 'none';
+            } else {
+                const roleLabel = roleReq === 'Erwachsen' ? 'Erwachsene oder Orga' : roleReq;
+                roleHint.textContent = `Anforderung: ${roleLabel} (nur berechtigte Helfer werden angezeigt)`;
+                roleHint.style.display = 'block';
+            }
+        }
 
         teamSelect.innerHTML = '<option value="">Team auswaehlen</option>';
         allTeams.forEach(t => teamSelect.add(new Option(t.name, t.id)));
@@ -842,8 +863,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateHelperDropdown(teamId) {
-        helperSelect.innerHTML = '<option value="">Helfer auswawhlen</option>';
-        if (teamId) allHelpers.filter(h => h.team_id == teamId).forEach(h => helperSelect.add(new Option(h.name, h.id)));
+        helperSelect.innerHTML = '<option value="">Helfer auswählen</option>';
+        if (!teamId) return;
+        const roleReq = currentActivity ? (currentActivity.role_requirement || 'Alle') : 'Alle';
+        allHelpers
+            .filter(h => h.team_id == teamId)
+            .filter(h => {
+                if (roleReq === 'Alle') return true;
+                if (roleReq === 'Erwachsen') return h.role === 'Erwachsen' || h.role === 'Orga';
+                // For any other role requirement, allow exact match or Orga
+                return h.role === roleReq || h.role === 'Orga';
+            })
+            .forEach(h => helperSelect.add(new Option(h.name, h.id)));
     }
 
     function setupModalListeners() {
@@ -853,7 +884,23 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.querySelector('#shift-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const helperId = helperSelect.value;
-            if (!helperId) { alert('Bitte einen Helfer auswawhlen.'); return; }
+            if (!helperId) { alert('Bitte einen Helfer auswählen.'); return; }
+
+            // Client-side role validation before submitting
+            const helper = allHelpers.find(h => h.id == helperId);
+            if (helper && currentActivity) {
+                const roleReq = currentActivity.role_requirement || 'Alle';
+                if (roleReq === 'Erwachsen') {
+                    if (helper.role !== 'Erwachsen' && helper.role !== 'Orga') {
+                        alert('Dieser Helfer ist für diese Schicht nicht berechtigt. Die Schicht erfordert einen Erwachsenen oder Orga.');
+                        return;
+                    }
+                } else if (roleReq !== 'Alle' && helper.role !== roleReq && helper.role !== 'Orga') {
+                    alert(`Dieser Helfer ist für diese Schicht nicht berechtigt. Die Schicht erfordert: ${roleReq}.`);
+                    return;
+                }
+            }
+
             const activityId = currentSlot.dataset.activityId;
             const hourIndex = parseInt(currentSlot.dataset.hourIndex);
             const startTime = hourIndexToDate(hourIndex);
@@ -903,10 +950,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 modal.style.display = 'none';
                 await fetchAndRenderAllShifts();
             } else {
-                let txt = '';
-                try { txt = await response.text(); } catch(e){}
-                console.error('Save shift failed', response.status, txt);
-                alert('Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht (Erwachsener oder Orga).');
+                let errorMsg = 'Fehler beim Speichern der Schicht.';
+                try {
+                    const body = await response.json();
+                    if (body && body.error) errorMsg = body.error;
+                } catch(e) {
+                    try { const txt = await response.text(); if (txt) errorMsg = txt; } catch(e2) {}
+                }
+                console.error('Save shift failed', response.status, errorMsg);
+                alert(errorMsg);
             }
         });
 

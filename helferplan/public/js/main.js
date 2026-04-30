@@ -1283,6 +1283,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (logoutBtn) logoutBtn.style.display = 'none';
             if (resetPasswordSection) resetPasswordSection.style.display = 'none';
         }
+
+        // Show "Turnier-Admin" nav link only for admins
+        const navTurniAdmin = document.getElementById('nav-turnier-admin');
+        if (navTurniAdmin) {
+            navTurniAdmin.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
+        }
+
+        // Show "Helfer-Adden" nav link only when logged in
+        const navHelferAdd = document.getElementById('nav-helper-add');
+        if (navHelferAdd) {
+            navHelferAdd.style.display = currentUser ? '' : 'none';
+        }
     }
 
     function showAuthModal() {
