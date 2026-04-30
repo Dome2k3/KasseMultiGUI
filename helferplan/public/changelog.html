@@ -310,21 +310,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get helper name by ID
     function getHelperNameById(helperId) {
         if (!helperId) return null;
-        const helper = helpers.find(h => h.id === helperId);
-        return helper ? helper.name : `ID: ${helperId}`;
+        const id = parseInt(helperId, 10);
+        const helper = helpers.find(h => h.id === id);
+        return helper ? helper.name : `(ID: ${helperId})`;
     }
     
     // Get team name by ID
     function getTeamNameById(teamId) {
         if (!teamId) return null;
-        const team = teams.find(t => t.id === teamId);
+        const id = parseInt(teamId, 10);
+        const team = teams.find(t => t.id === id);
         return team ? team.name : null;
     }
     
     // Get activity name by ID
     function getActivityNameById(activityId) {
         if (!activityId) return null;
-        const activity = activities.find(a => a.id === activityId);
+        const id = parseInt(activityId, 10);
+        const activity = activities.find(a => a.id === id);
         return activity ? activity.name : null;
     }
     
@@ -509,6 +512,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         return description;
     }
     
+    // Fields that are internal/redundant and should never be shown in the changelog
+    const FIELDS_TO_SKIP = new Set(['id', 'helper_name', 'team_color', 'created_at', 'updated_at', 'is_override']);
+
     function renderDataChanges(before, after, tableName) {
         let html = '<div class="data-change">';
         
@@ -522,7 +528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // UPDATE - show changes
             const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
             keys.forEach(key => {
-                if (key === 'id') return; // Skip ID
+                if (FIELDS_TO_SKIP.has(key)) return;
                 
                 const beforeValue = before[key];
                 const afterValue = after[key];
@@ -548,7 +554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function renderDataFields(data, tableName) {
         let html = '';
         Object.entries(data).forEach(([key, value]) => {
-            if (key === 'id') return; // Skip ID
+            if (FIELDS_TO_SKIP.has(key)) return;
             const fieldName = getFieldDisplayName(key, tableName);
             html += `<p><span class="label">${fieldName}:</span> ${formatValue(value, key)}</p>`;
         });
@@ -583,10 +589,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Replace helper_id with helper name and ID
         if (fieldName === 'helper_id' && value) {
             const helperName = getHelperNameById(value);
-            if (helperName && !helperName.startsWith('ID:')) {
+            if (helperName && !helperName.startsWith('(ID:')) {
                 return `${helperName} (ID: ${value})`;
             }
-            return `ID: ${value}`;
+            return `(ID: ${value})`;
         }
         
         // Replace team_id with team name and ID
@@ -595,7 +601,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (teamName) {
                 return `${teamName} (ID: ${value})`;
             }
-            return `ID: ${value}`;
+            return `(ID: ${value})`;
         }
         
         // Replace activity_id with activity name and ID
@@ -604,7 +610,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (activityName) {
                 return `${activityName} (ID: ${value})`;
             }
-            return `ID: ${value}`;
+            return `(ID: ${value})`;
         }
         
         // Format allowed_time_blocks
