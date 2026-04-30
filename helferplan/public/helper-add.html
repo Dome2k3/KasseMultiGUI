@@ -128,7 +128,7 @@
 <nav>
     <a href="index.html">Admin: Stammdaten</a>
     <a href="plan.html">Turnier-Planung</a>
-    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="plan-admin.html" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
     <a href="aufbau-abbau.html">Auf-/Abbau</a>
     <a href="kuchen.html">Kuchen</a>
     <a href="statistik.html">Statistik</a>
@@ -242,6 +242,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const response = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
             const data = await response.json();
+
+            // Update nav link visibility based on auth status
+            const navTurniAdmin = document.getElementById('nav-turnier-admin');
+            if (navTurniAdmin) {
+                navTurniAdmin.style.display = (data.authenticated && data.user && data.user.is_admin) ? '' : 'none';
+            }
+            const navHelferAdd = document.getElementById('nav-helper-add');
+            if (navHelferAdd) {
+                navHelferAdd.style.display = data.authenticated ? '' : 'none';
+            }
             
             if (!data.authenticated) {
                 authCheck.innerHTML = `

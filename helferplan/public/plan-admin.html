@@ -71,7 +71,7 @@
 <nav>
   <a href="index.html">Admin: Stammdaten</a>
   <a href="plan.html">Turnier-Planung</a>
-  <a href="plan-admin.html" class="active">Turnier-Admin</a>
+  <a href="plan-admin.html" class="active" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
   <a href="aufbau-abbau.html">Auf-/Abbau</a>
   <a href="kuchen.html">Kuchen</a>
   <a href="statistik.html">Statistik</a>
@@ -169,6 +169,12 @@
         writeModeBtn.style.display = 'inline-block';
         writeModeBtn.textContent = 'Anmelden';
         if (logoutBtn) logoutBtn.style.display = 'none';
+      }
+
+      // Show "Turnier-Admin" nav link only for admins
+      const navTurniAdmin = document.getElementById('nav-turnier-admin');
+      if (navTurniAdmin) {
+        navTurniAdmin.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
       }
     }
 

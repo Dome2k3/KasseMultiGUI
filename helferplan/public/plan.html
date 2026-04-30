@@ -126,7 +126,7 @@
 <nav>
     <a href="index.html">Admin: Stammdaten</a>
     <a href="plan.html" class="active">Turnier-Planung</a>
-    <a href="plan-admin.html">Turnier-Admin</a>
+    <a href="plan-admin.html" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
     <a href="aufbau-abbau.html">Auf-/Abbau</a>
     <a href="kuchen.html">Kuchen</a>
     <a href="statistik.html">Statistik</a>
@@ -177,6 +177,7 @@
     <div class="modal-content">
         <h2 id="modal-title">Schicht besetzen</h2>
         <p id="modal-subtitle"></p>
+        <p id="modal-role-hint" style="font-size:13px; color:#666; margin:0 0 8px 0; display:none;"></p>
         <form id="shift-form">
             <label for="modal-team-select">Team:</label>
             <select id="modal-team-select" required></select>
