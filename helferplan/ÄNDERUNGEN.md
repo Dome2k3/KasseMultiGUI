@@ -169,7 +169,39 @@ Für erlaubte Blöcke `[{start: 0, end: 2}, {start: 2, end: 6}]`:
 - Stunde 6+ (Freitag 18:00+) sind gesperrt
 - Eine Schicht um 14:00 (Stunde 2) wird jetzt korrekt als erlaubt erkannt
 
-## 8. Zusammenfassung
+## 8. Bugfix: Changelog-Einträge bereinigt (April 2026)
+
+### Problem
+Im Änderungsprotokoll (changelog.html) zeigten manche Einträge nur IDs statt Namen (z.B. „Helfer: ID: 95" statt „Ina (ID: 95)") und gelöschte Einträge enthielten interne Felder (`helper_name`, `team_color`, `created_at`, `updated_at`, `is_override`), die für den Nutzer nicht aussagekräftig sind.
+
+### Ursachen
+1. **Typenvergleich-Fehler**: Die ID-Suche (`helpers.find(h => h.id === helperId)`) verwendete strikte Gleichheit (`===`). Da die IDs aus JSON-Daten als Strings ankommen, die Vergleichswerte aus der API aber Zahlen sind, schlug der Vergleich immer fehl.
+2. **Zu viele Felder**: Die Funktion `renderDataFields` zeigte alle gespeicherten Felder an, auch technische/interne Felder wie `created_at`, `updated_at`, `helper_name`, `team_color` und `is_override`.
+
+### Lösung
+- **Datei geändert**: `helferplan/public/changelog.html`
+- `getHelperNameById`, `getTeamNameById`, `getActivityNameById`: IDs werden jetzt per `parseInt()` in Zahlen umgewandelt, bevor sie verglichen werden.
+- `FIELDS_TO_SKIP`-Set eingeführt: `id`, `helper_name`, `team_color`, `created_at`, `updated_at`, `is_override` werden in `renderDataFields` und `renderDataChanges` übersprungen.
+- Fallback-Anzeige für unbekannte IDs vereinheitlicht: `(ID: X)` statt `ID: X`.
+
+### Beispiel vorher
+```
+Aktivität: ID: 24
+Helfer: ID: 95
+helper_name: leer
+team_color: leer
+created_at: 2026-04-30T09:16:17.000Z
+updated_at: 2026-04-30T09:16:17.000Z
+Überschreibung: 0
+```
+
+### Beispiel nachher
+```
+Aktivität: Flammkuchen 1 (ID: 24)
+Helfer: Ina (ID: 95)
+```
+
+## 9. Zusammenfassung
 
 Alle Anforderungen wurden vollständig implementiert:
 - ✅ Layout-Verbesserungen (Sticky Headers, optimiertes Panel)
@@ -182,3 +214,4 @@ Alle Anforderungen wurden vollständig implementiert:
 - ✅ Konsistenter Code-Stil
 - ✅ Gut dokumentiert und annotiert
 - ✅ Zeitblock-Validierung korrigiert (Dezember 2024)
+- ✅ Changelog-Einträge bereinigt (April 2026)
