@@ -49,6 +49,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUser = null; // Current authenticated user
     let currentActivity = null; // Activity associated with the currently open modal
 
+    // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)
+    function getStoredToken() {
+        try { return localStorage.getItem('hp_session_token'); } catch(e) { console.warn('Failed to retrieve token:', e); return null; }
+    }
+
+    function getAuthHeaders() {
+        const token = getStoredToken();
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
     // --- Helpers ---
     function hourIndexToDate(index) {
         const start = new Date(EVENT_START_DATE);
@@ -176,7 +186,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function checkCurrentUser() {
         try {
             const res = await fetch(`${API_URL_HELFERPLAN}/current-user`, { 
-                credentials: 'include' 
+                credentials: 'include',
+                headers: getAuthHeaders()
             });
             if (res.ok) {
                 const data = await res.json();
@@ -260,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_URL_HELFERPLAN}/auth/identify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ name, email })
             });
@@ -268,6 +279,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const data = await res.json();
                 currentUser = data.user;
+                // Store token in localStorage as fallback for cookie issues (e.g. Chrome iOS)
+                if (data.token) {
+                    try { localStorage.setItem('hp_session_token', data.token); } catch(e) { console.warn('Failed to store token:', e); }
+                }
                 updateAuthUI();
                 document.getElementById('auth-modal').style.display = 'none';
                 
@@ -288,13 +303,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await fetch(`${API_URL_HELFERPLAN}/auth/session`, {
                 method: 'DELETE',
-                credentials: 'include'
+                credentials: 'include',
+                headers: getAuthHeaders()
             });
         } catch (err) {
             console.warn('Logout request failed:', err);
         }
         
         currentUser = null;
+        try { localStorage.removeItem('hp_session_token'); } catch(e) { console.warn('Failed to remove token:', e); }
         updateAuthUI();
     }
 
@@ -573,7 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                                 credentials: 'include',
                                 body: JSON.stringify({
                                     activity_id: activityId,
@@ -908,7 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
             });
@@ -923,13 +940,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (confirm(`Konflikt: Es existiert bereits eine Schicht (${who}). Überschreiben?`)) {
                         // attempt delete by id if server provided it
                         if (existing.id) {
-                            const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE', credentials: 'include' });
+                            const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${existing.id}`, { method: 'DELETE', credentials: 'include', headers: getAuthHeaders() });
                             if (!del.ok) alert('Löschen der bestehenden Schicht fehlgeschlagen; siehe Konsole.');
                             else {
                                 // retry create
                                 const retry = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
+                                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                                     credentials: 'include',
                                     body: JSON.stringify({ activity_id: activityId, start_time: startTime.toISOString(), end_time: endTime.toISOString(), helper_id: helperId })
                                 });
@@ -970,7 +987,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const shiftId = currentSlot.dataset.shiftId;
             if (shiftId) {
                 try {
-                    const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${shiftId}`, { method: 'DELETE', credentials: 'include' });
+                    const del = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts/${shiftId}`, { method: 'DELETE', credentials: 'include', headers: getAuthHeaders() });
                     const text = await del.text().catch(()=>null);
                     console.log('DELETE by id response', del.status, text);
                     if (!del.ok) {
@@ -995,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                     credentials: 'include',
                     body: JSON.stringify({ activity_id: activityId, start_time: startTimeIso, helper_id: helperId })
                 });
