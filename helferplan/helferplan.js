@@ -432,11 +432,11 @@ app.post('/api/auth/identify', authLimiter, async (req, res) => {
         // Set HTTP-only secure cookie
         // sameSite can be 'lax' (default, works for same-site and top-level navigation)
         // or 'none' (for cross-site requests, requires secure=true)
-        const sameSiteMode = process.env.COOKIE_SAMESITE || 'none';
+        const sameSiteMode = process.env.COOKIE_SAMESITE || 'lax';
         
         // Set secure flag for HTTPS connections or when sameSite is 'none'
         // req.secure is true when the connection is HTTPS (works with trust proxy)
-        const cookieSecure = req.secure || sameSiteMode === 'none';
+        const cookieSecure = req.secure;
         
         res.cookie('hp_session', token, {
             httpOnly: true,
