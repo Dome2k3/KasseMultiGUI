@@ -11,8 +11,20 @@
         return `${window.location.origin}/api`;
     })();
 
+    // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)
+    function getStoredToken() {
+        try { return localStorage.getItem('hp_session_token'); } catch(e) { return null; }
+    }
+    function getAuthHeaders() {
+        const token = getStoredToken();
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
     try {
-        const res = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
+        const res = await fetch(`${API_URL}/current-user`, {
+            credentials: 'include',
+            headers: { ...getAuthHeaders() }
+        });
         if (res.ok) {
             const data = await res.json();
             const isLoggedIn = data.authenticated && data.user;

@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!id) return alert('Kein Team ausgewählt.');
         if (!confirm('Soll das Team wirklich gelöscht werden?')) return;
         try {
-            const res = await fetch(`${API_URL}/teams/${id}`, { method: 'DELETE', credentials: 'include' });
+            const res = await fetch(`${API_URL}/teams/${id}`, { method: 'DELETE', credentials: 'include', headers: { ...getAuthHeaders() } });
             if (!res.ok) throw new Error('Löschen fehlgeschlagen');
             await fetchAndRenderTeams();
             await fetchAndRenderHelpers(); // team changes can affect helper list
@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_URL}/teams/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ name, color_hex })
             });
@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteBtn.addEventListener('click', async () => {
                 if (!confirm(`${helper.name} wirklich löschen?`)) return;
                 try {
-                    const res = await fetch(`${API_URL}/helpers/${helper.id}`, { method: 'DELETE', credentials: 'include' });
+                    const res = await fetch(`${API_URL}/helpers/${helper.id}`, { method: 'DELETE', credentials: 'include', headers: { ...getAuthHeaders() } });
                     if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                     fetchAndRenderHelpers();
                 } catch (err) { 
@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delBtn.addEventListener('click', async () => {
                     if (!confirm('Wirklich löschen?')) return;
                     try {
-                        const res = await fetch(`${API_URL}/activity-groups/${group.id}`, { method: 'DELETE', credentials: 'include' });
+                        const res = await fetch(`${API_URL}/activity-groups/${group.id}`, { method: 'DELETE', credentials: 'include', headers: { ...getAuthHeaders() } });
                         if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                         fetchAndRenderGroups();
                     } catch (err) { console.error('Fehler beim Löschen Gruppe:', err); alert('Löschen fehlgeschlagen'); }
@@ -447,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', async () => {
                 if (!confirm('Wirklich löschen?')) return;
                 try {
-                    const res = await fetch(`${API_URL}/activities/${activity.id}`, { method: 'DELETE', credentials: 'include' });
+                    const res = await fetch(`${API_URL}/activities/${activity.id}`, { method: 'DELETE', credentials: 'include', headers: { ...getAuthHeaders() } });
                     if (!res.ok) throw new Error('Löschen fehlgeschlagen');
                     await fetchAndRenderActivities();
                 } catch (err) { console.error('Fehler beim Löschen Aktivität:', err); alert('Löschen fehlgeschlagen'); }
@@ -463,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify(body),
                 credentials: 'include'
             });
@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wenn Name frei: sende POST
             const postRes = await fetch(`${API_URL}/helpers`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ name, team_id, role }),
                 credentials: 'include'
             });
@@ -604,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ settings: payload }),
                 credentials: 'include'
             });
@@ -648,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ settings: payload }),
                 credentials: 'include'
             });
@@ -667,7 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ settings: payload }),
                 credentials: 'include'
             });
@@ -1223,10 +1223,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Authentication Functions ---
     let currentUser = null;
+
+    // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)
+    function getStoredToken() {
+        try { return localStorage.getItem('hp_session_token'); } catch(e) { return null; }
+    }
+    function getAuthHeaders() {
+        const token = getStoredToken();
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
     
     async function checkCurrentUser() {
         try {
-            const res = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
+            const res = await fetch(`${API_URL}/current-user`, {
+                credentials: 'include',
+                headers: { ...getAuthHeaders() }
+            });
             if (res.ok) {
                 const data = await res.json();
                 if (data.authenticated && data.user) {
@@ -1319,7 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_URL}/auth/identify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ name, email })
             });
@@ -1327,6 +1339,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const data = await res.json();
                 currentUser = data.user;
+                // Store token in localStorage as fallback for cookie issues (e.g. Chrome iOS)
+                if (data.token) {
+                    try { localStorage.setItem('hp_session_token', data.token); } catch(e) { console.warn('Failed to store token:', e); }
+                }
                 updateAuthUI();
                 document.getElementById('auth-modal').style.display = 'none';
                 
@@ -1347,12 +1363,14 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await fetch(`${API_URL}/auth/session`, {
                 method: 'DELETE',
-                credentials: 'include'
+                credentials: 'include',
+                headers: { ...getAuthHeaders() }
             });
         } catch (err) {
             console.warn('Logout request failed:', err);
         }
         currentUser = null;
+        try { localStorage.removeItem('hp_session_token'); } catch(e) { console.warn('Failed to remove token:', e); }
         updateAuthUI();
     }
 
@@ -1400,7 +1418,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_URL}/reset-password`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ password })
             });
@@ -1448,7 +1466,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(`${API_URL}/reset-tournament-data`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ password })
             });
