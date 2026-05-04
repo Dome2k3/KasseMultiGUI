@@ -313,7 +313,6 @@ nav a.active {
     padding: 4px 10px;
     border-radius: 4px;
     cursor: pointer;
-    margin-left: auto;
     flex-shrink: 0;
 }
 .nav-burger:hover {

@@ -704,7 +704,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!usersList) return;
         
         try {
-            const response = await fetch(`${API_URL}/users`, { credentials: 'include' });
+            const response = await fetch(`${API_URL}/users`, { credentials: 'include', headers: { ...getAuthHeaders() } });
             
             if (response.status === 403) {
                 usersList.innerHTML = '<p style="text-align: center; color: #999;">Nur für Administratoren verfügbar.</p>';
@@ -1391,7 +1391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Reset Password Management (Admin only) ---
     async function loadResetPassword() {
         try {
-            const res = await fetch(`${API_URL}/reset-password`, { credentials: 'include' });
+            const res = await fetch(`${API_URL}/reset-password`, { credentials: 'include', headers: { ...getAuthHeaders() } });
             if (res.ok) {
                 const data = await res.json();
                 const input = document.getElementById('reset-password-input');
