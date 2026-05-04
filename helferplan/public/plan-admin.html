@@ -69,13 +69,16 @@
 </head>
 <body>
 <nav>
-  <a href="index.html">Admin: Stammdaten</a>
-  <a href="plan.html">Turnier-Planung</a>
-  <a href="plan-admin.html" class="active" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
-  <a href="aufbau-abbau.html">Auf-/Abbau</a>
-  <a href="kuchen.html">Kuchen</a>
-  <a href="statistik.html">Statistik</a>
-  <a href="changelog.html">Änderungen</a>
+  <button class="nav-burger" id="nav-burger" aria-label="Navigation öffnen" aria-expanded="false" aria-controls="nav-links">☰</button>
+  <div class="nav-links" id="nav-links">
+    <a href="index.html">Admin: Stammdaten</a>
+    <a href="plan.html">Turnier-Planung</a>
+    <a href="plan-admin.html" class="active" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
+    <a href="aufbau-abbau.html">Auf-/Abbau</a>
+    <a href="kuchen.html">Kuchen</a>
+    <a href="statistik.html">Statistik</a>
+    <a href="changelog.html">Änderungen</a>
+  </div>
 </nav>
 
 <main class="plan-main">
@@ -101,6 +104,7 @@
 </main>
 
 <script src="/helferplan/public/config.js"></script>
+<script src="/helferplan/public/js/nav.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
     // API base for Helferplan - same as plan.js
@@ -119,10 +123,22 @@
     // Authentication state
     let currentUser = null;
 
+    // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)
+    function getStoredToken() {
+        try { return localStorage.getItem('hp_session_token'); } catch(e) { return null; }
+    }
+    function getAuthHeaders() {
+        const token = getStoredToken();
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
     // Authentication functions
     async function checkCurrentUser() {
       try {
-        const res = await fetch(`${API_URL_HELFERPLAN}/current-user`, { credentials: 'include' });
+        const res = await fetch(`${API_URL_HELFERPLAN}/current-user`, {
+          credentials: 'include',
+          headers: { ...getAuthHeaders() }
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated && data.user) {
@@ -200,7 +216,7 @@
       try {
         const res = await fetch(`${API_URL_HELFERPLAN}/auth/identify`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ name, email })
         });
@@ -208,6 +224,10 @@
         if (res.ok) {
           const data = await res.json();
           currentUser = data.user;
+          // Store token in localStorage as fallback for cookie issues (e.g. Chrome iOS)
+          if (data.token) {
+            try { localStorage.setItem('hp_session_token', data.token); } catch(e) { console.warn('Failed to store token:', e); }
+          }
           updateAuthUI();
           document.getElementById('auth-modal').style.display = 'none';
           
@@ -228,12 +248,14 @@
       try {
         await fetch(`${API_URL_HELFERPLAN}/auth/session`, {
           method: 'DELETE',
-          credentials: 'include'
+          credentials: 'include',
+          headers: { ...getAuthHeaders() }
         });
       } catch (err) {
         console.warn('Logout request failed:', err);
       }
       currentUser = null;
+      try { localStorage.removeItem('hp_session_token'); } catch(e) { console.warn('Failed to remove token:', e); }
       updateAuthUI();
     }
 
@@ -436,7 +458,7 @@
       try {
         const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activityId}/allowed-time-blocks`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           credentials: 'include',
           body: JSON.stringify({ blocks: blocks })
         });

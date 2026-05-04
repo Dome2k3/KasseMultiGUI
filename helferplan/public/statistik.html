@@ -196,13 +196,16 @@
 </head>
 <body>
 <nav>
-    <a href="index.html">Admin: Stammdaten</a>
-    <a href="plan.html">Turnier-Planung</a>
-    <a href="plan-admin.html" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
-    <a href="aufbau-abbau.html">Auf-/Abbau</a>
-    <a href="kuchen.html">Kuchen</a>
-    <a href="statistik.html" class="active">Statistik</a>
-    <a href="changelog.html">Änderungen</a>
+    <button class="nav-burger" id="nav-burger" aria-label="Navigation öffnen" aria-expanded="false" aria-controls="nav-links">☰</button>
+    <div class="nav-links" id="nav-links">
+        <a href="index.html">Admin: Stammdaten</a>
+        <a href="plan.html">Turnier-Planung</a>
+        <a href="plan-admin.html" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
+        <a href="aufbau-abbau.html">Auf-/Abbau</a>
+        <a href="kuchen.html">Kuchen</a>
+        <a href="statistik.html" class="active">Statistik</a>
+        <a href="changelog.html">Änderungen</a>
+    </div>
 </nav>
 
 <main class="stats-container">
@@ -282,6 +285,7 @@
 
 <script src="/helferplan/public/config.js"></script>
 <script src="/helferplan/public/js/nav-auth.js"></script>
+<script src="/helferplan/public/js/nav.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
     // API URL setup

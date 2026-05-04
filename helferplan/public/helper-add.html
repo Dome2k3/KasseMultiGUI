@@ -126,14 +126,17 @@
 </head>
 <body>
 <nav>
-    <a href="index.html">Admin: Stammdaten</a>
-    <a href="plan.html">Turnier-Planung</a>
-    <a href="plan-admin.html" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
-    <a href="aufbau-abbau.html">Auf-/Abbau</a>
-    <a href="kuchen.html">Kuchen</a>
-    <a href="statistik.html">Statistik</a>
-    <a href="changelog.html">Änderungen</a>
-    <a href="helper-add.html" class="active">Helfer hinzufügen</a>
+    <button class="nav-burger" id="nav-burger" aria-label="Navigation öffnen" aria-expanded="false" aria-controls="nav-links">☰</button>
+    <div class="nav-links" id="nav-links">
+        <a href="index.html">Admin: Stammdaten</a>
+        <a href="plan.html">Turnier-Planung</a>
+        <a href="plan-admin.html" id="nav-turnier-admin" style="display:none">Turnier-Admin</a>
+        <a href="aufbau-abbau.html">Auf-/Abbau</a>
+        <a href="kuchen.html">Kuchen</a>
+        <a href="statistik.html">Statistik</a>
+        <a href="changelog.html">Änderungen</a>
+        <a href="helper-add.html" class="active">Helfer hinzufügen</a>
+    </div>
 </nav>
 
 <main>
@@ -216,6 +219,7 @@
 </div>
 
 <script src="config.js"></script>
+<script src="/helferplan/public/js/nav.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
     // API URL setup
@@ -228,6 +232,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         return `${window.location.origin}/api`;
     })();
+
+    // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)
+    function getStoredToken() {
+        try { return localStorage.getItem('hp_session_token'); } catch(e) { return null; }
+    }
+    function getAuthHeaders() {
+        const token = getStoredToken();
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
     
     const authCheck = document.getElementById('auth-check');
     const formContainer = document.getElementById('add-helper-form-container');
@@ -240,7 +253,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check authentication
     async function checkAuth() {
         try {
-            const response = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
+            const response = await fetch(`${API_URL}/current-user`, {
+                credentials: 'include',
+                headers: { ...getAuthHeaders() }
+            });
             const data = await response.json();
 
             // Update nav link visibility based on auth status
@@ -345,7 +361,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const response = await fetch(`${API_URL}/helpers`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders()
                 },
                 credentials: 'include',
                 body: JSON.stringify({
@@ -430,7 +447,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const res = await fetch(`${API_URL}/auth/identify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
                 body: JSON.stringify({ name, email })
             });
@@ -438,6 +455,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (res.ok) {
                 const data = await res.json();
                 currentUser = data.user;
+                // Store token in localStorage as fallback for cookie issues (e.g. Chrome iOS)
+                if (data.token) {
+                    try { localStorage.setItem('hp_session_token', data.token); } catch(e) { console.warn('Failed to store token:', e); }
+                }
                 updateAuthUI();
                 document.getElementById('auth-modal').style.display = 'none';
                 
@@ -463,12 +484,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             await fetch(`${API_URL}/auth/session`, {
                 method: 'DELETE',
-                credentials: 'include'
+                credentials: 'include',
+                headers: { ...getAuthHeaders() }
             });
         } catch (err) {
             console.warn('Logout request failed:', err);
         }
         currentUser = null;
+        try { localStorage.removeItem('hp_session_token'); } catch(e) { console.warn('Failed to remove token:', e); }
         updateAuthUI();
         // Show auth required message
         authCheck.style.display = 'block';
@@ -503,7 +526,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadTeams();
         // Get the current user data
         try {
-            const response = await fetch(`${API_URL}/current-user`, { credentials: 'include' });
+            const response = await fetch(`${API_URL}/current-user`, {
+                credentials: 'include',
+                headers: { ...getAuthHeaders() }
+            });
             const data = await response.json();
             if (data.authenticated) {
                 currentUser = data.user;
@@ -514,7 +540,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } else {
         // Show login button even if not authenticated
-        const response = await fetch(`${API_URL}/current-user`, { credentials: 'include' }).catch(() => null);
+        const response = await fetch(`${API_URL}/current-user`, {
+            credentials: 'include',
+            headers: { ...getAuthHeaders() }
+        }).catch(() => null);
         if (response && response.ok) {
             const data = await response.json();
             if (data.authenticated) {
