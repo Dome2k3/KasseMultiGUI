@@ -339,13 +339,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     function hourIndexToTime(index) {
         const eventStartDate = settings.event_start_date || '2024-07-19T12:00:00Z';
         const start = new Date(eventStartDate);
-        start.setHours(start.getHours() + index);
+        start.setUTCHours(start.getUTCHours() + index);
         return start.toLocaleString('de-DE', { 
             weekday: 'short',
             day: '2-digit', 
             month: '2-digit',
             hour: '2-digit', 
-            minute: '2-digit' ,
+            minute: '2-digit',
             timeZone: 'Europe/Berlin'
         });
     }
