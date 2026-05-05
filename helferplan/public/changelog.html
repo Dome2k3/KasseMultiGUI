@@ -346,6 +346,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             month: '2-digit',
             hour: '2-digit', 
             minute: '2-digit' 
+            timeZone: 'Europe/Berlin'
         });
     }
     
@@ -462,6 +463,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit'
+            timeZone: 'Europe/Berlin'
         });
         
         const description = generateDescription(log);
@@ -584,6 +586,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     year: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
+                    timeZone: 'Europe/Berlin'
                 });
             } catch (e) {
                 return String(value);
