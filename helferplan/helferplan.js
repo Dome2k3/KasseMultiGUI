@@ -9,6 +9,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
+const SlotRules = require('./public/js/slot-rules.js');
 
 // --- 2. Express-App initialisieren ---
 const app = express();
@@ -749,7 +750,9 @@ app.get('/api/activities', async (req, res) => {
         // Parse `allowed_time_blocks` from JSON string to JavaScript object
         const activities = rows.map(row => ({
             ...row,
-            allowed_time_blocks: row.allowed_time_blocks ? JSON.parse(row.allowed_time_blocks) : null
+            allowed_time_blocks: row.allowed_time_blocks
+                ? SlotRules.normalizeCoverageBlocks(JSON.parse(row.allowed_time_blocks), row.role_requirement)
+                : null
         }));
 
         res.json(activities);
@@ -851,49 +854,37 @@ app.post('/api/tournament-shifts', attachUser, requireEditor, async (req, res) =
         if (activity.length === 0) return res.status(404).json({ error: 'Aktivität nicht gefunden.' });
 
         const roleRequirement = activity[0].role_requirement;
-        const allowedTimeBlocks = activity[0].allowed_time_blocks ? JSON.parse(activity[0].allowed_time_blocks) : null;
+        const allowedTimeBlocks = activity[0].allowed_time_blocks ? JSON.parse(activity[0].allowed_time_blocks) : [];
 
         // Prüfen, ob die Rolle passt
         const [helper] = await pool.query("SELECT role FROM helferplan_helpers WHERE id = ?", [helper_id]);
         if (helper.length === 0) return res.status(404).json({ error: 'Helfer nicht gefunden.' });
         
-        // Orga helpers can fill any role, minors can only fill 'Alle' roles
         const helperRole = helper[0].role;
-        if (roleRequirement === 'Erwachsen') {
-            // For 'Erwachsen' requirement, allow both 'Erwachsen' and 'Orga' helpers
-            if (helperRole !== 'Erwachsen' && helperRole !== 'Orga') {
-                return res.status(400).json({ error: 'Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht.' });
-            }
-        } else if (roleRequirement !== 'Alle' && helperRole !== roleRequirement) {
-            return res.status(400).json({ error: 'Die Rolle des Helfers entspricht nicht den Anforderungen der Schicht.' });
-        }
+        
+        // 2. Zeitblock und Rollen-Regel validieren
+        const settingsResult = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'event_friday'");
+        const settingsRows = settingsResult[0];
+        const eventFriday = settingsRows && settingsRows.length > 0 ? settingsRows[0].setting_value : '2024-07-19';
+        const eventStartDate = new Date(`${eventFriday}T12:00:00Z`);
+        const shiftStart = new Date(start_time);
+        const shiftEnd = new Date(end_time);
+        const shiftStartHourIndex = Math.round((shiftStart - eventStartDate) / MS_PER_HOUR);
+        const shiftEndHourIndex = Math.round((shiftEnd - eventStartDate) / MS_PER_HOUR);
+        const validation = SlotRules.validateShiftAssignment({
+            activity: { role_requirement: roleRequirement, allowed_time_blocks: allowedTimeBlocks },
+            coverageBlocks: allowedTimeBlocks,
+            startHourIndex: shiftStartHourIndex,
+            endHourIndex: shiftEndHourIndex,
+            helperRole,
+            eventStartHour: SlotRules.EVENT_START_HOUR
+        });
 
-        // 2. Zeitblock validieren
-        // allowed_time_blocks contain hour indices (e.g., {start: 2, end: 6})
-        // We need to convert these to actual datetimes based on event_friday setting
-        if (allowedTimeBlocks && Array.isArray(allowedTimeBlocks) && allowedTimeBlocks.length > 0) {
-            // Get event start date from settings
-            const settingsResult = await pool.query("SELECT setting_value FROM helferplan_settings WHERE setting_key = 'event_friday'");
-            const settingsRows = settingsResult[0];
-            const eventFriday = settingsRows && settingsRows.length > 0 ? settingsRows[0].setting_value : '2024-07-19';
-            
-            // Event starts at 12:00 on Friday
-            const eventStartDate = new Date(`${eventFriday}T12:00:00Z`);
-            const shiftStart = new Date(start_time);
-            
-            // Calculate hour index of the shift start time
-            const hoursDiff = (shiftStart - eventStartDate) / MS_PER_HOUR;
-            const shiftHourIndex = Math.round(hoursDiff);
-            
-            // Check if shift hour index is within any allowed block
-            const isAllowed = allowedTimeBlocks.some(block => {
-                return shiftHourIndex >= block.start && shiftHourIndex < block.end;
-            });
-            
-            if (!isAllowed) {
-                console.warn(`Time block validation failed: shiftHourIndex=${shiftHourIndex}, allowedBlocks=`, allowedTimeBlocks);
-                return res.status(400).json({ error: 'Die ausgewählte Zeit liegt außerhalb der zulässigen Schichtblöcke.' });
-            }
+        if (!validation.valid) {
+            const errorMessage = validation.code === 'not_needed'
+                ? 'Die ausgewählte Zeit liegt außerhalb der benötigten Schichtzeiten.'
+                : validation.message;
+            return res.status(400).json({ error: errorMessage });
         }
 
         // Schicht anlegen (wenn keine Konflikte bestehen)
@@ -1200,7 +1191,7 @@ app.get('/api/activities/:id/allowed-time-blocks', async (req, res) => {
     const activityId = req.params.id;
     try {
         const [result] = await pool.query(
-            "SELECT allowed_time_blocks FROM helferplan_activities WHERE id = ?",
+            "SELECT role_requirement, allowed_time_blocks FROM helferplan_activities WHERE id = ?",
             [activityId]
         );
         if (result.length === 0) {
@@ -1209,7 +1200,7 @@ app.get('/api/activities/:id/allowed-time-blocks', async (req, res) => {
         const allowedTimeBlocks = result[0].allowed_time_blocks
             ? JSON.parse(result[0].allowed_time_blocks)
             : [];
-        res.json(allowedTimeBlocks);
+        res.json(SlotRules.normalizeCoverageBlocks(allowedTimeBlocks, result[0].role_requirement || SlotRules.DEFAULT_ROLE));
     } catch (err) {
         console.error('GET /api/activities/:id/allowed-time-blocks Fehler:', err);
         res.status(500).json({ error: 'Serverfehler beim Abrufen der Zeitblöcke.' });
@@ -1228,14 +1219,15 @@ app.post('/api/activities/:id/allowed-time-blocks', attachUser, requireAdmin, as
     try {
         // Get current blocks for audit log
         const [current] = await pool.query(
-            "SELECT allowed_time_blocks FROM helferplan_activities WHERE id = ?",
+            "SELECT role_requirement, allowed_time_blocks FROM helferplan_activities WHERE id = ?",
             [activityId]
         );
         const beforeBlocks = current.length > 0 && current[0].allowed_time_blocks 
             ? JSON.parse(current[0].allowed_time_blocks) 
             : null;
         
-        const blocksJson = JSON.stringify(blocks);
+        const normalizedBlocks = SlotRules.normalizeCoverageBlocks(blocks, (current[0] && current[0].role_requirement) || SlotRules.DEFAULT_ROLE);
+        const blocksJson = JSON.stringify(normalizedBlocks);
         await pool.query(
             "UPDATE helferplan_activities SET allowed_time_blocks = ? WHERE id = ?",
             [blocksJson, activityId]
@@ -1249,7 +1241,7 @@ app.post('/api/activities/:id/allowed-time-blocks', attachUser, requireAdmin, as
             tableName: 'helferplan_activities',
             rowId: Number(activityId),
             before: { allowed_time_blocks: beforeBlocks },
-            after: { allowed_time_blocks: blocks },
+            after: { allowed_time_blocks: normalizedBlocks },
             req,
             note: 'Updated allowed_time_blocks'
         });

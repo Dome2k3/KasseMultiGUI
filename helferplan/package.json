@@ -4,7 +4,8 @@
   "description": "Helferplan fuer Turniere",
   "main": "helferplan.js",
   "scripts": {
-    "start": "node helferplan.js"
+    "start": "node helferplan.js",
+    "test": "node --test ./test/*.test.js"
   },
   "author": "",
   "license": "ISC",

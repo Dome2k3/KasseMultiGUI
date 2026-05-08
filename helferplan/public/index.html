@@ -377,10 +377,10 @@
                     </select>
                 </div>
                 <div>
-                    <label for="activity-filter-role" style="font-size: 13px; font-weight: 500;">Filter Anforderung:</label>
-                    <select id="activity-filter-role" style="padding: 4px 8px; font-size: 13px;">
-                        <option value="">Alle Anforderungen</option>
-                        <option value="Alle">Alle</option>
+                     <label for="activity-filter-role" style="font-size: 13px; font-weight: 500;">Filter Anforderung:</label>
+                     <select id="activity-filter-role" style="padding: 4px 8px; font-size: 13px;">
+                         <option value="">Alle Anforderungen</option>
+                        <option value="Alle">Alle / Jugend tagsüber</option>
                         <option value="Erwachsen">Nur Erwachsene</option>
                         <option value="Orga">Nur Orga</option>
                     </select>
@@ -398,12 +398,13 @@
                 <input type="text" id="activity-name-input" placeholder="z.B. Ausschank" required>
                 <select id="activity-group-select" required></select>
                 <select id="activity-role-select" required>
-                    <option value="Alle">Alle</option>
+                    <option value="Alle">Alle / Jugend tagsüber</option>
                     <option value="Erwachsen">Nur Erwachsene</option>
                     <option value="Orga">Nur Orga</option>
                 </select>
                 <button type="submit">Anlegen</button>
             </form>
+            <p style="margin: 10px 0 0; color: #45556a; font-size: 13px;">Zeiten mit Bedarf werden im Turnier-Admin gesetzt. Bei <strong>Alle</strong> dürfen Minderjährige nur tagsüber eingesetzt werden; Nachtstunden nach Mitternacht werden automatisch als <strong>Erwachsene oder Orga</strong> behandelt.</p>
         </div>
         </div>
     </div>

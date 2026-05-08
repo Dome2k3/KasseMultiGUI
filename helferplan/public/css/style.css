@@ -213,7 +213,7 @@ button:hover {
     text-overflow: ellipsis;
 }
 .shift-slot:hover {
-    background-color: #e8f0fe;
+    filter: brightness(0.98);
 }
 
 .shift-slot.filled {
@@ -274,6 +274,135 @@ button:hover {
 }
 .modal-actions .danger:hover {
     background-color: #c9302c;
+}
+
+.slot-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    margin: 12px 0 0;
+    padding: 12px;
+    border: 1px solid #d7dbe0;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.slot-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #233244;
+}
+
+.slot-legend-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid #7b8794;
+    flex: 0 0 auto;
+    position: relative;
+}
+
+.slot-legend-swatch.legend-filled {
+    background: linear-gradient(135deg, #005A9F 0%, #53a2d9 100%);
+    border-color: #005A9F;
+}
+
+.slot-legend-swatch.legend-open-all {
+    background: #b9f6ca;
+    border-color: #228b4e;
+}
+
+.slot-legend-swatch.legend-open-adult {
+    background: #ffd59e;
+    border-color: #b36200;
+}
+
+.slot-legend-swatch.legend-open-orga {
+    background: #ffe46b;
+    border-color: #9b7a00;
+}
+
+.slot-legend-swatch.legend-not-needed {
+    background: #d6d9de;
+    border-color: #8b949e;
+}
+
+.slot-legend-swatch.legend-not-needed::before {
+    content: "✕";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c1121f;
+    font-weight: 800;
+    font-size: 16px;
+    line-height: 1;
+}
+
+.shift-slot {
+    border-right: 1px solid #d3d8df;
+    border-bottom: 1px solid #edf1f4;
+    position: relative;
+}
+
+.shift-slot:focus-visible {
+    outline: 3px solid #005A9F;
+    outline-offset: -3px;
+    z-index: 2;
+}
+
+.shift-slot.slot-state-open-all {
+    background: #b9f6ca;
+    color: #10361c;
+    border-color: #228b4e;
+}
+
+.shift-slot.slot-state-open-adult {
+    background: #ffd59e;
+    color: #5b3200;
+    border-color: #b36200;
+}
+
+.shift-slot.slot-state-open-orga {
+    background: #ffe46b;
+    color: #4f3d00;
+    border-color: #9b7a00;
+}
+
+.shift-slot.slot-state-not-needed {
+    background: #d6d9de;
+    color: #c1121f;
+    border-color: #8b949e;
+}
+
+.shift-slot.slot-state-not-needed::before {
+    content: "✕";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c1121f;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.shift-slot.slot-state-not-needed > * {
+    visibility: hidden;
+}
+
+.shift-slot.filled {
+    color: inherit;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+    font-size: 11px;
+    border-color: rgba(0, 0, 0, 0.2);
 }
 
 /* Navigation styles */
