@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SlotRules = window.HelferplanSlotRules;
 
     if (!SlotRules) {
-        throw new Error('HelferplanSlotRules konnte nicht geladen werden.');
+        throw new Error('HelferplanSlotRules konnte nicht geladen werden. Bitte prüfen Sie die Script-Reihenfolge und die Browser-Konsole auf Ladefehler von slot-rules.js.');
     }
 
     // Globale State-Variablen
@@ -87,10 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const b = parseInt(c.slice(4,6),16);
             return (0.299*r + 0.587*g + 0.114*b);
         } catch (e) { return 0; }
-    }
-
-    function getTextColorForBackground(hex) {
-        return luminanceForHex(hex) > 160 ? '#111' : '#fff';
     }
 
     // Fetch allowed time blocks for all activities
@@ -597,7 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             displaySlot.innerHTML = helper.name.split(' ')[0] || helper.name;
                             displaySlot.classList.add('filled');
                             displaySlot.style.backgroundColor = teamColor;
-                            displaySlot.style.color = getTextColorForBackground(teamColor);
+                            displaySlot.style.color = SlotRules.getTextColorForBackground(teamColor);
                             displaySlot.style.opacity = '1';
                             displaySlot.dataset.helperId = helperId;
                             displaySlot.dataset.startTime = startTime.toISOString();
@@ -746,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 startSlot.innerHTML = shift.helper_name ? shift.helper_name.split(' ')[0] : '—';
                 startSlot.classList.add('filled');
                 startSlot.style.backgroundColor = shift.team_color || '#666';
-                startSlot.style.color = getTextColorForBackground(shift.team_color || '#666');
+                startSlot.style.color = SlotRules.getTextColorForBackground(shift.team_color || '#666');
                 startSlot.style.opacity = '1';
                 startSlot.dataset.helperId = shift.helper_id || '';
                 // store server-provided start and id (server now reliably returns id)

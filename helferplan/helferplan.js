@@ -218,6 +218,15 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+const shiftMutationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    // Allows normal scheduling bursts from drag/drop or modal edits while still throttling abuse.
+    max: 60,
+    message: 'Zu viele Schicht-Änderungen. Bitte kurz warten und erneut versuchen.',
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 app.use(express.json());
 app.use(cookieParser());
 app.use((req, res, next) => {
@@ -843,7 +852,7 @@ app.get('/api/tournament-shifts', async (req, res) => {
 });
 
 /// Schicht hinzufügen: Validierung der Rolle und Berücksichtigung von Schichtblöcken
-app.post('/api/tournament-shifts', attachUser, requireEditor, async (req, res) => {
+app.post('/api/tournament-shifts', shiftMutationLimiter, attachUser, requireEditor, async (req, res) => {
     try {
         const { activity_id, start_time, end_time, helper_id } = req.body;
         const startMy = isoToMySQLDatetime(start_time);

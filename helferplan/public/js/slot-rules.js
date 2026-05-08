@@ -13,7 +13,10 @@
 
     function normalizeRoleRequirement(roleRequirement, fallback) {
         const candidate = roleRequirement || fallback || DEFAULT_ROLE;
-        return Object.prototype.hasOwnProperty.call(ROLE_ORDER, candidate) ? candidate : (fallback || DEFAULT_ROLE);
+        if (Object.prototype.hasOwnProperty.call(ROLE_ORDER, candidate)) {
+            return candidate;
+        }
+        return fallback || DEFAULT_ROLE;
     }
 
     function normalizeCoverageBlocks(blocks, fallbackRoleRequirement) {
@@ -50,6 +53,7 @@
         const restrictedUntilHour = Number(options && options.restrictedUntilHour);
         const eventStartHour = Number(options && options.eventStartHour);
         const limit = Number.isFinite(restrictedUntilHour) ? restrictedUntilHour : NIGHT_RESTRICTED_UNTIL_HOUR;
+        // getClockHourForIndex always normalizes into the range [0, 23].
         const clockHour = getClockHourForIndex(hourIndex, Number.isFinite(eventStartHour) ? eventStartHour : EVENT_START_HOUR);
         return clockHour >= 0 && clockHour < limit;
     }
@@ -68,6 +72,20 @@
         return 'Jugend / Erwachsene / Orga';
     }
 
+    function getTextColorForBackground(hex) {
+        try {
+            const color = String(hex || '').replace('#', '');
+            if (color.length !== 6) return '#fff';
+            const r = parseInt(color.slice(0, 2), 16);
+            const g = parseInt(color.slice(2, 4), 16);
+            const b = parseInt(color.slice(4, 6), 16);
+            const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+            return luminance > 160 ? '#111' : '#fff';
+        } catch (error) {
+            return '#fff';
+        }
+    }
+
     function getStricterRoleRequirement(currentRole, nextRole) {
         const current = normalizeRoleRequirement(currentRole, DEFAULT_ROLE);
         const next = normalizeRoleRequirement(nextRole, DEFAULT_ROLE);
@@ -82,17 +100,16 @@
         const start = Math.trunc(Number(startHourIndex));
         const duration = Math.max(1, Math.trunc(Number(options && options.duration) || SLOT_DURATION_HOURS));
         const end = Math.max(start + 1, Math.trunc(Number(options && options.endHourIndex) || (start + duration)));
-        const coverageBlocks = normalizeCoverageBlocks(
-            options && options.coverageBlocks !== undefined
-                ? options.coverageBlocks
-                : activity && activity.allowed_time_blocks,
-            baseRoleRequirement
-        );
+        const providedCoverageBlocks = options && options.coverageBlocks !== undefined
+            ? options.coverageBlocks
+            : activity && activity.allowed_time_blocks;
+        const coverageBlocks = normalizeCoverageBlocks(providedCoverageBlocks, baseRoleRequirement);
 
         let roleRequirement = baseRoleRequirement;
         let nightRestricted = false;
 
         for (let hour = start; hour < end; hour += 1) {
+            // Empty coverageBlocks means "every hour is needed" for backward compatibility.
             const coverageBlock = coverageBlocks.length > 0 ? findCoverageBlock(coverageBlocks, hour) : { role_requirement: baseRoleRequirement };
             if (!coverageBlock) {
                 return {
@@ -204,6 +221,7 @@
         isNightRestrictedHour,
         getAllowedRolesForRequirement,
         getRoleRequirementLabel,
+        getTextColorForBackground,
         getShiftRule,
         validateShiftAssignment
     };

@@ -392,10 +392,6 @@ button:hover {
     line-height: 1;
 }
 
-.shift-slot.slot-state-not-needed > * {
-    visibility: hidden;
-}
-
 .shift-slot.filled {
     color: inherit;
     font-weight: 700;

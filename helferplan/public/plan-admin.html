@@ -127,7 +127,7 @@
     window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
     console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
     const SlotRules = window.HelferplanSlotRules;
-    if (!SlotRules) throw new Error('HelferplanSlotRules konnte nicht geladen werden.');
+    if (!SlotRules) throw new Error('HelferplanSlotRules konnte nicht geladen werden. Bitte prüfen Sie die Script-Reihenfolge und die Browser-Konsole auf 404- oder Ladefehler von slot-rules.js.');
 
     // Authentication state
     let currentUser = null;
@@ -530,12 +530,13 @@
             const slot = document.createElement('div');
             slot.className = 'shift-slot';
             slot.dataset.activityId = activity.id;
-              slot.dataset.hourIndex = i;
-              slot.tabIndex = 0;
-              if (i === DAY_TRANSITION_FR_SA || i === DAY_TRANSITION_SA_SO) {
-                slot.style.borderLeft = '2px solid #000';
-                slot.style.marginLeft = '4px';
-              }
+            slot.dataset.hourIndex = i;
+            slot.tabIndex = 0;
+            let suppressNextClick = false;
+            if (i === DAY_TRANSITION_FR_SA || i === DAY_TRANSITION_SA_SO) {
+              slot.style.borderLeft = '2px solid #000';
+              slot.style.marginLeft = '4px';
+            }
 
             updateSlotVisual(slot, activity, i);
 
@@ -543,10 +544,15 @@
             slot.addEventListener('mousedown', (e) => {
               e.preventDefault();
               isDragging = true;
+              suppressNextClick = true;
               const currentlyNeeded = getSlotRule(activity, i).isNeeded;
               dragMode = currentlyNeeded ? 'lock' : 'unlock';
               toggleSlotLock(activity.id, i, dragMode).then(() => {
                 updateSlotVisual(slot, activity, i);
+              }).finally(() => {
+                window.setTimeout(() => {
+                  suppressNextClick = false;
+                }, 250);
               });
             });
 
@@ -558,14 +564,17 @@
               }
             });
 
-            slot.addEventListener('touchstart', (e) => {
-              e.preventDefault();
+            slot.addEventListener('click', () => {
+              if (suppressNextClick) {
+                suppressNextClick = false;
+                return;
+              }
               const currentlyNeeded = getSlotRule(activity, i).isNeeded;
               const nextMode = currentlyNeeded ? 'lock' : 'unlock';
               toggleSlotLock(activity.id, i, nextMode).then(() => {
                 updateSlotVisual(slot, activity, i);
               });
-            }, { passive: false });
+            });
 
             slot.addEventListener('keydown', (e) => {
               if (e.key !== 'Enter' && e.key !== ' ') return;

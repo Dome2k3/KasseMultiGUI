@@ -80,3 +80,8 @@ test('helper filtering can rely on shared allowed roles for every slot state', (
     assert.deepEqual(SlotRules.getAllowedRolesForRequirement('Erwachsen'), ['Erwachsen', 'Orga']);
     assert.deepEqual(SlotRules.getAllowedRolesForRequirement('Orga'), ['Orga']);
 });
+
+test('shared contrast helper returns readable text colors for filled slots', () => {
+    assert.equal(SlotRules.getTextColorForBackground('#ffffff'), '#111');
+    assert.equal(SlotRules.getTextColorForBackground('#005A9F'), '#fff');
+});
