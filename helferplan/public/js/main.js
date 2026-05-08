@@ -325,6 +325,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return team ? team.color_hex : '#999';
     }
 
+    function formatActivityRole(roleRequirement) {
+        if (roleRequirement === 'Erwachsen') return 'Nur Erwachsene oder Orga';
+        if (roleRequirement === 'Orga') return 'Nur Orga';
+        return 'Alle / Jugend tagsüber';
+    }
+
     helperFilterTeam.addEventListener('change', () => {
         displayedHelperCount = 40; // Reset count when filtering (2x20)
         renderHelperCards();
@@ -438,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activityListBody.innerHTML = '';
         filteredActivities.forEach(activity => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${activity.name}</td><td>${activity.group_name || ''}</td><td>${activity.role_requirement}</td>`;
+            tr.innerHTML = `<td>${activity.name}</td><td>${activity.group_name || ''}</td><td>${formatActivityRole(activity.role_requirement)}</td>`;
             const tdDelete = document.createElement('td');
             const btn = document.createElement('button');
             btn.className = 'small-delete';

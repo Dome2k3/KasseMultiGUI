@@ -72,7 +72,6 @@
 
         .hour-slot { font-size:12px; padding:4px 6px; text-align:center; background:#fafafa; }
         .shift-slot { font-size:12px; padding:6px; min-height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: transform .08s, outline .08s; }
-        .shift-slot.filled { color:#fff; }
 
         .team-item .team-color { padding:6px 8px; border-radius:6px; color:#fff; font-weight:600; display:inline-block; white-space:nowrap; }
 
@@ -167,6 +166,14 @@
             <div id="helper-pool"><div id="helper-pool-empty">Wähle ein Team um Helfer anzuzeigen.</div></div>
         </div>
     </div>
+
+    <div class="slot-legend" aria-label="Legende für Schichtzustände">
+        <span class="slot-legend-item"><span class="slot-legend-swatch legend-filled" aria-hidden="true"></span>Teamfarbe = besetzt</span>
+        <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-all" aria-hidden="true"></span>Grün = Jugend / Erwachsene / Orga</span>
+        <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-adult" aria-hidden="true"></span>Orange = nur Erwachsene oder Orga</span>
+        <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-orga" aria-hidden="true"></span>Gelb = nur Orga</span>
+        <span class="slot-legend-item"><span class="slot-legend-swatch legend-not-needed" aria-hidden="true"></span>Grau mit rotem X = keine Schicht nötig</span>
+    </div>
     
     <div class="plan-layout">
         <div id="plan-container">
@@ -220,6 +227,7 @@
 <!-- Lade runtime config vor den App-Skripten -->
 <script src="/helferplan/public/config.js"></script>
 <script src="/helferplan/public/js/nav.js"></script>
+<script src="/helferplan/public/js/slot-rules.js"></script>
 <script src="/helferplan/public/js/plan.js"></script>
 </body>
 </html>

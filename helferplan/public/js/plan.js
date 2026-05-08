@@ -25,6 +25,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalSubtitle = document.getElementById('modal-subtitle');
     const teamSelect = document.getElementById('modal-team-select');
     const helperSelect = document.getElementById('modal-helper-select');
+    const SlotRules = window.HelferplanSlotRules;
+
+    if (!SlotRules) {
+        throw new Error('HelferplanSlotRules konnte nicht geladen werden. Bitte prüfen Sie die Script-Reihenfolge und die Browser-Konsole auf Ladefehler von slot-rules.js.');
+    }
 
     // Globale State-Variablen
     // WICHTIG: allActivities muss synchron mit den API-Daten gehalten werden
@@ -34,7 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Config
     const HOUR_PX = 40;      // width per hour column
     const LEFT_COL_PX = 200; // left name column width
-    const DEFAULT_ROLE = 'Alle'; // default role requirement value
+    const DEFAULT_ROLE = SlotRules.DEFAULT_ROLE || 'Alle';
+    const SLOT_DURATION_HOURS = SlotRules.SLOT_DURATION_HOURS || 2;
     const DAY_TRANSITION_FR_SA = 12; // Friday to Saturday transition at hour 12
     const DAY_TRANSITION_SA_SO = 36; // Saturday to Sunday transition at hour 36
 
@@ -103,50 +109,32 @@ document.addEventListener('DOMContentLoaded', () => {
         await Promise.all(promises);
     }
 
-    // Check if a time slot is locked (not in allowed blocks)
-    function isSlotLocked(activityId, hourIndex) {
-        const blocks = allowedTimeBlocks[activityId] || [];
-        
-        // If no blocks defined, assume all times are unlocked (backward compatible)
-        if (blocks.length === 0) {
-            return false;
-        }
-
-        // Check if this hour is NOT in any allowed block (locked = not allowed)
-        const isAllowed = blocks.some(block => hourIndex >= block.start && hourIndex < block.end);
-        return !isAllowed;
+    function getSlotRule(activity, hourIndex, endHourIndex = hourIndex + SLOT_DURATION_HOURS) {
+        return SlotRules.getShiftRule(activity, hourIndex, {
+            endHourIndex,
+            duration: endHourIndex - hourIndex,
+            coverageBlocks: allowedTimeBlocks[activity.id] || activity.allowed_time_blocks || [],
+            eventStartHour: SlotRules.EVENT_START_HOUR
+        });
     }
 
-    // Prüft ob eine Zeit für eine Aktivität erlaubt ist
-    function isTimeAllowed(activity, startTime) {
-        // Aktuell keine spezifischen Zeitbeschränkungen implementiert
-        // Diese Funktion kann erweitert werden, um z.B. Aktivitäts-spezifische
-        // Zeitfenster zu prüfen (z.B. activity.allowed_start, activity.allowed_end)
+    function applyBaseSlotState(slot, activity, hourIndex) {
+        const slotRule = getSlotRule(activity, hourIndex, hourIndex + SLOT_DURATION_HOURS);
 
-        // Basale Validierung: Prüfe ob Aktivität überhaupt definiert ist
-        if (!activity) {
-            console.warn('isTimeAllowed: Keine Aktivität übergeben');
-            return false;
-        }
-
-        // NEW: Check if time slot is locked via allowed_time_blocks
-        const activityId = activity.id;
-        const blocks = allowedTimeBlocks[activityId] || [];
-        
-        // If no blocks defined, assume all times are allowed (backward compatible)
-        if (blocks.length === 0) {
-            return true;
-        }
-
-        // Calculate hour index from startTime
-        const start = new Date(EVENT_START_DATE);
-        const st = new Date(startTime);
-        const hourIndex = Math.round((st - start) / (1000 * 60 * 60));
-
-        // Check if this hour is in any allowed block
-        const isAllowed = blocks.some(block => hourIndex >= block.start && hourIndex < block.end);
-        
-        return isAllowed;
+        slot.classList.remove('filled', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
+        slot.style.backgroundColor = '';
+        slot.style.color = '';
+        slot.style.opacity = '1';
+        slot.style.gridColumn = '';
+        slot.textContent = '';
+        slot.title = slotRule.title;
+        slot.dataset.roleRequirement = slotRule.roleRequirement;
+        slot.dataset.isNeeded = slotRule.isNeeded ? 'true' : 'false';
+        slot.dataset.nightRestricted = slotRule.nightRestricted ? 'true' : 'false';
+        slot.classList.add(`slot-state-${slotRule.visualState}`);
+        slot.style.cursor = slotRule.isNeeded ? 'pointer' : 'not-allowed';
+        slot.tabIndex = slotRule.isNeeded ? 0 : -1;
+        return slotRule;
     }
 
     // --- Rendering helpers ---
@@ -495,33 +483,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         slot.style.borderLeft = '2px solid #000';
                         slot.style.marginLeft = '4px';
                     }
-
-                    // Check if this slot is locked
-                    const isLocked = isSlotLocked(activity.id, i);
-                    if (isLocked) {
-                        slot.classList.add('locked-slot');
-                        slot.style.backgroundColor = '#ffcccc'; // Light red for blocked slots
-                        slot.style.opacity = '0.7';
-                        slot.style.cursor = 'not-allowed';
-                        slot.title = 'Dieser Zeitslot ist gesperrt';
-                    } else {
-                        // Color-code free slots by role requirement
-                        const roleReq = activity.role_requirement || DEFAULT_ROLE;
-                        if (roleReq === 'Erwachsen') {
-                            slot.style.backgroundColor = '#ffb3d9'; // Light pink for Erwachsenen
-                            slot.title = 'Freie Schicht (nur Erwachsene)';
-                        } else if (roleReq === 'Orga') {
-                            slot.style.backgroundColor = '#ffff99'; // Light yellow for Orga
-                            slot.title = 'Freie Schicht (nur Orga)';
-                        } else {
-                            slot.style.backgroundColor = '#ccffcc'; // Light green for all
-                            slot.title = 'Freie Schicht (für alle)';
-                        }
-                    }
+                    applyBaseSlotState(slot, activity, i);
 
                     slot.addEventListener('dragover', (e) => {
-                        // Prevent drop on locked slots
-                        if (isLocked) {
+                        const slotRule = getSlotRule(activity, i, i + SLOT_DURATION_HOURS);
+                        if (!slotRule.isNeeded) {
                             e.dataTransfer.dropEffect = 'none';
                             return;
                         }
@@ -530,7 +496,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         handleHoverHighlight(slot);
                     });
                     slot.addEventListener('dragenter', (e) => {
-                        if (isLocked) return;
+                        const slotRule = getSlotRule(activity, i, i + SLOT_DURATION_HOURS);
+                        if (!slotRule.isNeeded) return;
                         e.preventDefault();
                         handleHoverHighlight(slot);
                     });
@@ -568,25 +535,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const startIndex = parseInt(slot.dataset.hourIndex);
                             const startTime = hourIndexToDate(startIndex);
-
-                            // Validierung: Prüfe, ob der Helfer für die Aktivität geeignet ist
-                            // Orga helpers can fill any role, minors can only fill 'Alle' roles
-                            if (activity.role_requirement === 'Erwachsen') {
-                                if (helper.role !== 'Erwachsen' && helper.role !== 'Orga') {
-                                    alert('Fehler: Diese Schicht erfordert einen Erwachsenen oder Orga. Der ausgewählte Helfer ist nicht berechtigt.');
-                                    return;
-                                }
-                            } else if (activity.role_requirement !== 'Alle' && helper.role !== activity.role_requirement) {
-                                alert('Fehler: Diese Schicht erfordert die Rolle "' + activity.role_requirement + '". Der ausgewählte Helfer ist nicht berechtigt.');
+                            const endIndex = startIndex + SLOT_DURATION_HOURS;
+                            const validation = SlotRules.validateShiftAssignment({
+                                activity,
+                                coverageBlocks: allowedTimeBlocks[activityId] || [],
+                                startHourIndex: startIndex,
+                                endHourIndex: endIndex,
+                                helperRole: helper.role,
+                                eventStartHour: SlotRules.EVENT_START_HOUR
+                            });
+                            if (!validation.valid) {
+                                alert(validation.message);
                                 return;
                             }
-
-                            if (!isTimeAllowed(activity, startTime)) {
-                                alert('Diese Zeit ist für die Schicht nicht verfügbar.');
-                                return;
-                            }
-
-                            const endTime = hourIndexToDate(startIndex + 2);
+                            const endTime = hourIndexToDate(endIndex);
 
                             const resp = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                                 method: 'POST',
@@ -631,6 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             displaySlot.innerHTML = helper.name.split(' ')[0] || helper.name;
                             displaySlot.classList.add('filled');
                             displaySlot.style.backgroundColor = teamColor;
+                            displaySlot.style.color = SlotRules.getTextColorForBackground(teamColor);
                             displaySlot.style.opacity = '1';
                             displaySlot.dataset.helperId = helperId;
                             displaySlot.dataset.startTime = startTime.toISOString();
@@ -641,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             // Apply 2-hour span (same logic as in fetchAndRenderAllShifts)
-                            const duration = 2; // 2 hours
+                            const duration = SLOT_DURATION_HOURS;
                             const displayStartIdx = parseInt(displaySlot.dataset.hourIndex);
                             displaySlot.style.gridColumn = `span ${duration}`;
                             
@@ -665,12 +628,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     slot.addEventListener('click', () => {
-                        // Don't open modal for locked slots unless they already have a shift
-                        if (isLocked && !slot.dataset.helperId) {
-                            alert('Dieser Zeitslot ist gesperrt. Bitte entsperren Sie ihn in der Turnier-Admin Ansicht.');
+                        const slotRule = getSlotRule(activity, i, i + SLOT_DURATION_HOURS);
+                        if (!slotRule.isNeeded && !slot.dataset.helperId) {
+                            alert('Hier wird keine Schicht benötigt.');
                             return;
                         }
                         openShiftModal(slot, activity);
+                    });
+                    slot.addEventListener('keydown', (event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        slot.click();
                     });
                     row.appendChild(slot);
                 }
@@ -707,6 +675,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (startSlot && !startSlot.classList.contains('slot-hidden')) {
+            const activity = allActivities.find(a => String(a.id) === String(startSlot.dataset.activityId));
+            if (activity) {
+                const slotRule = getSlotRule(activity, startIdx, startIdx + SLOT_DURATION_HOURS);
+                if (!slotRule.isNeeded) return;
+            }
             highlightedSlots.push({ el: startSlot, originalBg: startSlot.style.backgroundColor || '', hourIndex: startIdx });
             startSlot.classList.add('potential-drop');
         }
@@ -740,34 +713,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Fetch shifts and render them into the grid, using grid-column spans
     async function fetchAndRenderAllShifts() {
         document.querySelectorAll('.shift-slot').forEach(s => {
-            s.innerHTML = '';
-            s.classList.remove('filled');
-            s.style.gridColumn = '';
             s.classList.remove('slot-hidden');
             s.classList.remove('dimmed');
             delete s.dataset.helperId;
             delete s.dataset.hiddenForSpan;
             delete s.dataset.startTime;
             delete s.dataset.shiftId;
-            
-            // Restore default color based on lock status and role requirement
+
             const activityId = s.dataset.activityId;
             const hourIndex = parseInt(s.dataset.hourIndex);
-            const isLocked = isSlotLocked(activityId, hourIndex);
-            
-            if (isLocked) {
-                s.style.backgroundColor = '#ffcccc'; // Light red for blocked
-                s.style.opacity = '0.7';
-            } else {
-                const roleReq = s.dataset.roleRequirement || DEFAULT_ROLE;
-                if (roleReq === 'Erwachsen') {
-                    s.style.backgroundColor = '#ffb3d9'; // Light pink
-                } else if (roleReq === 'Orga') {
-                    s.style.backgroundColor = '#ffff99'; // Light yellow
-                } else {
-                    s.style.backgroundColor = '#ccffcc'; // Light green
-                }
-                s.style.opacity = '1';
+            const activity = allActivities.find(a => String(a.id) === String(activityId));
+            if (activity) {
+                applyBaseSlotState(s, activity, hourIndex);
             }
         });
 
@@ -785,6 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 startSlot.innerHTML = shift.helper_name ? shift.helper_name.split(' ')[0] : '—';
                 startSlot.classList.add('filled');
                 startSlot.style.backgroundColor = shift.team_color || '#666';
+                startSlot.style.color = SlotRules.getTextColorForBackground(shift.team_color || '#666');
                 startSlot.style.opacity = '1';
                 startSlot.dataset.helperId = shift.helper_id || '';
                 // store server-provided start and id (server now reliably returns id)
@@ -852,13 +810,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show role requirement hint
         const roleHint = document.getElementById('modal-role-hint');
+        const slotRule = getSlotRule(activity, parseInt(currentSlot.dataset.hourIndex), parseInt(currentSlot.dataset.hourIndex) + SLOT_DURATION_HOURS);
         if (roleHint) {
-            const roleReq = activity.role_requirement || 'Alle';
-            if (roleReq === 'Alle') {
+            if (slotRule.roleRequirement === 'Alle' && !slotRule.nightRestricted) {
                 roleHint.style.display = 'none';
             } else {
-                const roleLabel = roleReq === 'Erwachsen' ? 'Erwachsene oder Orga' : roleReq;
-                roleHint.textContent = `Anforderung: ${roleLabel} (nur berechtigte Helfer werden angezeigt)`;
+                const roleLabel = SlotRules.getRoleRequirementLabel(slotRule.roleRequirement);
+                roleHint.textContent = `Anforderung: ${roleLabel}${slotRule.nightRestricted ? ' (Nachtregel aktiv)' : ''}`;
                 roleHint.style.display = 'block';
             }
         }
@@ -882,15 +840,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateHelperDropdown(teamId) {
         helperSelect.innerHTML = '<option value="">Helfer auswählen</option>';
         if (!teamId) return;
-        const roleReq = currentActivity ? (currentActivity.role_requirement || 'Alle') : 'Alle';
+        const hourIndex = currentSlot ? parseInt(currentSlot.dataset.hourIndex) : 0;
+        const slotRule = currentActivity
+            ? getSlotRule(currentActivity, hourIndex, hourIndex + SLOT_DURATION_HOURS)
+            : { allowedRoles: SlotRules.getAllowedRolesForRequirement(DEFAULT_ROLE) };
         allHelpers
             .filter(h => h.team_id == teamId)
-            .filter(h => {
-                if (roleReq === 'Alle') return true;
-                if (roleReq === 'Erwachsen') return h.role === 'Erwachsen' || h.role === 'Orga';
-                // For any other role requirement, allow exact match or Orga
-                return h.role === roleReq || h.role === 'Orga';
-            })
+            .filter(h => slotRule.allowedRoles.includes(h.role))
             .forEach(h => helperSelect.add(new Option(h.name, h.id)));
     }
 
@@ -906,14 +862,17 @@ document.addEventListener('DOMContentLoaded', () => {
             // Client-side role validation before submitting
             const helper = allHelpers.find(h => h.id == helperId);
             if (helper && currentActivity) {
-                const roleReq = currentActivity.role_requirement || 'Alle';
-                if (roleReq === 'Erwachsen') {
-                    if (helper.role !== 'Erwachsen' && helper.role !== 'Orga') {
-                        alert('Dieser Helfer ist für diese Schicht nicht berechtigt. Die Schicht erfordert einen Erwachsenen oder Orga.');
-                        return;
-                    }
-                } else if (roleReq !== 'Alle' && helper.role !== roleReq && helper.role !== 'Orga') {
-                    alert(`Dieser Helfer ist für diese Schicht nicht berechtigt. Die Schicht erfordert: ${roleReq}.`);
+                const startHourIndex = parseInt(currentSlot.dataset.hourIndex);
+                const validation = SlotRules.validateShiftAssignment({
+                    activity: currentActivity,
+                    coverageBlocks: allowedTimeBlocks[currentActivity.id] || [],
+                    startHourIndex,
+                    endHourIndex: startHourIndex + SLOT_DURATION_HOURS,
+                    helperRole: helper.role,
+                    eventStartHour: SlotRules.EVENT_START_HOUR
+                });
+                if (!validation.valid) {
+                    alert(validation.message);
                     return;
                 }
             }
@@ -921,7 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const activityId = currentSlot.dataset.activityId;
             const hourIndex = parseInt(currentSlot.dataset.hourIndex);
             const startTime = hourIndexToDate(hourIndex);
-            const endTime = hourIndexToDate(hourIndex + 2);
+            const endTime = hourIndexToDate(hourIndex + SLOT_DURATION_HOURS);
 
             const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'POST',

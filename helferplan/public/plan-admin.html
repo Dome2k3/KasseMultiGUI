@@ -20,7 +20,6 @@
 
     .hour-slot { font-size:12px; padding:4px 6px; text-align:center; background:#fafafa; }
     .shift-slot { font-size:12px; padding:6px; min-height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: transform .08s, outline .08s; }
-    .shift-slot.filled { color:#fff; }
 
     .dimmed { opacity: .28; filter: grayscale(80%); }
 
@@ -90,6 +89,13 @@
       <button id="logout-btn" style="display: none; padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Abmelden</button>
     </div>
   </div>
+  <div class="slot-legend" aria-label="Legende für Schichtzustände">
+    <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-all" aria-hidden="true"></span>Grün = Schicht benötigt, Jugend / Erwachsene / Orga</span>
+    <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-adult" aria-hidden="true"></span>Orange = Schicht benötigt, nur Erwachsene oder Orga</span>
+    <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-orga" aria-hidden="true"></span>Gelb = Schicht benötigt, nur Orga</span>
+    <span class="slot-legend-item"><span class="slot-legend-swatch legend-not-needed" aria-hidden="true"></span>Grau mit rotem X = keine Schicht nötig</span>
+  </div>
+  <p style="margin: 10px 0 16px; color: #45556a; font-size: 13px;">Klicken oder tippen Sie auf einzelne Felder, um Bedarf zu setzen oder zu entfernen. Mit gedrückter Maustaste können Sie weiterhin mehrere Felder am Stück markieren.</p>
   <div class="plan-layout">
     <div class="left-panel">
       <h3>Aktivitäten</h3>
@@ -105,6 +111,7 @@
 
 <script src="/helferplan/public/config.js"></script>
 <script src="/helferplan/public/js/nav.js"></script>
+<script src="/helferplan/public/js/slot-rules.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
     // API base for Helferplan - same as plan.js
@@ -119,6 +126,8 @@
     })();
     window.API_URL_HELFERPLAN = API_URL_HELFERPLAN;
     console.info('API_URL_HELFERPLAN =', API_URL_HELFERPLAN);
+    const SlotRules = window.HelferplanSlotRules;
+    if (!SlotRules) throw new Error('HelferplanSlotRules konnte nicht geladen werden. Bitte prüfen Sie die Script-Reihenfolge und die Browser-Konsole auf 404- oder Ladefehler von slot-rules.js.');
 
     // Authentication state
     let currentUser = null;
@@ -282,6 +291,9 @@
     // Config - match plan.js
     const HOUR_PX = 40;
     const LEFT_COL_PX = 200;
+    const SLOT_DURATION_HOURS = SlotRules.SLOT_DURATION_HOURS || 2;
+    const DAY_TRANSITION_FR_SA = 12;
+    const DAY_TRANSITION_SA_SO = 36;
 
     let activities = [];
     let allowedBlocks = {};
@@ -380,6 +392,10 @@
         const hour = document.createElement('div');
         hour.className = 'hour-slot';
         hour.textContent = `${(12 + i) % 24}:00`;
+        if (i === DAY_TRANSITION_FR_SA || i === DAY_TRANSITION_SA_SO) {
+          hour.style.borderLeft = '2px solid #000';
+          hour.style.marginLeft = '4px';
+        }
         hoursWrapper.appendChild(hour);
       }
       timelineHeader.appendChild(hoursWrapper);
@@ -387,11 +403,13 @@
       return { totalHours, gridTemplateColumns };
     }
 
-    function isHourLocked(activityId, hour) {
-      const blocks = allowedBlocks[activityId] || [];
-      // A slot is "unlocked" if there's a block covering it
-      // We'll use inverse logic: locked = NOT in any allowed block
-      return !blocks.some(block => hour >= block.start && hour < block.end);
+    function getSlotRule(activity, hour) {
+      return SlotRules.getShiftRule(activity, hour, {
+        endHourIndex: hour + SLOT_DURATION_HOURS,
+        duration: SLOT_DURATION_HOURS,
+        coverageBlocks: allowedBlocks[activity.id] || activity.allowed_time_blocks || [],
+        eventStartHour: SlotRules.EVENT_START_HOUR
+      });
     }
 
     async function toggleSlotLock(activityId, hour, lockState) {
@@ -513,35 +531,59 @@
             slot.className = 'shift-slot';
             slot.dataset.activityId = activity.id;
             slot.dataset.hourIndex = i;
-
-            const locked = isHourLocked(activity.id, i);
-            if (locked) {
-              slot.style.backgroundColor = '#ccc';
-              slot.style.opacity = '0.5';
-              slot.title = 'Gesperrt (klicken zum Entsperren)';
-            } else {
-              slot.style.backgroundColor = '#90EE90';
-              slot.style.opacity = '1';
-              slot.title = 'Freigeschaltet (klicken zum Sperren)';
+            slot.tabIndex = 0;
+            let suppressNextClick = false;
+            if (i === DAY_TRANSITION_FR_SA || i === DAY_TRANSITION_SA_SO) {
+              slot.style.borderLeft = '2px solid #000';
+              slot.style.marginLeft = '4px';
             }
+
+            updateSlotVisual(slot, activity, i);
 
             // Mouse events for drag-to-paint
             slot.addEventListener('mousedown', (e) => {
               e.preventDefault();
               isDragging = true;
-              const currentlyLocked = isHourLocked(activity.id, i);
-              dragMode = currentlyLocked ? 'unlock' : 'lock';
+              suppressNextClick = true;
+              const currentlyNeeded = getSlotRule(activity, i).isNeeded;
+              dragMode = currentlyNeeded ? 'lock' : 'unlock';
               toggleSlotLock(activity.id, i, dragMode).then(() => {
-                updateSlotVisual(slot, activity.id, i);
+                updateSlotVisual(slot, activity, i);
+              }).finally(() => {
+                window.setTimeout(() => {
+                  suppressNextClick = false;
+                }, 250);
               });
             });
 
             slot.addEventListener('mouseenter', (e) => {
               if (isDragging && dragMode) {
                 toggleSlotLock(activity.id, i, dragMode).then(() => {
-                  updateSlotVisual(slot, activity.id, i);
+                  updateSlotVisual(slot, activity, i);
                 });
               }
+            });
+
+            slot.addEventListener('click', () => {
+              if (suppressNextClick) {
+                suppressNextClick = false;
+                return;
+              }
+              const currentlyNeeded = getSlotRule(activity, i).isNeeded;
+              const nextMode = currentlyNeeded ? 'lock' : 'unlock';
+              toggleSlotLock(activity.id, i, nextMode).then(() => {
+                updateSlotVisual(slot, activity, i);
+              });
+            });
+
+            slot.addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              const currentlyNeeded = getSlotRule(activity, i).isNeeded;
+              const nextMode = currentlyNeeded ? 'lock' : 'unlock';
+              toggleSlotLock(activity.id, i, nextMode).then(() => {
+                updateSlotVisual(slot, activity, i);
+              });
             });
 
             row.appendChild(slot);
@@ -557,17 +599,16 @@
       });
     }
 
-    function updateSlotVisual(slot, activityId, hour) {
-      const locked = isHourLocked(activityId, hour);
-      if (locked) {
-        slot.style.backgroundColor = '#ccc';
-        slot.style.opacity = '0.5';
-        slot.title = 'Gesperrt (klicken zum Entsperren)';
-      } else {
-        slot.style.backgroundColor = '#90EE90';
-        slot.style.opacity = '1';
-        slot.title = 'Freigeschaltet (klicken zum Sperren)';
-      }
+    function updateSlotVisual(slot, activity, hour) {
+      const slotRule = getSlotRule(activity, hour);
+      slot.classList.remove('slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
+      slot.classList.add(`slot-state-${slotRule.visualState}`);
+      slot.style.backgroundColor = '';
+      slot.style.color = '';
+      slot.style.opacity = '1';
+      slot.title = slotRule.isNeeded
+        ? `${slotRule.title} – klicken/tippen zum Entfernen des Bedarfs`
+        : 'Hier wird keine Schicht benötigt – klicken/tippen, um Bedarf zu setzen';
     }
 
     await fetchActivities();
