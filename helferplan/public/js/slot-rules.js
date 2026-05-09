@@ -8,7 +8,7 @@
     const DEFAULT_ROLE = 'Alle';
     const SLOT_DURATION_HOURS = 2;
     const EVENT_START_HOUR = 12;
-    const NIGHT_RESTRICTED_UNTIL_HOUR = 3;
+    const NIGHT_RESTRICTED_UNTIL_HOUR = 7;
     const ROLE_ORDER = { Alle: 0, Erwachsen: 1, Orga: 2 };
 
     function normalizeRoleRequirement(roleRequirement, fallback) {
