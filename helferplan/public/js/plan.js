@@ -184,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
             slotRule = getSlotRule(activity, hourIndex, hourIndex + validInfo.duration);
         }
 
-        slot.classList.remove('filled', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
+        slot.classList.remove('filled', 'slot-open-pair', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
         slot.style.backgroundColor = '';
         slot.style.color = '';
         slot.style.opacity = '1';
@@ -657,6 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const row = startSlot.parentElement;
                             startSlot.innerHTML = helper.name.split(' ')[0] || helper.name;
                             startSlot.classList.add('filled');
+                            startSlot.classList.remove('slot-open-pair');
                             startSlot.style.backgroundColor = teamColor;
                             startSlot.style.color = SlotRules.getTextColorForBackground(teamColor);
                             startSlot.style.opacity = '1';
@@ -709,6 +710,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 gridContainer.appendChild(row);
             });
         }
+        reapplyOpenSlotVisuals();
+    }
+
+    // Span open valid 2h slots and add the connected block visual (→ arrow).
+    // Called after generateGrid and after fetchAndRenderAllShifts renders filled shifts.
+    function reapplyOpenSlotVisuals() {
+        document.querySelectorAll('.activity-row').forEach(row => {
+            row.querySelectorAll('.shift-slot').forEach(slot => {
+                if (slot.classList.contains('slot-hidden')) return;
+                if (slot.classList.contains('filled')) return;
+
+                const hourIndex = parseInt(slot.dataset.hourIndex);
+                const activityId = slot.dataset.activityId;
+                const activity = allActivities.find(a => String(a.id) === String(activityId));
+                if (!activity) return;
+
+                const validInfo = getValidSlotInfo(activity, hourIndex);
+                if (!validInfo.valid || validInfo.duration <= 1) return;
+
+                const slotRule = getSlotRule(activity, hourIndex, hourIndex + validInfo.duration);
+                if (!slotRule.isNeeded) return;
+
+                // Span the cell across both hour columns
+                slot.style.gridColumn = `span ${validInfo.duration}`;
+                slot.classList.add('slot-open-pair');
+
+                // Hide follow slot(s)
+                for (let k = 1; k < validInfo.duration; k++) {
+                    const follow = row.querySelector(`.shift-slot[data-hour-index='${hourIndex + k}']`);
+                    if (follow) {
+                        follow.classList.add('slot-hidden');
+                        follow.dataset.hiddenForSpan = 'true';
+                    }
+                }
+
+                // Build the inner connected-block visual
+                slot.innerHTML = '';
+                const pair = document.createElement('div');
+                pair.className = 'slot-pair';
+
+                const b1 = document.createElement('div');
+                b1.className = 'slot-pair-block';
+
+                const arrow = document.createElement('span');
+                arrow.className = 'slot-pair-arrow';
+                arrow.setAttribute('aria-hidden', 'true');
+                arrow.textContent = '→';
+
+                const b2 = document.createElement('div');
+                b2.className = 'slot-pair-block';
+
+                pair.appendChild(b1);
+                pair.appendChild(arrow);
+                pair.appendChild(b2);
+                slot.appendChild(pair);
+            });
+        });
     }
 
     // Hover: highlight exactly 2 cells (start + next).
@@ -831,6 +889,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             });
+            reapplyOpenSlotVisuals();
             applyViewFilter();
         } catch (err) {
             console.error('fetchAndRenderAllShifts error', err);
