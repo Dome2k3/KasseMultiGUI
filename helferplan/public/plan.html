@@ -119,6 +119,42 @@
             z-index: 6;
         }
         #grid-container { overflow: visible; }
+
+        /* ── Connected 2-block open-slot visual ─────────────────────────── */
+        .shift-slot.slot-open-pair {
+            border-radius: 6px;
+            padding: 4px 5px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10),
+                        inset 0 0 0 1.5px rgba(255, 255, 255, 0.25);
+            /* Tighten up the right edge so the shared border is visible */
+            border-right-width: 1.5px;
+        }
+        .slot-pair {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .slot-pair-block {
+            flex: 1;
+            min-width: 0;
+            height: 20px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.45);
+            border: 1.5px solid rgba(0, 0, 0, 0.18);
+            box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.6),
+                        0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+        .slot-pair-arrow {
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(0, 0, 0, 0.40);
+            flex-shrink: 0;
+            line-height: 1;
+        }
     </style>
 </head>
 <body>
