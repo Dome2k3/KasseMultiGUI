@@ -734,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Span the cell across both hour columns
                 slot.style.gridColumn = `span ${validInfo.duration}`;
+                if (slot.classList.contains('slot-open-pair')) return; // already styled
                 slot.classList.add('slot-open-pair');
 
                 // Hide follow slot(s)
