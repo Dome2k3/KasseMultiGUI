@@ -225,3 +225,4 @@ Alle Anforderungen wurden vollständig implementiert:
 | 2026-05-11T09:14:44Z | `plan-admin.html` Runtime-Fehler behoben (`totalHours is not defined` in `generateTimeline`) |
 | 2026-05-11T09:14:44Z | 2h-Validierung erweitert: 1h-Lücken zwischen zwei 2h-Bedarfsbereichen werden blockiert; isolierter 1h-Slot zwischen gesperrten Slots bleibt erlaubt |
 | 2026-05-11T09:14:44Z | `plan.js` Slot-Dauer beim Eintragen dynamisch (1h/2h) umgesetzt, damit 1h-Slots nicht mehr optisch als 2h über `X` laufen und Teamfarbe sofort sichtbar bleibt |
+| 2026-05-11T09:55:01Z | `plan-admin.html` Bearbeitung stabilisiert: Bedarf wird beim Klicken/Ziehen in 2h-Blöcken umgeschaltet, wiederholte Validierungs-Popups bei ungültigen Zwischenzuständen beendet und Admin-Anpassungen dadurch wieder möglich |

@@ -95,7 +95,7 @@
     <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-orga" aria-hidden="true"></span>Gelb = Schicht benötigt, nur Orga</span>
     <span class="slot-legend-item"><span class="slot-legend-swatch legend-not-needed" aria-hidden="true"></span>Grau mit rotem X = keine Schicht nötig</span>
   </div>
-  <p style="margin: 10px 0 16px; color: #45556a; font-size: 13px;">Klicken oder tippen Sie auf einzelne Felder, um Bedarf zu setzen oder zu entfernen. Mit gedrückter Maustaste können Sie weiterhin mehrere Felder am Stück markieren.</p>
+  <p style="margin: 10px 0 16px; color: #45556a; font-size: 13px;">Klicken oder tippen Sie auf Felder, um den Bedarf immer in 2h-Blöcken zu setzen oder zu entfernen. Mit gedrückter Maustaste können Sie weiterhin mehrere Blöcke am Stück markieren.</p>
   <div class="plan-layout">
     <div class="left-panel">
       <h3>Aktivitäten</h3>
@@ -455,65 +455,82 @@
       return queueActivityUpdate(activityId, async () => {
         const currentBlocks = normalizeActivityBlocks(activityId, allowedBlocks[activityId] || []);
         const blocks = currentBlocks.map(block => ({ ...block }));
+        const slotSpan = Math.max(1, SLOT_DURATION_HOURS);
+        const slotStart = Math.max(0, Math.min(hour, TOTAL_HOURS - slotSpan));
+        const slotEnd = Math.min(TOTAL_HOURS, slotStart + slotSpan);
 
-        if (lockState === 'unlock') {
-          // Add to allowed blocks (unlock the slot)
+        function addHour(blockList, hourIndex) {
           let merged = false;
-          for (let i = 0; i < blocks.length; i++) {
-            if (blocks[i].end === hour) {
-              blocks[i].end = hour + 1;
+          for (let i = 0; i < blockList.length; i++) {
+            if (blockList[i].end === hourIndex) {
+              blockList[i].end = hourIndex + 1;
               merged = true;
               // Check if we can merge with next block
-              for (let j = i + 1; j < blocks.length; j++) {
-                if (blocks[j].start <= blocks[i].end) {
-                  blocks[i].end = Math.max(blocks[i].end, blocks[j].end);
-                  blocks.splice(j, 1);
+              for (let j = i + 1; j < blockList.length; j++) {
+                if (blockList[j].start <= blockList[i].end) {
+                  blockList[i].end = Math.max(blockList[i].end, blockList[j].end);
+                  blockList.splice(j, 1);
                   j -= 1;
                 } else {
                   break;
                 }
               }
               break;
-            } else if (blocks[i].start === hour + 1) {
-              blocks[i].start = hour;
+            } else if (blockList[i].start === hourIndex + 1) {
+              blockList[i].start = hourIndex;
               merged = true;
               break;
-            } else if (hour >= blocks[i].start && hour < blocks[i].end) {
+            } else if (hourIndex >= blockList[i].start && hourIndex < blockList[i].end) {
               merged = true;
               break;
             }
           }
           if (!merged) {
-            blocks.push({ start: hour, end: hour + 1 });
+            blockList.push({ start: hourIndex, end: hourIndex + 1 });
           }
-        } else {
-          // Remove from allowed blocks (lock the slot)
-          for (let i = blocks.length - 1; i >= 0; i--) {
-            const block = blocks[i];
-            if (hour >= block.start && hour < block.end) {
-              if (hour === block.start && hour + 1 === block.end) {
+        }
+
+        function removeHour(blockList, hourIndex) {
+          for (let i = blockList.length - 1; i >= 0; i--) {
+            const block = blockList[i];
+            if (hourIndex >= block.start && hourIndex < block.end) {
+              if (hourIndex === block.start && hourIndex + 1 === block.end) {
                 // Remove entire block
-                blocks.splice(i, 1);
-              } else if (hour === block.start) {
+                blockList.splice(i, 1);
+              } else if (hourIndex === block.start) {
                 // Trim from start
-                block.start = hour + 1;
-              } else if (hour + 1 === block.end) {
+                block.start = hourIndex + 1;
+              } else if (hourIndex + 1 === block.end) {
                 // Trim from end
-                block.end = hour;
+                block.end = hourIndex;
               } else {
                 // Split block
-                const newBlock = { start: hour + 1, end: block.end };
-                block.end = hour;
-                blocks.push(newBlock);
+                const newBlock = { start: hourIndex + 1, end: block.end };
+                block.end = hourIndex;
+                blockList.push(newBlock);
               }
               break;
             }
           }
         }
 
+        if (lockState === 'unlock') {
+          // Add to allowed blocks (unlock slot) in 2h span
+          for (let h = slotStart; h < slotEnd; h += 1) {
+            addHour(blocks, h);
+          }
+        } else {
+          // Remove from allowed blocks (lock slot) in 2h span
+          for (let h = slotStart; h < slotEnd; h += 1) {
+            removeHour(blocks, h);
+          }
+        }
+
         const normalizedBlocks = normalizeActivityBlocks(activityId, blocks);
         const shapeValidation = isValidBlockShape(normalizedBlocks);
         if (!shapeValidation.valid) {
+          isDragging = false;
+          dragMode = null;
           alert(shapeValidation.message);
           return;
         }
@@ -654,8 +671,8 @@
       slot.style.color = '';
       slot.style.opacity = '1';
       slot.title = slotRule.isNeeded
-        ? `${slotRule.title} – klicken/tippen zum Entfernen des Bedarfs`
-        : 'Hier wird keine Schicht benötigt – klicken/tippen, um Bedarf zu setzen';
+        ? `${slotRule.title} – klicken/tippen zum Entfernen eines 2h-Bedarfsblocks`
+        : 'Hier wird keine Schicht benötigt – klicken/tippen, um einen 2h-Bedarfsblock zu setzen';
     }
 
     await fetchActivities();
