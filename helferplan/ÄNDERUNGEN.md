@@ -215,3 +215,13 @@ Alle Anforderungen wurden vollständig implementiert:
 - ✅ Gut dokumentiert und annotiert
 - ✅ Zeitblock-Validierung korrigiert (Dezember 2024)
 - ✅ Changelog-Einträge bereinigt (April 2026)
+
+## 10. Zeitstempel-Protokoll (letzte Helferplan-Patches)
+
+| Zeitstempel (UTC) | Änderung |
+| --- | --- |
+| 2026-05-11T08:45:00Z | **Enforce 2h-compatible coverage blocks, fix new-lane block editing, and apply slot team color updates immediately** |
+| 2026-05-11T09:14:44Z | Folgearbeiten gestartet: zusätzliche Absicherung für Helferplan-Admin/Plan angefordert |
+| 2026-05-11T09:14:44Z | `plan-admin.html` Runtime-Fehler behoben (`totalHours is not defined` in `generateTimeline`) |
+| 2026-05-11T09:14:44Z | 2h-Validierung erweitert: 1h-Lücken zwischen zwei 2h-Bedarfsbereichen werden blockiert; isolierter 1h-Slot zwischen gesperrten Slots bleibt erlaubt |
+| 2026-05-11T09:14:44Z | `plan.js` Slot-Dauer beim Eintragen dynamisch (1h/2h) umgesetzt, damit 1h-Slots nicht mehr optisch als 2h über `X` laufen und Teamfarbe sofort sichtbar bleibt |

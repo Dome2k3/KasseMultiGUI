@@ -83,6 +83,7 @@
         const coveredHours = Array.from(covered).sort((a, b) => a - b);
         let runStart = coveredHours[0];
         let previousHour = coveredHours[0];
+        const runs = [];
 
         const validateRun = (start, endInclusive) => {
             const runLength = (endInclusive - start) + 1;
@@ -113,15 +114,33 @@
         for (let i = 1; i < coveredHours.length; i += 1) {
             const hour = coveredHours[i];
             if (hour !== previousHour + 1) {
-                const error = validateRun(runStart, previousHour);
-                if (error) return error;
+                runs.push({ start: runStart, end: previousHour });
                 runStart = hour;
             }
             previousHour = hour;
         }
 
-        const lastError = validateRun(runStart, previousHour);
-        if (lastError) return lastError;
+        runs.push({ start: runStart, end: previousHour });
+
+        for (let i = 0; i < runs.length; i += 1) {
+            const error = validateRun(runs[i].start, runs[i].end);
+            if (error) return error;
+        }
+
+        for (let i = 1; i < runs.length; i += 1) {
+            const previousRun = runs[i - 1];
+            const currentRun = runs[i];
+            const gapLength = currentRun.start - previousRun.end - 1;
+            if (gapLength === 1) {
+                return {
+                    valid: false,
+                    code: 'invalid_coverage_shape',
+                    message: 'Bedarfszeiten müssen in 2h-Blöcken planbar sein. 1h-Lücken zwischen zwei Bedarfsbereichen sind nicht erlaubt.',
+                    gapStart: previousRun.end + 1,
+                    gapEnd: currentRun.start
+                };
+            }
+        }
 
         return { valid: true, code: 'ok', message: '' };
     }

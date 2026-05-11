@@ -118,8 +118,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function getAssignableSlotDuration(activity, hourIndex) {
+        const oneHourRule = getSlotRule(activity, hourIndex, hourIndex + 1);
+        if (!oneHourRule.isNeeded) return SLOT_DURATION_HOURS;
+
+        const twoHourRule = getSlotRule(activity, hourIndex, hourIndex + SLOT_DURATION_HOURS);
+        return twoHourRule.isNeeded ? SLOT_DURATION_HOURS : 1;
+    }
+
     function applyBaseSlotState(slot, activity, hourIndex) {
-        const slotRule = getSlotRule(activity, hourIndex, hourIndex + SLOT_DURATION_HOURS);
+        const slotDuration = getAssignableSlotDuration(activity, hourIndex);
+        const slotRule = getSlotRule(activity, hourIndex, hourIndex + slotDuration);
 
         slot.classList.remove('filled', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
         slot.style.backgroundColor = '';
@@ -486,7 +495,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     applyBaseSlotState(slot, activity, i);
 
                     slot.addEventListener('dragover', (e) => {
-                        const slotRule = getSlotRule(activity, i, i + SLOT_DURATION_HOURS);
+                        const slotDuration = getAssignableSlotDuration(activity, i);
+                        const slotRule = getSlotRule(activity, i, i + slotDuration);
                         if (!slotRule.isNeeded) {
                             e.dataTransfer.dropEffect = 'none';
                             return;
@@ -496,7 +506,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         handleHoverHighlight(slot);
                     });
                     slot.addEventListener('dragenter', (e) => {
-                        const slotRule = getSlotRule(activity, i, i + SLOT_DURATION_HOURS);
+                        const slotDuration = getAssignableSlotDuration(activity, i);
+                        const slotRule = getSlotRule(activity, i, i + slotDuration);
                         if (!slotRule.isNeeded) return;
                         e.preventDefault();
                         handleHoverHighlight(slot);
@@ -533,9 +544,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return;
                             }
 
-                            const startIndex = parseInt(slot.dataset.hourIndex);
+                            let startSlot = slot;
+                            if (startSlot.classList.contains('slot-hidden')) {
+                                const row = startSlot.parentElement;
+                                let back = parseInt(startSlot.dataset.hourIndex) - 1;
+                                while (back >= 0) {
+                                    const candidate = row.querySelector(`.shift-slot[data-hour-index='${back}']`);
+                                    if (candidate && !candidate.classList.contains('slot-hidden')) {
+                                        startSlot = candidate;
+                                        break;
+                                    }
+                                    back -= 1;
+                                }
+                            }
+
+                            const startIndex = parseInt(startSlot.dataset.hourIndex);
+                            const slotDuration = getAssignableSlotDuration(activity, startIndex);
                             const startTime = hourIndexToDate(startIndex);
-                            const endIndex = startIndex + SLOT_DURATION_HOURS;
+                            const endIndex = startIndex + slotDuration;
                             const validation = SlotRules.validateShiftAssignment({
                                 activity,
                                 coverageBlocks: allowedTimeBlocks[activityId] || [],
@@ -572,45 +598,26 @@ document.addEventListener('DOMContentLoaded', () => {
                             const team = allTeams.find(t => t.id == helper.team_id);
                             const teamColor = team ? team.color_hex : '#888';
 
-                            // Find the start slot (walk left if we dropped on a hidden slot)
-                            let displaySlot = slot;
-                            const row = slot.parentElement;
-                            const startIdx = parseInt(slot.dataset.hourIndex);
-                            
-                            if (slot.classList.contains('slot-hidden')) {
-                                // Walk left to find visible slot
-                                let back = startIdx - 1;
-                                while (back >= 0) {
-                                    const cand = row.querySelector(`.shift-slot[data-hour-index='${back}']`);
-                                    if (cand && !cand.classList.contains('slot-hidden')) {
-                                        displaySlot = cand;
-                                        break;
-                                    }
-                                    back--;
-                                }
-                            }
-                            
-                            displaySlot.innerHTML = helper.name.split(' ')[0] || helper.name;
-                            displaySlot.classList.add('filled');
-                            displaySlot.style.backgroundColor = teamColor;
-                            displaySlot.style.color = SlotRules.getTextColorForBackground(teamColor);
-                            displaySlot.style.opacity = '1';
-                            displaySlot.dataset.helperId = helperId;
-                            displaySlot.dataset.startTime = startTime.toISOString();
+                            const row = startSlot.parentElement;
+                            startSlot.innerHTML = helper.name.split(' ')[0] || helper.name;
+                            startSlot.classList.add('filled');
+                            startSlot.style.backgroundColor = teamColor;
+                            startSlot.style.color = SlotRules.getTextColorForBackground(teamColor);
+                            startSlot.style.opacity = '1';
+                            startSlot.dataset.helperId = helperId;
+                            startSlot.dataset.startTime = startTime.toISOString();
                             
                             const responseData = await resp.json();
                             if (responseData.id) {
-                                displaySlot.dataset.shiftId = responseData.id;
+                                startSlot.dataset.shiftId = responseData.id;
                             }
 
-                            // Apply 2-hour span (same logic as in fetchAndRenderAllShifts)
-                            const duration = SLOT_DURATION_HOURS;
-                            const displayStartIdx = parseInt(displaySlot.dataset.hourIndex);
-                            displaySlot.style.gridColumn = `span ${duration}`;
+                            // Apply span for the effective slot duration (1h isolated or 2h default)
+                            startSlot.style.gridColumn = slotDuration > 1 ? `span ${slotDuration}` : '';
                             
                             // Hide the follow slot
-                            for (let k = 1; k < duration; k++) {
-                                const follow = row.querySelector(`.shift-slot[data-activity-id='${activityId}'][data-hour-index='${displayStartIdx + k}']`);
+                            for (let k = 1; k < slotDuration; k++) {
+                                const follow = row.querySelector(`.shift-slot[data-activity-id='${activityId}'][data-hour-index='${startIndex + k}']`);
                                 if (follow) {
                                     follow.classList.add('slot-hidden');
                                     follow.dataset.hiddenForSpan = 'true';
@@ -628,7 +635,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     slot.addEventListener('click', () => {
-                        const slotRule = getSlotRule(activity, i, i + SLOT_DURATION_HOURS);
+                        const slotDuration = getAssignableSlotDuration(activity, i);
+                        const slotRule = getSlotRule(activity, i, i + slotDuration);
                         if (!slotRule.isNeeded && !slot.dataset.helperId) {
                             alert('Hier wird keine Schicht benötigt.');
                             return;
@@ -674,21 +682,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        let activity = null;
         if (startSlot && !startSlot.classList.contains('slot-hidden')) {
-            const activity = allActivities.find(a => String(a.id) === String(startSlot.dataset.activityId));
+            activity = allActivities.find(a => String(a.id) === String(startSlot.dataset.activityId));
             if (activity) {
-                const slotRule = getSlotRule(activity, startIdx, startIdx + SLOT_DURATION_HOURS);
+                const slotDuration = getAssignableSlotDuration(activity, startIdx);
+                const slotRule = getSlotRule(activity, startIdx, startIdx + slotDuration);
                 if (!slotRule.isNeeded) return;
             }
             highlightedSlots.push({ el: startSlot, originalBg: startSlot.style.backgroundColor || '', hourIndex: startIdx });
             startSlot.classList.add('potential-drop');
         }
 
-        const nextIdx = startIdx + 1;
-        const nextSlot = row.querySelector(`.shift-slot[data-hour-index='${nextIdx}']`);
-        if (nextSlot && !nextSlot.classList.contains('slot-hidden')) {
-            highlightedSlots.push({ el: nextSlot, originalBg: nextSlot.style.backgroundColor || '', hourIndex: nextIdx });
-            nextSlot.classList.add('potential-drop');
+        const duration = activity ? getAssignableSlotDuration(activity, startIdx) : SLOT_DURATION_HOURS;
+        for (let step = 1; step < duration; step += 1) {
+            const nextIdx = startIdx + step;
+            const nextSlot = row.querySelector(`.shift-slot[data-hour-index='${nextIdx}']`);
+            if (nextSlot && !nextSlot.classList.contains('slot-hidden')) {
+                highlightedSlots.push({ el: nextSlot, originalBg: nextSlot.style.backgroundColor || '', hourIndex: nextIdx });
+                nextSlot.classList.add('potential-drop');
+            }
         }
     }
 
@@ -812,7 +825,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show role requirement hint
         const roleHint = document.getElementById('modal-role-hint');
-        const slotRule = getSlotRule(activity, parseInt(currentSlot.dataset.hourIndex), parseInt(currentSlot.dataset.hourIndex) + SLOT_DURATION_HOURS);
+        const currentHourIndex = parseInt(currentSlot.dataset.hourIndex);
+        const slotDuration = getAssignableSlotDuration(activity, currentHourIndex);
+        const slotRule = getSlotRule(activity, currentHourIndex, currentHourIndex + slotDuration);
         if (roleHint) {
             if (slotRule.roleRequirement === 'Alle' && !slotRule.nightRestricted) {
                 roleHint.style.display = 'none';
@@ -843,8 +858,9 @@ document.addEventListener('DOMContentLoaded', () => {
         helperSelect.innerHTML = '<option value="">Helfer auswählen</option>';
         if (!teamId) return;
         const hourIndex = currentSlot ? parseInt(currentSlot.dataset.hourIndex) : 0;
+        const slotDuration = currentActivity ? getAssignableSlotDuration(currentActivity, hourIndex) : SLOT_DURATION_HOURS;
         const slotRule = currentActivity
-            ? getSlotRule(currentActivity, hourIndex, hourIndex + SLOT_DURATION_HOURS)
+            ? getSlotRule(currentActivity, hourIndex, hourIndex + slotDuration)
             : { allowedRoles: SlotRules.getAllowedRolesForRequirement(DEFAULT_ROLE) };
         allHelpers
             .filter(h => h.team_id == teamId)
@@ -865,11 +881,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const helper = allHelpers.find(h => h.id == helperId);
             if (helper && currentActivity) {
                 const startHourIndex = parseInt(currentSlot.dataset.hourIndex);
+                const slotDuration = getAssignableSlotDuration(currentActivity, startHourIndex);
                 const validation = SlotRules.validateShiftAssignment({
                     activity: currentActivity,
                     coverageBlocks: allowedTimeBlocks[currentActivity.id] || [],
                     startHourIndex,
-                    endHourIndex: startHourIndex + SLOT_DURATION_HOURS,
+                    endHourIndex: startHourIndex + slotDuration,
                     helperRole: helper.role,
                     eventStartHour: SlotRules.EVENT_START_HOUR
                 });
@@ -881,8 +898,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const activityId = currentSlot.dataset.activityId;
             const hourIndex = parseInt(currentSlot.dataset.hourIndex);
+            const slotDuration = currentActivity ? getAssignableSlotDuration(currentActivity, hourIndex) : SLOT_DURATION_HOURS;
             const startTime = hourIndexToDate(hourIndex);
-            const endTime = hourIndexToDate(hourIndex + SLOT_DURATION_HOURS);
+            const endTime = hourIndexToDate(hourIndex + slotDuration);
 
             const response = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, {
                 method: 'POST',

@@ -120,3 +120,22 @@ test('coverage validation rejects single-hour coverage at timeline edge', () => 
     assert.equal(validation.valid, false);
     assert.equal(validation.code, 'invalid_coverage_shape');
 });
+
+test('coverage validation rejects single-hour gap between two 2h coverage runs', () => {
+    const validation = SlotRules.validateCoverageBlocksForSlotDuration([
+        { start: 5, end: 7 },
+        { start: 8, end: 10 }
+    ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
+
+    assert.equal(validation.valid, false);
+    assert.equal(validation.code, 'invalid_coverage_shape');
+});
+
+test('coverage validation allows 2h gap between two 2h coverage runs', () => {
+    const validation = SlotRules.validateCoverageBlocksForSlotDuration([
+        { start: 5, end: 7 },
+        { start: 9, end: 11 }
+    ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
+
+    assert.equal(validation.valid, true);
+});
