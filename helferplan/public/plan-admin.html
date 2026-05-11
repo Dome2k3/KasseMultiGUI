@@ -294,11 +294,14 @@
     const SLOT_DURATION_HOURS = SlotRules.SLOT_DURATION_HOURS || 2;
     const DAY_TRANSITION_FR_SA = 12;
     const DAY_TRANSITION_SA_SO = 36;
+    const HOURS_COUNT_BY_DAY = [12, 24, 18]; // Fr 12-24, Sa 0-24, So 0-18
+    const TOTAL_HOURS = HOURS_COUNT_BY_DAY.reduce((acc, count) => acc + count, 0);
 
     let activities = [];
     let allowedBlocks = {};
     let isDragging = false;
     let dragMode = null; // 'lock' or 'unlock'
+    const activityUpdateQueue = {};
 
     async function fetchActivities() {
       const res = await fetch(`${API_URL_HELFERPLAN}/activities`, { credentials: 'include' });
@@ -334,15 +337,45 @@
     async function fetchAllowedBlocks() {
       for (const activity of activities) {
         const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activity.id}/allowed-time-blocks`, { credentials: 'include' });
-        allowedBlocks[activity.id] = await res.json();
+        const fetchedBlocks = await res.json();
+        allowedBlocks[activity.id] = SlotRules.normalizeCoverageBlocks(fetchedBlocks, activity.role_requirement || SlotRules.DEFAULT_ROLE);
       }
     }
 
+    function getActivityById(activityId) {
+      return activities.find(activity => String(activity.id) === String(activityId)) || null;
+    }
+
+    function normalizeActivityBlocks(activityId, blocks) {
+      const activity = getActivityById(activityId);
+      const fallbackRole = activity ? activity.role_requirement : SlotRules.DEFAULT_ROLE;
+      return SlotRules.normalizeCoverageBlocks(blocks, fallbackRole);
+    }
+
+    function isValidBlockShape(blocks) {
+      return SlotRules.validateCoverageBlocksForSlotDuration(blocks, {
+        slotDurationHours: SLOT_DURATION_HOURS,
+        minHourIndex: 0,
+        maxHourIndex: TOTAL_HOURS,
+        allowIsolatedSingleHour: true
+      });
+    }
+
+    function queueActivityUpdate(activityId, callback) {
+      const queueKey = String(activityId);
+      const previous = activityUpdateQueue[queueKey] || Promise.resolve();
+      const next = previous.then(callback, callback);
+      activityUpdateQueue[queueKey] = next.finally(() => {
+        if (activityUpdateQueue[queueKey] === next) {
+          delete activityUpdateQueue[queueKey];
+        }
+      });
+      return activityUpdateQueue[queueKey];
+    }
+
     function generateTimeline() {
-      const hoursCountByDay = [12, 24, 18]; // Fr 12-24, Sa 0-24, So 0-18
       const days = ['Freitag','Samstag','Sonntag'];
-      const totalHours = hoursCountByDay.reduce((a,b)=>a+b,0);
-      const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${totalHours}, ${HOUR_PX}px)`;
+      const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${TOTAL_HOURS}, ${HOUR_PX}px)`;
 
       timelineHeader.innerHTML = '';
       timelineHeader.style.display = 'grid';
@@ -370,7 +403,7 @@
       daysWrapper.style.gap = '0';
 
       let offset = 0;
-      hoursCountByDay.forEach((count, idx) => {
+      HOURS_COUNT_BY_DAY.forEach((count, idx) => {
         const dh = document.createElement('div');
         dh.className = 'day-header';
         dh.style.gridColumn = `${offset+1} / ${offset+1+count}`;
@@ -385,10 +418,10 @@
       // Hours wrapper
       const hoursWrapper = document.createElement('div');
       hoursWrapper.style.display = 'grid';
-      hoursWrapper.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_PX}px)`;
+      hoursWrapper.style.gridTemplateColumns = `repeat(${TOTAL_HOURS}, ${HOUR_PX}px)`;
       hoursWrapper.style.gridColumn = '2 / -1';
       hoursWrapper.style.gap = '0';
-      for (let i=0;i<totalHours;i++){
+      for (let i=0;i<TOTAL_HOURS;i++){
         const hour = document.createElement('div');
         hour.className = 'hour-slot';
         hour.textContent = `${(12 + i) % 24}:00`;
@@ -400,7 +433,7 @@
       }
       timelineHeader.appendChild(hoursWrapper);
 
-      return { totalHours, gridTemplateColumns };
+      return { totalHours: TOTAL_HOURS, gridTemplateColumns };
     }
 
     function getSlotRule(activity, hour) {
@@ -418,81 +451,95 @@
         alert('Admin-Rechte erforderlich. Bitte melden Sie sich an.');
         return;
       }
-      
-      const blocks = allowedBlocks[activityId] || [];
-      
-      if (lockState === 'unlock') {
-        // Add to allowed blocks (unlock the slot)
-        // Merge adjacent blocks
-        let merged = false;
-        for (let i = 0; i < blocks.length; i++) {
-          if (blocks[i].end === hour) {
-            blocks[i].end = hour + 1;
-            merged = true;
-            // Check if we can merge with next block
-            for (let j = i + 1; j < blocks.length; j++) {
-              if (blocks[j].start === blocks[i].end) {
-                blocks[i].end = blocks[j].end;
-                blocks.splice(j, 1);
-                break;
-              }
-            }
-            break;
-          } else if (blocks[i].start === hour + 1) {
-            blocks[i].start = hour;
-            merged = true;
-            break;
-          }
-        }
-        if (!merged) {
-          blocks.push({ start: hour, end: hour + 1 });
-        }
-      } else {
-        // Remove from allowed blocks (lock the slot)
-        for (let i = blocks.length - 1; i >= 0; i--) {
-          const block = blocks[i];
-          if (hour >= block.start && hour < block.end) {
-            if (hour === block.start && hour + 1 === block.end) {
-              // Remove entire block
-              blocks.splice(i, 1);
-            } else if (hour === block.start) {
-              // Trim from start
-              block.start = hour + 1;
-            } else if (hour + 1 === block.end) {
-              // Trim from end
-              block.end = hour;
-            } else {
-              // Split block
-              const newBlock = { start: hour + 1, end: block.end };
-              block.end = hour;
-              blocks.push(newBlock);
-            }
-            break;
-          }
-        }
-      }
 
-      // Send to server with authentication
-      try {
-        const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activityId}/allowed-time-blocks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          credentials: 'include',
-          body: JSON.stringify({ blocks: blocks })
-        });
-        
-        if (!res.ok) {
-          const error = await res.json().catch(() => ({ error: 'Fehler beim Speichern' }));
-          alert('Fehler: ' + (error.error || 'Speichern fehlgeschlagen'));
+      return queueActivityUpdate(activityId, async () => {
+        const currentBlocks = normalizeActivityBlocks(activityId, allowedBlocks[activityId] || []);
+        const blocks = currentBlocks.map(block => ({ ...block }));
+
+        if (lockState === 'unlock') {
+          // Add to allowed blocks (unlock the slot)
+          let merged = false;
+          for (let i = 0; i < blocks.length; i++) {
+            if (blocks[i].end === hour) {
+              blocks[i].end = hour + 1;
+              merged = true;
+              // Check if we can merge with next block
+              for (let j = i + 1; j < blocks.length; j++) {
+                if (blocks[j].start <= blocks[i].end) {
+                  blocks[i].end = Math.max(blocks[i].end, blocks[j].end);
+                  blocks.splice(j, 1);
+                  j -= 1;
+                } else {
+                  break;
+                }
+              }
+              break;
+            } else if (blocks[i].start === hour + 1) {
+              blocks[i].start = hour;
+              merged = true;
+              break;
+            } else if (hour >= blocks[i].start && hour < blocks[i].end) {
+              merged = true;
+              break;
+            }
+          }
+          if (!merged) {
+            blocks.push({ start: hour, end: hour + 1 });
+          }
+        } else {
+          // Remove from allowed blocks (lock the slot)
+          for (let i = blocks.length - 1; i >= 0; i--) {
+            const block = blocks[i];
+            if (hour >= block.start && hour < block.end) {
+              if (hour === block.start && hour + 1 === block.end) {
+                // Remove entire block
+                blocks.splice(i, 1);
+              } else if (hour === block.start) {
+                // Trim from start
+                block.start = hour + 1;
+              } else if (hour + 1 === block.end) {
+                // Trim from end
+                block.end = hour;
+              } else {
+                // Split block
+                const newBlock = { start: hour + 1, end: block.end };
+                block.end = hour;
+                blocks.push(newBlock);
+              }
+              break;
+            }
+          }
+        }
+
+        const normalizedBlocks = normalizeActivityBlocks(activityId, blocks);
+        const shapeValidation = isValidBlockShape(normalizedBlocks);
+        if (!shapeValidation.valid) {
+          alert(shapeValidation.message);
           return;
         }
-      } catch (err) {
-        console.error('Failed to save blocks:', err);
-        alert('Verbindungsfehler beim Speichern');
-        return;
-      }
-      
-      allowedBlocks[activityId] = blocks;
+
+        // Send to server with authentication
+        try {
+          const res = await fetch(`${API_URL_HELFERPLAN}/activities/${activityId}/allowed-time-blocks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            credentials: 'include',
+            body: JSON.stringify({ blocks: normalizedBlocks })
+          });
+          
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: 'Fehler beim Speichern' }));
+            alert('Fehler: ' + (error.error || 'Speichern fehlgeschlagen'));
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to save blocks:', err);
+          alert('Verbindungsfehler beim Speichern');
+          return;
+        }
+
+        allowedBlocks[activityId] = normalizedBlocks;
+      });
     }
 
     function renderGrid(timelineConfig) {

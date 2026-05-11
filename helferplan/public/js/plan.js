@@ -697,7 +697,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.el) {
                 item.el.classList.remove('potential-drop');
                 item.el.classList.remove('drop-target');
-                item.el.style.backgroundColor = item.originalBg || '';
+                if (!item.el.classList.contains('filled')) {
+                    item.el.style.backgroundColor = item.originalBg || '';
+                }
             }
         });
         highlightedSlots = [];
@@ -705,7 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- NEW: helper to fetch shifts (returns array) ---
     async function getShifts() {
-        const r = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`);
+        const r = await fetch(`${API_URL_HELFERPLAN}/tournament-shifts`, { cache: 'no-store' });
         if (!r.ok) throw new Error('Fehler beim Laden der Schichten');
         return await r.json();
     }

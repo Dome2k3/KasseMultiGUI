@@ -22,7 +22,7 @@
     function normalizeCoverageBlocks(blocks, fallbackRoleRequirement) {
         if (!Array.isArray(blocks)) return [];
 
-        return blocks
+        const normalized = blocks
             .map(block => {
                 if (!block || !Number.isFinite(Number(block.start)) || !Number.isFinite(Number(block.end))) return null;
                 const start = Math.max(0, Math.trunc(Number(block.start)));
@@ -39,10 +39,91 @@
             })
             .filter(Boolean)
             .sort((a, b) => (a.start - b.start) || (a.end - b.end));
+
+        const merged = [];
+        normalized.forEach((block) => {
+            const previous = merged[merged.length - 1];
+            if (
+                previous &&
+                previous.role_requirement === block.role_requirement &&
+                block.start <= previous.end
+            ) {
+                previous.end = Math.max(previous.end, block.end);
+                return;
+            }
+            merged.push({ ...block });
+        });
+
+        return merged;
     }
 
     function findCoverageBlock(blocks, hourIndex) {
         return (blocks || []).find(block => hourIndex >= block.start && hourIndex < block.end) || null;
+    }
+
+    function validateCoverageBlocksForSlotDuration(blocks, options) {
+        const slotDurationHours = Math.max(1, Math.trunc(Number(options && options.slotDurationHours) || SLOT_DURATION_HOURS));
+        const allowIsolatedSingleHour = options && options.allowIsolatedSingleHour !== undefined
+            ? Boolean(options.allowIsolatedSingleHour)
+            : true;
+        const minHourIndex = Number(options && options.minHourIndex);
+        const maxHourIndex = Number(options && options.maxHourIndex);
+
+        const covered = new Set();
+        (blocks || []).forEach((block) => {
+            for (let hour = block.start; hour < block.end; hour += 1) {
+                covered.add(hour);
+            }
+        });
+
+        if (covered.size === 0) {
+            return { valid: true, code: 'ok', message: '' };
+        }
+
+        const coveredHours = Array.from(covered).sort((a, b) => a - b);
+        let runStart = coveredHours[0];
+        let previousHour = coveredHours[0];
+
+        const validateRun = (start, endInclusive) => {
+            const runLength = (endInclusive - start) + 1;
+            if (runLength % slotDurationHours === 0) return null;
+
+            if (allowIsolatedSingleHour && runLength === 1) {
+                const leftHour = start - 1;
+                const rightHour = start + 1;
+                const hasLeftNeighborHour = Number.isFinite(minHourIndex) ? leftHour >= minHourIndex : true;
+                const hasRightNeighborHour = Number.isFinite(maxHourIndex) ? rightHour < maxHourIndex : true;
+                const hasLeftGap = !covered.has(leftHour);
+                const hasRightGap = !covered.has(rightHour);
+
+                if (hasLeftNeighborHour && hasRightNeighborHour && hasLeftGap && hasRightGap) {
+                    return null;
+                }
+            }
+
+            return {
+                valid: false,
+                code: 'invalid_coverage_shape',
+                message: 'Bedarfszeiten müssen in 2h-Blöcken planbar sein. Nur ein isolierter 1h-Slot zwischen zwei gesperrten Stunden ist erlaubt.',
+                runStart: start,
+                runEnd: endInclusive + 1
+            };
+        };
+
+        for (let i = 1; i < coveredHours.length; i += 1) {
+            const hour = coveredHours[i];
+            if (hour !== previousHour + 1) {
+                const error = validateRun(runStart, previousHour);
+                if (error) return error;
+                runStart = hour;
+            }
+            previousHour = hour;
+        }
+
+        const lastError = validateRun(runStart, previousHour);
+        if (lastError) return lastError;
+
+        return { valid: true, code: 'ok', message: '' };
     }
 
     function getClockHourForIndex(hourIndex, eventStartHour) {
@@ -216,6 +297,7 @@
         NIGHT_RESTRICTED_UNTIL_HOUR,
         normalizeRoleRequirement,
         normalizeCoverageBlocks,
+        validateCoverageBlocksForSlotDuration,
         findCoverageBlock,
         getClockHourForIndex,
         isNightRestrictedHour,
