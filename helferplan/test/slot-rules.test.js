@@ -85,3 +85,38 @@ test('shared contrast helper returns readable text colors for filled slots', () 
     assert.equal(SlotRules.getTextColorForBackground('#ffffff'), '#111');
     assert.equal(SlotRules.getTextColorForBackground('#005A9F'), '#fff');
 });
+
+test('coverage validation accepts 2h and 4h contiguous ranges', () => {
+    const validation = SlotRules.validateCoverageBlocksForSlotDuration([
+        { start: 2, end: 4 },
+        { start: 7, end: 11 }
+    ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
+
+    assert.equal(validation.valid, true);
+});
+
+test('coverage validation allows exactly one isolated hour between blocked neighbors', () => {
+    const validation = SlotRules.validateCoverageBlocksForSlotDuration([
+        { start: 5, end: 6 }
+    ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
+
+    assert.equal(validation.valid, true);
+});
+
+test('coverage validation rejects odd-length contiguous coverage that leaves 1h remainder', () => {
+    const validation = SlotRules.validateCoverageBlocksForSlotDuration([
+        { start: 8, end: 11 }
+    ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
+
+    assert.equal(validation.valid, false);
+    assert.equal(validation.code, 'invalid_coverage_shape');
+});
+
+test('coverage validation rejects single-hour coverage at timeline edge', () => {
+    const validation = SlotRules.validateCoverageBlocksForSlotDuration([
+        { start: 0, end: 1 }
+    ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
+
+    assert.equal(validation.valid, false);
+    assert.equal(validation.code, 'invalid_coverage_shape');
+});

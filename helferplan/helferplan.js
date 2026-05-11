@@ -38,6 +38,7 @@ const SESSION_EXPIRY = '24h'; // JWT token validity
 
 // Time constants
 const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
+const TOURNAMENT_TOTAL_HOURS = 54;
 
 // --- 3b. Sicherstellen, dass Settings-Tabelle existiert ---
 (async function ensureSettingsTable() {
@@ -1236,6 +1237,15 @@ app.post('/api/activities/:id/allowed-time-blocks', attachUser, requireAdmin, as
             : null;
         
         const normalizedBlocks = SlotRules.normalizeCoverageBlocks(blocks, (current[0] && current[0].role_requirement) || SlotRules.DEFAULT_ROLE);
+        const coverageShapeValidation = SlotRules.validateCoverageBlocksForSlotDuration(normalizedBlocks, {
+            slotDurationHours: SlotRules.SLOT_DURATION_HOURS,
+            minHourIndex: 0,
+            maxHourIndex: TOURNAMENT_TOTAL_HOURS,
+            allowIsolatedSingleHour: true
+        });
+        if (!coverageShapeValidation.valid) {
+            return res.status(400).json({ error: coverageShapeValidation.message });
+        }
         const blocksJson = JSON.stringify(normalizedBlocks);
         await pool.query(
             "UPDATE helferplan_activities SET allowed_time_blocks = ? WHERE id = ?",
