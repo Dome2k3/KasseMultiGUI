@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let highlightedSlots = []; // [{el, originalBg, hourIndex}] start first then next
     let allShifts = []; // cached shift array from server; used to find shift ids
     let allowedTimeBlocks = {}; // {activityId: [{start, end}, ...]}
+    let validSlotStartsCache = {}; // {activityId: Map<hourIndex, duration>} – computed from allowedTimeBlocks
     let currentUser = null; // Current authenticated user
     let currentActivity = null; // Activity associated with the currently open modal
 
@@ -118,17 +119,70 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function getAssignableSlotDuration(activity, hourIndex) {
-        const oneHourRule = getSlotRule(activity, hourIndex, hourIndex + 1);
-        if (!oneHourRule.isNeeded) return SLOT_DURATION_HOURS;
+    // Compute valid 2h-aligned slot start positions within each free run of an activity.
+    // Returns Map<hourIndex, duration> where duration is 2 (normal) or 1 (last hour of an odd-length run).
+    // This enforces that helpers can only start shifts at even offsets from the beginning of each
+    // contiguous allowed block, preventing isolated 1h-slots mid-run (e.g. 13:00 inside a 12-16 block).
+    function computeValidSlotStarts(activity) {
+        const blocks = allowedTimeBlocks[activity.id] || [];
+        const totalHours = 54; // Fr 12:00 → So 18:00 = 12 + 24 + 18
+        const result = new Map();
 
-        const twoHourRule = getSlotRule(activity, hourIndex, hourIndex + SLOT_DURATION_HOURS);
-        return twoHourRule.isNeeded ? SLOT_DURATION_HOURS : 1;
+        if (blocks.length === 0) {
+            // Backward-compat: empty blocks means all hours needed → 2h-aligned from index 0
+            for (let pos = 0; pos < totalHours; pos += 2) {
+                const dur = (pos + 2 <= totalHours) ? 2 : 1;
+                result.set(pos, dur);
+            }
+            return result;
+        }
+
+        const sorted = [...blocks].sort((a, b) => a.start - b.start);
+        for (const block of sorted) {
+            let pos = block.start;
+            while (pos < block.end) {
+                const remaining = block.end - pos;
+                const dur = remaining >= 2 ? 2 : 1;
+                result.set(pos, dur);
+                pos += dur;
+            }
+        }
+        return result;
+    }
+
+    // Returns {valid: bool, duration: number} for the given slot position.
+    // Only positions that are 2h-aligned starts within their free run return valid=true.
+    function getValidSlotInfo(activity, hourIndex) {
+        if (!validSlotStartsCache[activity.id]) {
+            validSlotStartsCache[activity.id] = computeValidSlotStarts(activity);
+        }
+        const cache = validSlotStartsCache[activity.id];
+        if (cache.has(hourIndex)) {
+            return { valid: true, duration: cache.get(hourIndex) };
+        }
+        return { valid: false, duration: SLOT_DURATION_HOURS };
+    }
+
+    function getAssignableSlotDuration(activity, hourIndex) {
+        return getValidSlotInfo(activity, hourIndex).duration;
     }
 
     function applyBaseSlotState(slot, activity, hourIndex) {
-        const slotDuration = getAssignableSlotDuration(activity, hourIndex);
-        const slotRule = getSlotRule(activity, hourIndex, hourIndex + slotDuration);
+        const validInfo = getValidSlotInfo(activity, hourIndex);
+        let slotRule;
+        if (!validInfo.valid) {
+            // Position is not a 2h-aligned block start within its free run → not available
+            slotRule = {
+                isNeeded: false,
+                roleRequirement: activity.role_requirement || DEFAULT_ROLE,
+                allowedRoles: [],
+                visualState: 'not-needed',
+                title: 'Kein freier 2h-Block an dieser Position',
+                nightRestricted: false
+            };
+        } else {
+            slotRule = getSlotRule(activity, hourIndex, hourIndex + validInfo.duration);
+        }
 
         slot.classList.remove('filled', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
         slot.style.backgroundColor = '';
@@ -443,6 +497,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Fetch allowed time blocks for all activities
         await fetchAllowedTimeBlocks(activities);
+        // Invalidate the valid-slot-starts cache so it's rebuilt with fresh block data
+        validSlotStartsCache = {};
 
         const groups = activities.reduce((acc, a) => {
             const g = a.group_name || 'Ohne Gruppe';
