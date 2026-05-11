@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SLOT_DURATION_HOURS = SlotRules.SLOT_DURATION_HOURS || 2;
     const DAY_TRANSITION_FR_SA = 12; // Friday to Saturday transition at hour 12
     const DAY_TRANSITION_SA_SO = 36; // Saturday to Sunday transition at hour 36
+    const TOTAL_HOURS = 54;  // Fr 12:00 → So 18:00 = 12 + 24 + 18
 
     // State
     let allHelpers = [];
@@ -125,13 +126,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // contiguous allowed block, preventing isolated 1h-slots mid-run (e.g. 13:00 inside a 12-16 block).
     function computeValidSlotStarts(activity) {
         const blocks = allowedTimeBlocks[activity.id] || [];
-        const totalHours = 54; // Fr 12:00 → So 18:00 = 12 + 24 + 18
         const result = new Map();
 
         if (blocks.length === 0) {
             // Backward-compat: empty blocks means all hours needed → 2h-aligned from index 0
-            for (let pos = 0; pos < totalHours; pos += 2) {
-                const dur = (pos + 2 <= totalHours) ? 2 : 1;
+            for (let pos = 0; pos < TOTAL_HOURS; pos += 2) {
+                const dur = (pos + 2 <= TOTAL_HOURS) ? 2 : 1;
                 result.set(pos, dur);
             }
             return result;
