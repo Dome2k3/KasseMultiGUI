@@ -453,8 +453,22 @@
       }
 
       return queueActivityUpdate(activityId, async () => {
-        const currentBlocks = normalizeActivityBlocks(activityId, allowedBlocks[activityId] || []);
-        const blocks = currentBlocks.map(block => ({ ...block }));
+        const rawBlocks = allowedBlocks[activityId] || [];
+        const currentBlocks = normalizeActivityBlocks(activityId, rawBlocks);
+
+        // Fix 1a: When no blocks are configured yet (empty = all hours needed via
+        // backward-compat), and the admin wants to lock a slot, we must first
+        // initialise the full coverage before removing the clicked hours – otherwise
+        // removeHour would find nothing to remove and the slot stays "needed".
+        let blocks;
+        if (currentBlocks.length === 0 && lockState === 'lock') {
+          const activity = getActivityById(activityId);
+          const role = activity ? (activity.role_requirement || SlotRules.DEFAULT_ROLE) : SlotRules.DEFAULT_ROLE;
+          blocks = [{ start: 0, end: TOTAL_HOURS, role_requirement: role }];
+        } else {
+          blocks = currentBlocks.map(block => ({ ...block }));
+        }
+
         const slotSpan = Math.max(1, SLOT_DURATION_HOURS);
         const slotStart = Math.max(0, Math.min(hour, TOTAL_HOURS - slotSpan));
         const slotEnd = Math.min(TOTAL_HOURS, slotStart + slotSpan);
@@ -527,13 +541,8 @@
         }
 
         const normalizedBlocks = normalizeActivityBlocks(activityId, blocks);
-        const shapeValidation = isValidBlockShape(normalizedBlocks);
-        if (!shapeValidation.valid) {
-          isDragging = false;
-          dragMode = null;
-          alert(shapeValidation.message);
-          return;
-        }
+        // Note: shape validation is intentionally omitted here – admins know what they
+        // are doing and must be able to set any block configuration without pop-up friction.
 
         // Send to server with authentication
         try {
