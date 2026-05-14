@@ -120,38 +120,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Compute valid 2h-aligned slot start positions within each free run of an activity.
-    // Returns Map<hourIndex, duration> where duration is 2 (normal) or 1 (last hour of an odd-length run).
-    // This enforces that helpers can only start shifts at even offsets from the beginning of each
-    // contiguous allowed block, preventing isolated 1h-slots mid-run (e.g. 13:00 inside a 12-16 block).
+    // Compute valid slot starts by splitting needed hours into contiguous runs with identical
+    // role-requirement and then assigning 2h blocks from each run start. A trailing remainder
+    // in a run is represented as a 1h slot.
+    // This covers "bis zum X in 2h, Rest 1h" and restarts after gaps or role changes
+    // (e.g. Alle -> Erwachsen at night restrictions).
     function computeValidSlotStarts(activity) {
-        const blocks = allowedTimeBlocks[activity.id] || [];
         const result = new Map();
+        let segmentStart = null;
+        let segmentRoleRequirement = null;
 
-        if (blocks.length === 0) {
-            // Backward-compat: empty blocks means all hours needed → 2h-aligned from index 0
-            for (let pos = 0; pos < TOTAL_HOURS; pos += 2) {
-                const dur = (pos + 2 <= TOTAL_HOURS) ? 2 : 1;
-                result.set(pos, dur);
-            }
-            return result;
-        }
-
-        const sorted = [...blocks].sort((a, b) => a.start - b.start);
-        for (const block of sorted) {
-            let pos = block.start;
-            while (pos < block.end) {
-                const remaining = block.end - pos;
+        function flushSegment(endExclusive) {
+            if (segmentStart === null) return;
+            let pos = segmentStart;
+            while (pos < endExclusive) {
+                const remaining = endExclusive - pos;
                 const dur = remaining >= 2 ? 2 : 1;
                 result.set(pos, dur);
                 pos += dur;
             }
+            segmentStart = null;
+            segmentRoleRequirement = null;
         }
+
+        for (let hour = 0; hour < TOTAL_HOURS; hour += 1) {
+            const hourRule = getSlotRule(activity, hour, hour + 1);
+            if (!hourRule.isNeeded) {
+                flushSegment(hour);
+                continue;
+            }
+
+            if (segmentStart === null) {
+                segmentStart = hour;
+                segmentRoleRequirement = hourRule.roleRequirement;
+                continue;
+            }
+
+            if (hourRule.roleRequirement !== segmentRoleRequirement) {
+                flushSegment(hour);
+                segmentStart = hour;
+                segmentRoleRequirement = hourRule.roleRequirement;
+            }
+        }
+
+        flushSegment(TOTAL_HOURS);
         return result;
     }
 
     // Returns {valid: bool, duration: number} for the given slot position.
-    // Only positions that are 2h-aligned starts within their free run return valid=true.
+    // Only computed run-start positions return valid=true.
     function getValidSlotInfo(activity, hourIndex) {
         if (!validSlotStartsCache[activity.id]) {
             validSlotStartsCache[activity.id] = computeValidSlotStarts(activity);
@@ -171,20 +188,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const validInfo = getValidSlotInfo(activity, hourIndex);
         let slotRule;
         if (!validInfo.valid) {
-            // Position is not a 2h-aligned block start within its free run → not available
+            // Position is not a computed block start within its free run → not available
             slotRule = {
                 isNeeded: false,
                 roleRequirement: activity.role_requirement || DEFAULT_ROLE,
                 allowedRoles: [],
                 visualState: 'not-needed',
-                title: 'Kein freier 2h-Block an dieser Position',
+                title: 'Kein freier Schichtblock an dieser Position',
                 nightRestricted: false
             };
         } else {
             slotRule = getSlotRule(activity, hourIndex, hourIndex + validInfo.duration);
         }
 
-        slot.classList.remove('filled', 'slot-open-pair', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
+        slot.classList.remove('filled', 'slot-open-pair', 'slot-open-single', 'slot-state-open-all', 'slot-state-open-adult', 'slot-state-open-orga', 'slot-state-not-needed');
         slot.style.backgroundColor = '';
         slot.style.color = '';
         slot.style.opacity = '1';
@@ -657,7 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const row = startSlot.parentElement;
                             startSlot.innerHTML = helper.name.split(' ')[0] || helper.name;
                             startSlot.classList.add('filled');
-                            startSlot.classList.remove('slot-open-pair');
+                            startSlot.classList.remove('slot-open-pair', 'slot-open-single');
                             startSlot.style.backgroundColor = teamColor;
                             startSlot.style.color = SlotRules.getTextColorForBackground(teamColor);
                             startSlot.style.opacity = '1';
@@ -713,13 +730,16 @@ document.addEventListener('DOMContentLoaded', () => {
         reapplyOpenSlotVisuals();
     }
 
-    // Span open valid 2h slots and add the connected block visual (→ arrow).
+    // Render open slots with connected block visuals:
+    // - 2h slots: two blocks with arrow
+    // - 1h slots: single block without arrow
     // Called after generateGrid and after fetchAndRenderAllShifts renders filled shifts.
     function reapplyOpenSlotVisuals() {
         document.querySelectorAll('.activity-row').forEach(row => {
             row.querySelectorAll('.shift-slot').forEach(slot => {
                 if (slot.classList.contains('slot-hidden')) return;
                 if (slot.classList.contains('filled')) return;
+                slot.classList.remove('slot-open-pair', 'slot-open-single');
 
                 const hourIndex = parseInt(slot.dataset.hourIndex);
                 const activityId = slot.dataset.activityId;
@@ -727,22 +747,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!activity) return;
 
                 const validInfo = getValidSlotInfo(activity, hourIndex);
-                if (!validInfo.valid || validInfo.duration <= 1) return;
+                if (!validInfo.valid) return;
 
                 const slotRule = getSlotRule(activity, hourIndex, hourIndex + validInfo.duration);
                 if (!slotRule.isNeeded) return;
 
-                // Span the cell across both hour columns
-                slot.style.gridColumn = `span ${validInfo.duration}`;
-                if (slot.classList.contains('slot-open-pair')) return; // already styled
-                slot.classList.add('slot-open-pair');
+                if (validInfo.duration > 1) {
+                    // Span the cell across both hour columns
+                    slot.style.gridColumn = `span ${validInfo.duration}`;
+                    slot.classList.add('slot-open-pair');
 
-                // Hide follow slot(s)
-                for (let k = 1; k < validInfo.duration; k++) {
-                    const follow = row.querySelector(`.shift-slot[data-hour-index='${hourIndex + k}']`);
-                    if (follow) {
-                        follow.classList.add('slot-hidden');
-                        follow.dataset.hiddenForSpan = 'true';
+                    // Hide follow slot(s)
+                    for (let k = 1; k < validInfo.duration; k++) {
+                        const follow = row.querySelector(`.shift-slot[data-hour-index='${hourIndex + k}']`);
+                        if (follow) {
+                            follow.classList.add('slot-hidden');
+                            follow.dataset.hiddenForSpan = 'true';
+                        }
                     }
                 }
 
@@ -753,18 +774,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const b1 = document.createElement('div');
                 b1.className = 'slot-pair-block';
-
-                const arrow = document.createElement('span');
-                arrow.className = 'slot-pair-arrow';
-                arrow.setAttribute('aria-hidden', 'true');
-                arrow.textContent = '→';
-
-                const b2 = document.createElement('div');
-                b2.className = 'slot-pair-block';
-
                 pair.appendChild(b1);
-                pair.appendChild(arrow);
-                pair.appendChild(b2);
+
+                if (validInfo.duration > 1) {
+                    const arrow = document.createElement('span');
+                    arrow.className = 'slot-pair-arrow';
+                    arrow.setAttribute('aria-hidden', 'true');
+                    arrow.textContent = '→';
+
+                    const b2 = document.createElement('div');
+                    b2.className = 'slot-pair-block';
+
+                    pair.appendChild(arrow);
+                    pair.appendChild(b2);
+                } else {
+                    slot.classList.add('slot-open-single');
+                }
+
                 slot.appendChild(pair);
             });
         });

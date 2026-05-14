@@ -95,7 +95,7 @@
     <span class="slot-legend-item"><span class="slot-legend-swatch legend-open-orga" aria-hidden="true"></span>Gelb = Schicht benötigt, nur Orga</span>
     <span class="slot-legend-item"><span class="slot-legend-swatch legend-not-needed" aria-hidden="true"></span>Grau mit rotem X = keine Schicht nötig</span>
   </div>
-  <p style="margin: 10px 0 16px; color: #45556a; font-size: 13px;">Klicken oder tippen Sie auf Felder, um den Bedarf immer in 2h-Blöcken zu setzen oder zu entfernen. Mit gedrückter Maustaste können Sie weiterhin mehrere Blöcke am Stück markieren.</p>
+  <p style="margin: 10px 0 16px; color: #45556a; font-size: 13px;">Klicken oder tippen Sie auf Felder, um Bedarfszeiten zu setzen oder zu entfernen. In der Planung werden daraus je Abschnitt 2h-Schichten, mit 1h-Rest am Ende, sowie 1h an Jugend/Nacht-Grenzen (z. B. 23–24 Uhr).</p>
   <div class="plan-layout">
     <div class="left-panel">
       <h3>Aktivitäten</h3>
@@ -680,8 +680,8 @@
       slot.style.color = '';
       slot.style.opacity = '1';
       slot.title = slotRule.isNeeded
-        ? `${slotRule.title} – klicken/tippen zum Entfernen eines 2h-Bedarfsblocks`
-        : 'Hier wird keine Schicht benötigt – klicken/tippen, um einen 2h-Bedarfsblock zu setzen';
+        ? `${slotRule.title} – klicken/tippen zum Entfernen des Bedarfs`
+        : 'Hier wird keine Schicht benötigt – klicken/tippen, um Bedarf zu setzen';
     }
 
     await fetchActivities();

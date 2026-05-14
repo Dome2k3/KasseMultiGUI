@@ -40,6 +40,24 @@ test('upgrades late-night Alle shifts to Erwachsene/Orga', () => {
     assert.deepEqual(rule.allowedRoles, ['Erwachsen', 'Orga']);
 });
 
+test('keeps 23:00-24:00 Alle while 23:00-01:00 becomes Erwachsene/Orga', () => {
+    const oneHourRule = SlotRules.getShiftRule(
+        { role_requirement: 'Alle', allowed_time_blocks: [{ start: 11, end: 15 }] },
+        11,
+        { endHourIndex: 12 }
+    );
+    assert.equal(oneHourRule.isNeeded, true);
+    assert.equal(oneHourRule.roleRequirement, 'Alle');
+
+    const twoHourRule = SlotRules.getShiftRule(
+        { role_requirement: 'Alle', allowed_time_blocks: [{ start: 11, end: 15 }] },
+        11,
+        { endHourIndex: 13 }
+    );
+    assert.equal(twoHourRule.isNeeded, true);
+    assert.equal(twoHourRule.roleRequirement, 'Erwachsen');
+});
+
 test('backend/shared validation rejects minor helpers on late-night shifts', () => {
     const validation = SlotRules.validateShiftAssignment({
         activity: { role_requirement: 'Alle', allowed_time_blocks: [{ start: 10, end: 15 }] },
@@ -103,32 +121,29 @@ test('coverage validation allows exactly one isolated hour between blocked neigh
     assert.equal(validation.valid, true);
 });
 
-test('coverage validation rejects odd-length contiguous coverage that leaves 1h remainder', () => {
+test('coverage validation allows odd-length contiguous coverage with 1h remainder', () => {
     const validation = SlotRules.validateCoverageBlocksForSlotDuration([
         { start: 8, end: 11 }
     ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
 
-    assert.equal(validation.valid, false);
-    assert.equal(validation.code, 'invalid_coverage_shape');
+    assert.equal(validation.valid, true);
 });
 
-test('coverage validation rejects single-hour coverage at timeline edge', () => {
+test('coverage validation allows single-hour coverage at timeline edge', () => {
     const validation = SlotRules.validateCoverageBlocksForSlotDuration([
         { start: 0, end: 1 }
     ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
 
-    assert.equal(validation.valid, false);
-    assert.equal(validation.code, 'invalid_coverage_shape');
+    assert.equal(validation.valid, true);
 });
 
-test('coverage validation rejects single-hour gap between two 2h coverage runs', () => {
+test('coverage validation allows single-hour gap between coverage runs', () => {
     const validation = SlotRules.validateCoverageBlocksForSlotDuration([
         { start: 5, end: 7 },
         { start: 8, end: 10 }
     ], { slotDurationHours: 2, minHourIndex: 0, maxHourIndex: 20 });
 
-    assert.equal(validation.valid, false);
-    assert.equal(validation.code, 'invalid_coverage_shape');
+    assert.equal(validation.valid, true);
 });
 
 test('coverage validation allows 2h gap between two 2h coverage runs', () => {
