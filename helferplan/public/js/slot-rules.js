@@ -62,7 +62,25 @@
     }
 
     function validateCoverageBlocksForSlotDuration(blocks, options) {
-        // options are intentionally accepted for API compatibility with existing call sites.
+        const requestedDurationHours = Number(options && options.slotDurationHours);
+        if (!Array.isArray(blocks)) {
+            return {
+                valid: false,
+                code: 'invalid_input',
+                message: 'Bedarfszeiten müssen als Liste von Zeitblöcken übergeben werden.'
+            };
+        }
+        if (Number.isFinite(requestedDurationHours) && requestedDurationHours < 1) {
+            return {
+                valid: false,
+                code: 'invalid_input',
+                message: 'Die Schichtdauer muss mindestens 1 Stunde sein.'
+            };
+        }
+
+        // Shift layout now supports 2h blocks with 1h remainders in each contiguous run.
+        // Therefore every normalized coverage shape is accepted; scheduling logic decides
+        // whether individual starts become 2h or 1h.
         return { valid: true, code: 'ok', message: '' };
     }
 
