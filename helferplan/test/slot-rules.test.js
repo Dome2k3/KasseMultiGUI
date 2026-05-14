@@ -40,7 +40,7 @@ test('upgrades late-night Alle shifts to Erwachsene/Orga', () => {
     assert.deepEqual(rule.allowedRoles, ['Erwachsen', 'Orga']);
 });
 
-test('keeps 23:00-24:00 Alle while 23:00-01:00 becomes Erwachsen/Orga', () => {
+test('at event offset 11 keeps 1h Alle but upgrades 2h into night to Erwachsen/Orga', () => {
     const oneHourRule = SlotRules.getShiftRule(
         { role_requirement: 'Alle', allowed_time_blocks: [{ start: 11, end: 15 }] },
         11,
