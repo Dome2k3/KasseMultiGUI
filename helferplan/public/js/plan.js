@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Compute valid slot starts by splitting needed hours into contiguous runs with identical
     // role-requirement and then assigning 2h blocks from each run start. A trailing remainder
     // in a run is represented as a 1h slot.
-    // This covers "bis zum X in 2h, Rest 1h" and restarts after gaps or role changes
+    // This covers "2h blocks until blocked, then 1h remainder" and restarts after gaps or role changes
     // (e.g. Alle -> Erwachsen at night restrictions).
     function computeValidSlotStarts(activity) {
         const result = new Map();

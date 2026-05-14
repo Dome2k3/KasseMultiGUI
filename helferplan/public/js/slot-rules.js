@@ -62,7 +62,7 @@
     }
 
     function validateCoverageBlocksForSlotDuration(blocks, options) {
-        void options;
+        // options are intentionally accepted for API compatibility with existing call sites.
         return { valid: true, code: 'ok', message: '' };
     }
 
