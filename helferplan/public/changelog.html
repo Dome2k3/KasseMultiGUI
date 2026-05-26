@@ -179,6 +179,17 @@
             font-style: italic;
             font-size: 13px;
         }
+        
+        .entry-record-label {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #e8f0fe;
+            color: #1a56db;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
     </style>
 </head>
 <body>
@@ -468,6 +479,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         const description = generateDescription(log);
+        const recordLabel = getRecordLabel(log);
         
         return `
             <div class="changelog-entry">
@@ -475,6 +487,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <div>
                         <span class="entry-action action-${log.action}">${getActionName(log.action)}</span>
                         <span class="entry-table">${getTableDisplayName(log.table_name)}</span>
+                        ${recordLabel ? `<span class="entry-record-label" title="Betroffener Datensatz">${recordLabel}</span>` : ''}
                     </div>
                     <div class="entry-timestamp">${formattedDate}</div>
                 </div>
@@ -487,6 +500,48 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ${log.note ? `<div class="entry-note">${log.note}</div>` : ''}
             </div>
         `;
+    }
+    
+    function escapeHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function getRecordLabel(log) {
+        const data = log.after_data || log.before_data;
+        if (!data) return null;
+        
+        const recordId = data.id;
+        let recordName = null;
+        
+        switch (log.table_name) {
+            case 'helferplan_helpers':
+            case 'helferplan_teams':
+            case 'helferplan_activities':
+            case 'helferplan_activity_groups':
+                recordName = data.name;
+                break;
+            case 'helferplan_tournament_shifts':
+            case 'helferplan_setup_cleanup_shifts': {
+                const hName = data.helper_name || getHelperNameById(data.helper_id);
+                recordName = hName ? `Helfer: ${hName}` : null;
+                break;
+            }
+            case 'helferplan_cakes':
+                recordName = data.cake_type || null;
+                break;
+            case 'helferplan_settings':
+                recordName = data.setting_key ? translateSettingKey(data.setting_key) : null;
+                break;
+        }
+        
+        if (recordName && recordId != null) {
+            return `${escapeHtml(recordName)} (ID: ${recordId})`;
+        } else if (recordName) {
+            return escapeHtml(recordName);
+        } else if (recordId != null) {
+            return `ID: ${recordId}`;
+        }
+        return null;
     }
     
     function generateDescription(log) {

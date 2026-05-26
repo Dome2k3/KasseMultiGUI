@@ -73,7 +73,8 @@
         .hour-slot { font-size:12px; padding:4px 6px; text-align:center; background:#fafafa; }
         .shift-slot { font-size:12px; padding:6px; min-height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: transform .08s, outline .08s; }
 
-        .team-item .team-color { padding:6px 8px; border-radius:6px; color:#fff; font-weight:600; display:inline-block; white-space:nowrap; }
+        .team-item .team-color { padding:6px 8px; border-radius:6px; color:#fff; font-weight:600; display:inline-block; white-space:nowrap; transition: transform 0.1s, box-shadow 0.1s; }
+        .team-item .team-color:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
 
         .dimmed { opacity: .28; filter: grayscale(80%); }
 
@@ -190,7 +191,7 @@
     
     <div class="top-controls">
         <div class="control-group">
-            <h3>Teams</h3>
+            <h3>Teams <small style="font-weight:400; color:#666; font-size:11px;">(anklicken zum Filtern)</small></h3>
             <div id="team-list-panel" class="team-list-panel"></div>
         </div>
 

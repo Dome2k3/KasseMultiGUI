@@ -225,12 +225,33 @@ document.addEventListener('DOMContentLoaded', () => {
             div.className = 'team-item';
             const colorBox = document.createElement('div');
             colorBox.className = 'team-color';
+            colorBox.style.cursor = 'pointer';
+            colorBox.dataset.teamId = team.id;
+            colorBox.title = `Klicken, um Helfer von "${team.name}" anzuzeigen`;
             const color = team.color_hex || '#666';
             colorBox.style.backgroundColor = color;
             colorBox.style.color = luminanceForHex(color) > 160 ? '#111' : '#fff';
             colorBox.textContent = team.name;
+            colorBox.addEventListener('click', () => {
+                planTeamFilter.value = String(team.id);
+                renderHelperPool();
+                updateTeamLegendActiveState();
+            });
             div.appendChild(colorBox);
             teamListPanel.appendChild(div);
+        });
+    }
+
+    function updateTeamLegendActiveState() {
+        const selectedId = String(planTeamFilter.value);
+        teamListPanel.querySelectorAll('.team-color').forEach(box => {
+            if (selectedId && String(box.dataset.teamId) === selectedId) {
+                box.style.outline = '3px solid #fff';
+                box.style.boxShadow = '0 0 0 3px #005A9F';
+            } else {
+                box.style.outline = '';
+                box.style.boxShadow = '';
+            }
         });
     }
 
@@ -1186,7 +1207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupModalListeners();
         setupAuthListeners();
 
-        planTeamFilter.addEventListener('change', () => renderHelperPool());
+        planTeamFilter.addEventListener('change', () => { renderHelperPool(); updateTeamLegendActiveState(); });
         viewTeamFilter.addEventListener('change', () => applyViewFilter());
     }
 
