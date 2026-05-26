@@ -807,6 +807,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     await exportSetupPDF(teamFilter, orientation);
                 } else if (exportType === 'cakes') {
                     await exportCakesPDF(teamFilter, orientation);
+                } else if (exportType === 'helpers') {
+                    await exportHelpersPDF(teamFilter, orientation);
+                } else if (exportType === 'users') {
+                    await exportUsersPDF(orientation);
                 }
             } catch (err) {
                 console.error('PDF Export Fehler:', err);
@@ -1227,7 +1231,150 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.save(`Kuchen-${teamName}.pdf`);
     }
 
-    // --- Authentication Functions ---
+    async function exportHelpersPDF(teamFilter, orientation) {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
+        }
+
+        let helpers = allHelpersData.slice();
+        if (teamFilter) {
+            helpers = helpers.filter(h => String(h.team_id) === String(teamFilter));
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('Helfer-Liste', pageWidth / 2, 15, { align: 'center' });
+
+        const teamName = teamFilter ? allTeamsData.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle Teams';
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Team: ${teamName}`, pageWidth / 2, 22, { align: 'center' });
+
+        const roleLabel = { Minderjaehrig: 'Minderjährig', Erwachsen: 'Erwachsen', Orga: 'Orga' };
+        const colWidths = [10, 70, 50, 35];
+        const headers = ['#', 'Name', 'Team', 'Rolle'];
+        const startX = 10;
+        let yPos = 30;
+
+        // Draw header row
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.setFillColor(0, 90, 159);
+        doc.setTextColor(255, 255, 255);
+        doc.rect(startX, yPos - 5, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+        let xPos = startX;
+        headers.forEach((h, i) => {
+            doc.text(h, xPos + 2, yPos);
+            xPos += colWidths[i];
+        });
+        yPos += 5;
+        doc.setTextColor(0, 0, 0);
+
+        // Draw rows
+        doc.setFont(undefined, 'normal');
+        helpers.forEach((h, idx) => {
+            if (yPos > pageHeight - 15) {
+                doc.addPage();
+                yPos = 15;
+            }
+            const rowColor = idx % 2 === 0 ? [249, 249, 249] : [255, 255, 255];
+            doc.setFillColor(...rowColor);
+            doc.rect(startX, yPos - 5, colWidths.reduce((a, b) => a + b, 0), 7, 'F');
+            const team = allTeamsData.find(t => t.id == h.team_id);
+            const rowData = [String(idx + 1), h.name || '', team?.name || '', roleLabel[h.role] || h.role || ''];
+            xPos = startX;
+            rowData.forEach((val, i) => {
+                doc.text(val, xPos + 2, yPos);
+                xPos += colWidths[i];
+            });
+            yPos += 7;
+        });
+
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'italic');
+        doc.text(`Gesamt: ${helpers.length} Helfer`, 10, pageHeight - 5);
+        doc.save(`Helfer-Liste-${teamName}.pdf`);
+    }
+
+    async function exportUsersPDF(orientation) {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
+        }
+
+        let users = [];
+        try {
+            const res = await fetch(`${API_URL}/users`, { credentials: 'include', headers: { ...getAuthHeaders() } });
+            if (!res.ok) throw new Error('Keine Berechtigung oder Fehler beim Laden der Benutzer.');
+            users = await res.json();
+        } catch (err) {
+            throw new Error('Benutzer konnten nicht geladen werden: ' + err.message);
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('Admins / Editoren', pageWidth / 2, 15, { align: 'center' });
+
+        const colWidths = [10, 60, 70, 20, 20, 45];
+        const headers = ['#', 'Name', 'E-Mail', 'Editor', 'Admin', 'Zuletzt aktiv'];
+        const startX = 10;
+        let yPos = 25;
+
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.setFillColor(0, 90, 159);
+        doc.setTextColor(255, 255, 255);
+        doc.rect(startX, yPos - 5, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+        let xPos = startX;
+        headers.forEach((h, i) => {
+            doc.text(h, xPos + 2, yPos);
+            xPos += colWidths[i];
+        });
+        yPos += 5;
+        doc.setTextColor(0, 0, 0);
+
+        doc.setFont(undefined, 'normal');
+        users.forEach((u, idx) => {
+            if (yPos > pageHeight - 15) {
+                doc.addPage();
+                yPos = 15;
+            }
+            const rowColor = idx % 2 === 0 ? [249, 249, 249] : [255, 255, 255];
+            doc.setFillColor(...rowColor);
+            doc.rect(startX, yPos - 5, colWidths.reduce((a, b) => a + b, 0), 7, 'F');
+            const lastSeen = u.last_seen ? new Date(u.last_seen).toLocaleString('de-DE', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }) : '—';
+            const rowData = [
+                String(idx + 1),
+                u.display_name || '',
+                u.email || '',
+                u.is_editor ? 'Ja' : 'Nein',
+                u.is_admin ? 'Ja' : 'Nein',
+                lastSeen
+            ];
+            xPos = startX;
+            rowData.forEach((val, i) => {
+                doc.text(val, xPos + 2, yPos);
+                xPos += colWidths[i];
+            });
+            yPos += 7;
+        });
+
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'italic');
+        doc.text(`Gesamt: ${users.length} Benutzer`, 10, pageHeight - 5);
+        doc.save('Admins-Editoren.pdf');
+    }
     let currentUser = null;
 
     // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)

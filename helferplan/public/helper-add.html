@@ -123,6 +123,43 @@
             color: #666;
         }
 
+        /* --- Helfer suchen/filtern --- */
+        .helper-search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .helper-search-bar input {
+            flex: 1;
+            min-width: 160px;
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .helper-search-bar input:focus {
+            outline: none;
+            border-color: #005A9F;
+            box-shadow: 0 0 0 2px rgba(0, 90, 159, 0.1);
+        }
+        .helper-search-bar select {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .helper-search-bar select:focus {
+            outline: none;
+            border-color: #005A9F;
+        }
+        #helper-search-count {
+            font-size: 13px;
+            color: #666;
+            white-space: nowrap;
+        }
+
         /* --- Helfer bearbeiten --- */
         .edit-helpers-container {
             max-width: 600px;
@@ -297,6 +334,19 @@
 <div id="edit-helpers-section" style="display:none;">
     <div class="edit-helpers-container">
         <h2>Bestehende Helfer bearbeiten</h2>
+        <div class="helper-search-bar">
+            <input type="text" id="helper-search-input" placeholder="Name suchen..." autocomplete="off">
+            <select id="helper-search-team">
+                <option value="">Alle Teams</option>
+            </select>
+            <select id="helper-search-role">
+                <option value="">Alle Rollen</option>
+                <option value="Minderjaehrig">Minderjährig</option>
+                <option value="Erwachsen">Erwachsen</option>
+                <option value="Orga">Orga</option>
+            </select>
+            <span id="helper-search-count"></span>
+        </div>
         <div id="helpers-list-loading" style="color:#666; padding: 16px 0;">Lade Helferliste...</div>
         <table class="helper-list-table" id="helpers-list-table" style="display:none;">
             <thead>
@@ -695,6 +745,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 editTeamSelect.appendChild(opt);
             });
 
+            // Populate search team dropdown
+            const searchTeamSelect = document.getElementById('helper-search-team');
+            if (searchTeamSelect) {
+                searchTeamSelect.innerHTML = '<option value="">Alle Teams</option>';
+                allTeams.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.name;
+                    searchTeamSelect.appendChild(opt);
+                });
+            }
+
             renderHelpersList();
         } catch (err) {
             console.error('Fehler beim Laden der Helferliste:', err);
@@ -702,10 +764,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function getFilteredHelpers() {
+        const searchVal = (document.getElementById('helper-search-input')?.value || '').trim().toLowerCase();
+        const teamVal = document.getElementById('helper-search-team')?.value || '';
+        const roleVal = document.getElementById('helper-search-role')?.value || '';
+
+        return allHelpers.filter(h => {
+            if (searchVal && !h.name.toLowerCase().includes(searchVal)) return false;
+            if (teamVal && String(h.team_id) !== String(teamVal)) return false;
+            if (roleVal && h.role !== roleVal) return false;
+            return true;
+        });
+    }
+
     function renderHelpersList() {
         const tbody = document.getElementById('helpers-list-body');
         const loading = document.getElementById('helpers-list-loading');
         const table = document.getElementById('helpers-list-table');
+        const countEl = document.getElementById('helper-search-count');
 
         tbody.innerHTML = '';
         if (!allHelpers.length) {
@@ -716,8 +792,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         table.style.display = '';
 
         const roleLabel = { Minderjaehrig: 'Minderjährig', Erwachsen: 'Erwachsen', Orga: 'Orga' };
+        const filtered = getFilteredHelpers();
 
-        allHelpers.forEach(h => {
+        if (countEl) {
+            countEl.textContent = filtered.length === allHelpers.length
+                ? `${allHelpers.length} Helfer`
+                : `${filtered.length} von ${allHelpers.length} Helfern`;
+        }
+
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666; padding:16px;">Keine Helfer gefunden.</td></tr>';
+            return;
+        }
+
+        filtered.forEach(h => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${escapeHtml(h.name)}</td>
@@ -752,6 +840,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('edit-cancel-btn').addEventListener('click', closeEditModal);
     document.getElementById('edit-modal').addEventListener('click', (e) => {
         if (e.target === document.getElementById('edit-modal')) closeEditModal();
+    });
+
+    // Wire search/filter inputs
+    ['helper-search-input', 'helper-search-team', 'helper-search-role'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', renderHelpersList);
+        if (el) el.addEventListener('change', renderHelpersList);
     });
 
     document.getElementById('edit-helper-form').addEventListener('submit', async (e) => {
