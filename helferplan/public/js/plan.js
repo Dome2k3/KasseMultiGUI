@@ -226,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const colorBox = document.createElement('div');
             colorBox.className = 'team-color';
             colorBox.style.cursor = 'pointer';
+            colorBox.dataset.teamId = team.id;
             colorBox.title = `Klicken, um Helfer von "${team.name}" anzuzeigen`;
             const color = team.color_hex || '#666';
             colorBox.style.backgroundColor = color;
@@ -244,9 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTeamLegendActiveState() {
         const selectedId = String(planTeamFilter.value);
         teamListPanel.querySelectorAll('.team-color').forEach(box => {
-            const div = box.closest('.team-item');
-            const team = allTeams.find(t => String(t.id) === selectedId && box.textContent.trim() === t.name);
-            if (team) {
+            if (selectedId && String(box.dataset.teamId) === selectedId) {
                 box.style.outline = '3px solid #fff';
                 box.style.boxShadow = '0 0 0 3px #005A9F';
             } else {

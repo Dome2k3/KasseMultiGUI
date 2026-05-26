@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
     }
     
-    function escapeHtmlCl(str) {
+    function escapeHtml(str) {
         return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
@@ -535,9 +535,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         if (recordName && recordId != null) {
-            return `${escapeHtmlCl(recordName)} (ID: ${recordId})`;
+            return `${escapeHtml(recordName)} (ID: ${recordId})`;
         } else if (recordName) {
-            return escapeHtmlCl(recordName);
+            return escapeHtml(recordName);
         } else if (recordId != null) {
             return `ID: ${recordId}`;
         }

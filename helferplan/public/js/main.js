@@ -1250,7 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.setFont(undefined, 'bold');
         doc.text('Helfer-Liste', pageWidth / 2, 15, { align: 'center' });
 
-        const teamName = teamFilter ? allTeamsData.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle Teams';
+        const teamName = teamFilter ? allTeamsData.find(t => String(t.id) === String(teamFilter))?.name || 'Team' : 'Alle Teams';
         doc.setFontSize(11);
         doc.setFont(undefined, 'normal');
         doc.text(`Team: ${teamName}`, pageWidth / 2, 22, { align: 'center' });
@@ -1285,7 +1285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const rowColor = idx % 2 === 0 ? [249, 249, 249] : [255, 255, 255];
             doc.setFillColor(...rowColor);
             doc.rect(startX, yPos - 5, colWidths.reduce((a, b) => a + b, 0), 7, 'F');
-            const team = allTeamsData.find(t => t.id == h.team_id);
+            const team = allTeamsData.find(t => String(t.id) === String(h.team_id));
             const rowData = [String(idx + 1), h.name || '', team?.name || '', roleLabel[h.role] || h.role || ''];
             xPos = startX;
             rowData.forEach((val, i) => {
