@@ -122,6 +122,103 @@
             padding: 40px;
             color: #666;
         }
+
+        /* --- Helfer bearbeiten --- */
+        .edit-helpers-container {
+            max-width: 600px;
+            margin: 0 auto 40px;
+            padding: 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .edit-helpers-container h2 {
+            color: #005A9F;
+            margin-bottom: 16px;
+        }
+
+        .helper-list-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .helper-list-table th {
+            background: #f0f4f8;
+            color: #333;
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .helper-list-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+
+        .helper-list-table tr:hover td {
+            background: #f9f9f9;
+        }
+
+        .btn-edit {
+            padding: 5px 12px;
+            background: #005A9F;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-edit:hover {
+            background: #004080;
+        }
+
+        /* Edit modal */
+        #edit-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #edit-modal .modal-box {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 480px;
+            width: 90%;
+        }
+
+        #edit-modal h2 {
+            margin-top: 0;
+            color: #005A9F;
+        }
+
+        #edit-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 14px;
+            display: none;
+        }
+
+        #edit-message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+
+        #edit-message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #81c784;
+        }
     </style>
 </head>
 <body>
@@ -195,6 +292,59 @@
         </div>
     </div>
 </main>
+
+<!-- Helfer bearbeiten -->
+<div id="edit-helpers-section" style="display:none;">
+    <div class="edit-helpers-container">
+        <h2>Bestehende Helfer bearbeiten</h2>
+        <div id="helpers-list-loading" style="color:#666; padding: 16px 0;">Lade Helferliste...</div>
+        <table class="helper-list-table" id="helpers-list-table" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Team</th>
+                    <th>Rolle</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="helpers-list-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+    <div class="modal-box">
+        <h2>Helfer bearbeiten</h2>
+        <div id="edit-message"></div>
+        <form id="edit-helper-form">
+            <input type="hidden" id="edit-helper-id">
+            <div class="form-group">
+                <label for="edit-helper-name">Name *</label>
+                <input type="text" id="edit-helper-name" required maxlength="255">
+            </div>
+            <div class="form-group">
+                <label for="edit-helper-team">Team *</label>
+                <select id="edit-helper-team" required>
+                    <option value="">Team auswählen...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="edit-helper-role">Rolle *</label>
+                <select id="edit-helper-role" required>
+                    <option value="">Rolle auswählen...</option>
+                    <option value="Minderjaehrig">Minderjährig</option>
+                    <option value="Erwachsen">Erwachsen</option>
+                    <option value="Orga">Orga</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" id="edit-cancel-btn">Abbrechen</button>
+                <button type="submit" class="btn btn-primary" id="edit-save-btn">Speichern</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Authentication Modal -->
 <div id="auth-modal" style="display:none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
@@ -296,6 +446,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // User is authenticated and has editor/admin rights
             authCheck.style.display = 'none';
             formContainer.style.display = 'block';
+            document.getElementById('edit-helpers-section').style.display = 'block';
             return true;
         } catch (err) {
             console.error('Auth check failed:', err);
@@ -466,7 +617,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (currentUser.is_editor || currentUser.is_admin) {
                     authCheck.style.display = 'none';
                     formContainer.style.display = 'block';
+                    document.getElementById('edit-helpers-section').style.display = 'block';
                     await loadTeams();
+                    await loadHelpersList();
                 } else {
                     alert('Sie wurden angemeldet, haben aber noch keine Schreibrechte. Bitte kontaktieren Sie einen Administrator.');
                 }
@@ -496,6 +649,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Show auth required message
         authCheck.style.display = 'block';
         formContainer.style.display = 'none';
+        document.getElementById('edit-helpers-section').style.display = 'none';
         authCheck.innerHTML = `
             <div class="auth-warning">
                 <strong>Anmeldung erforderlich</strong>
@@ -518,12 +672,146 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (authModal) authModal.addEventListener('click', (e) => { if (e.target === authModal) authModal.style.display = 'none'; });
     }
     
+    // --- Edit helper functionality ---
+    let allHelpers = [];
+    let allTeams = [];
+
+    async function loadHelpersList() {
+        try {
+            const [helpersRes, teamsRes] = await Promise.all([
+                fetch(`${API_URL}/helpers`, { credentials: 'include', headers: { ...getAuthHeaders() } }),
+                fetch(`${API_URL}/teams`, { credentials: 'include' })
+            ]);
+            allHelpers = await helpersRes.json();
+            allTeams = await teamsRes.json();
+
+            // Populate edit modal team dropdown
+            const editTeamSelect = document.getElementById('edit-helper-team');
+            editTeamSelect.innerHTML = '<option value="">Team auswählen...</option>';
+            allTeams.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.name;
+                editTeamSelect.appendChild(opt);
+            });
+
+            renderHelpersList();
+        } catch (err) {
+            console.error('Fehler beim Laden der Helferliste:', err);
+            document.getElementById('helpers-list-loading').textContent = 'Fehler beim Laden der Helferliste.';
+        }
+    }
+
+    function renderHelpersList() {
+        const tbody = document.getElementById('helpers-list-body');
+        const loading = document.getElementById('helpers-list-loading');
+        const table = document.getElementById('helpers-list-table');
+
+        tbody.innerHTML = '';
+        if (!allHelpers.length) {
+            loading.textContent = 'Keine Helfer vorhanden.';
+            return;
+        }
+        loading.style.display = 'none';
+        table.style.display = '';
+
+        const roleLabel = { Minderjaehrig: 'Minderjährig', Erwachsen: 'Erwachsen', Orga: 'Orga' };
+
+        allHelpers.forEach(h => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escapeHtml(h.name)}</td>
+                <td>${escapeHtml(h.team_name || '')}</td>
+                <td>${escapeHtml(roleLabel[h.role] || h.role)}</td>
+                <td><button class="btn-edit" data-id="${h.id}">Bearbeiten</button></td>
+            `;
+            tr.querySelector('.btn-edit').addEventListener('click', () => openEditModal(h));
+            tbody.appendChild(tr);
+        });
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function openEditModal(helper) {
+        document.getElementById('edit-helper-id').value = helper.id;
+        document.getElementById('edit-helper-name').value = helper.name;
+        document.getElementById('edit-helper-team').value = helper.team_id;
+        document.getElementById('edit-helper-role').value = helper.role;
+        const msg = document.getElementById('edit-message');
+        msg.style.display = 'none';
+        msg.className = '';
+        document.getElementById('edit-modal').style.display = 'flex';
+    }
+
+    function closeEditModal() {
+        document.getElementById('edit-modal').style.display = 'none';
+    }
+
+    document.getElementById('edit-cancel-btn').addEventListener('click', closeEditModal);
+    document.getElementById('edit-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('edit-modal')) closeEditModal();
+    });
+
+    document.getElementById('edit-helper-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('edit-helper-id').value;
+        const name = document.getElementById('edit-helper-name').value.trim();
+        const teamId = document.getElementById('edit-helper-team').value;
+        const role = document.getElementById('edit-helper-role').value;
+        const msg = document.getElementById('edit-message');
+        const saveBtn = document.getElementById('edit-save-btn');
+
+        if (!name || !teamId || !role) {
+            msg.textContent = 'Bitte alle Pflichtfelder ausfüllen.';
+            msg.className = 'error';
+            msg.style.display = 'block';
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Wird gespeichert...';
+
+        try {
+            const res = await fetch(`${API_URL}/helpers/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                credentials: 'include',
+                body: JSON.stringify({ name, team_id: parseInt(teamId), role })
+            });
+
+            if (res.ok) {
+                msg.textContent = `Helfer "${name}" wurde erfolgreich aktualisiert.`;
+                msg.className = 'success';
+                msg.style.display = 'block';
+                // Update local list
+                await loadHelpersList();
+                setTimeout(closeEditModal, 1500);
+            } else {
+                const err = await res.json().catch(() => ({ error: 'Unbekannter Fehler' }));
+                msg.textContent = err.error || 'Fehler beim Speichern.';
+                msg.className = 'error';
+                msg.style.display = 'block';
+            }
+        } catch (err) {
+            console.error('Fehler beim Bearbeiten:', err);
+            msg.textContent = 'Verbindungsfehler beim Speichern.';
+            msg.className = 'error';
+            msg.style.display = 'block';
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Speichern';
+        }
+    });
+
     // Initialize
     setupAuthListeners();
     
     const isAuthenticated = await checkAuth();
     if (isAuthenticated) {
         await loadTeams();
+        await loadHelpersList();
         // Get the current user data
         try {
             const response = await fetch(`${API_URL}/current-user`, {

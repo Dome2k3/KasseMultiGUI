@@ -630,6 +630,63 @@ app.post('/api/helpers', attachUser, requireEditor, async (req, res) => {
     }
 });
 
+// Helfer bearbeiten
+app.put('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: 'Ungültige Helfer-ID.' });
+
+        const { name, team_id, role } = req.body;
+        if (!name || !team_id || !role) return res.status(400).json({ error: 'Name, Team-ID und Rolle sind erforderlich.' });
+        const validRoles = ['Minderjaehrig', 'Erwachsen', 'Orga'];
+        if (!validRoles.includes(role)) return res.status(400).json({ error: 'Ungültige Rolle.' });
+
+        const trimmed = String(name).trim();
+
+        // Check for name collision with another helper
+        const [existing] = await pool.query(
+            "SELECT COUNT(*) as cnt FROM helferplan_helpers WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id <> ?;",
+            [trimmed, id]
+        );
+        const cnt = existing && existing[0] ? Number(existing[0].cnt || existing[0].CNT || existing[0].Cnt || 0) : 0;
+        if (cnt > 0) return res.status(409).json({ error: 'Name schon belegt.' });
+
+        // Fetch before state for audit log
+        const [beforeRows] = await pool.query("SELECT * FROM helferplan_helpers WHERE id = ?;", [id]);
+        if (beforeRows.length === 0) return res.status(404).json({ error: 'Helfer nicht gefunden.' });
+        const before = beforeRows[0];
+
+        await pool.query(
+            "UPDATE helferplan_helpers SET name = ?, team_id = ?, role = ? WHERE id = ?;",
+            [trimmed, team_id, role, id]
+        );
+
+        const after = { id, name: trimmed, team_id: Number(team_id), role };
+
+        await logAudit({
+            userId: req.currentUser.id,
+            actorName: req.currentUser.display_name,
+            action: 'UPDATE',
+            tableName: 'helferplan_helpers',
+            rowId: id,
+            before,
+            after,
+            req
+        });
+
+        res.json(after);
+    } catch (err) {
+        if (err && err.errno === 1452) {
+            return res.status(400).json({ error: `Team mit der ID ${req.body.team_id} existiert nicht.` });
+        }
+        if (err && (err.errno === 1062 || err.code === 'ER_DUP_ENTRY')) {
+            return res.status(409).json({ error: 'Name schon belegt.' });
+        }
+        console.error('DB-Fehler PUT /api/helpers/:id', err);
+        res.status(500).json({ error: 'DB-Fehler beim Bearbeiten des Helfers' });
+    }
+});
+
 // Helfer löschen
 app.delete('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
     try {
