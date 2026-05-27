@@ -64,14 +64,24 @@
         }
         .plan-layout { display: block; }
 
-        #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; }
+        #plan-container { overflow-x: auto; flex: 1 1 auto; position: relative; direction: ltr; }
+        /* Duplicate scrollbar at top of plan container via rotated wrapper */
+        .plan-scroll-top {
+            overflow-x: auto;
+            overflow-y: hidden;
+            height: 16px;
+            margin-bottom: -1px;
+        }
+        .plan-scroll-top-inner {
+            height: 1px;
+        }
         #timeline-header { position: sticky; top: 0; background: #fff; z-index: 10; display:block; }
 
         /* wichtig: alle relevant boxen box-sizing border-box */
         #timeline-header, #grid-container, .hour-slot, .shift-slot, .activity-name { box-sizing: border-box; }
 
         .hour-slot { font-size:12px; padding:4px 6px; text-align:center; background:#fafafa; }
-        .shift-slot { font-size:12px; padding:6px; min-height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: transform .08s, outline .08s; }
+        .shift-slot { font-size:12px; padding:4px 6px; min-height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition: transform .08s, outline .08s; }
 
         .team-item .team-color { padding:6px 8px; border-radius:6px; color:#fff; font-weight:600; display:inline-block; white-space:nowrap; transition: transform 0.1s, box-shadow 0.1s; }
         .team-item .team-color:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
@@ -92,9 +102,9 @@
             position: sticky;
             left: 0;
             z-index: 5;
-            padding: 8px;
+            padding: 4px 8px;
             border-right: 1px solid #e6e6e6;
-            min-height: 36px;
+            min-height: 28px;
             display:flex;
             align-items:center;
             font-weight:600;
@@ -220,6 +230,7 @@
     </div>
     
     <div class="plan-layout">
+        <div class="plan-scroll-top" id="plan-scroll-top"><div class="plan-scroll-top-inner"></div></div>
         <div id="plan-container">
             <div id="timeline-header" aria-hidden="true"></div>
             <div id="grid-container" role="grid"></div>

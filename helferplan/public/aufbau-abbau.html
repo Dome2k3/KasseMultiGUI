@@ -33,6 +33,16 @@
             overflow-x: auto;
             padding-bottom: 20px;
         }
+        .setup-scroll-top {
+            overflow-x: auto;
+            overflow-y: hidden;
+            height: 16px;
+            margin-bottom: -1px;
+            margin-top: 12px;
+        }
+        .setup-scroll-top-inner {
+            height: 1px;
+        }
         .day-wrapper {
             display: flex;
             flex-direction: column;
@@ -77,6 +87,8 @@
             display: flex;
             flex-direction: column;
             gap: 3px;
+            max-height: 520px;
+            overflow-y: auto;
         }
         .shift-row {
             display: flex;
@@ -176,6 +188,7 @@
         </div>
     </div>
     
+    <div class="setup-scroll-top" id="setup-scroll-top"><div class="setup-scroll-top-inner"></div></div>
     <div id="setup-container" class="setup-container">
         <!-- Days and shift columns will be generated dynamically -->
     </div>
@@ -291,21 +304,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
         
-        // Process teardown day
-        const teardownDate = settings.teardown_day_1;
-        const teardownStart = settings.teardown_day_1_start || '08:00';
-        const teardownEnd = settings.teardown_day_1_end || '20:00';
-        const teardownMin = parseInt(settings.teardown_day_1_min || 10);
-        
-        if (teardownDate) {
-            daysData.push({ 
-                type: 'Abbau', 
-                date: teardownDate, 
-                startTime: teardownStart, 
-                endTime: teardownEnd, 
-                minHelpers: teardownMin, 
-                dayNumber: 1 
-            });
+        // Process teardown days (1-2)
+        for (let i = 1; i <= 2; i++) {
+            const teardownDate = settings[`teardown_day_${i}`];
+            const teardownStart = settings[`teardown_day_${i}_start`] || '08:00';
+            const teardownEnd = settings[`teardown_day_${i}_end`] || '20:00';
+            const teardownMin = parseInt(settings[`teardown_day_${i}_min`] || 10);
+            
+            if (teardownDate) {
+                daysData.push({ 
+                    type: 'Abbau', 
+                    date: teardownDate, 
+                    startTime: teardownStart, 
+                    endTime: teardownEnd, 
+                    minHelpers: teardownMin, 
+                    dayNumber: i 
+                });
+            }
         }
         
         // Render all days
@@ -350,7 +365,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const dayHeader = document.createElement('div');
         dayHeader.className = 'day-header';
-        dayHeader.textContent = `${weekday} ${dateStr} - ${type}${type === 'Aufbau' ? ' Tag ' + dayNumber : ''}`;
+        dayHeader.textContent = `${weekday} ${dateStr} - ${type} Tag ${dayNumber}`;
         dayWrapper.appendChild(dayHeader);
         
         // Create container for shift columns
@@ -597,9 +612,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     viewTeamFilter.addEventListener('change', applyViewFilter);
     helperTeamFilter.addEventListener('change', renderDays);
     
+    // Top scrollbar sync for horizontal scroll
+    function setupScrollSync() {
+        const scrollTop = document.getElementById('setup-scroll-top');
+        const scrollTopInner = scrollTop ? scrollTop.querySelector('.setup-scroll-top-inner') : null;
+        if (!scrollTop || !scrollTopInner) return;
+        scrollTopInner.style.width = container.scrollWidth + 'px';
+
+        let syncing = false;
+        scrollTop.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            container.scrollLeft = scrollTop.scrollLeft;
+            syncing = false;
+        });
+        container.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            scrollTop.scrollLeft = container.scrollLeft;
+            syncing = false;
+        });
+    }
+
     // Initial load
     await loadData();
     renderDays();
+    setupScrollSync();
 });
 </script>
 </body>

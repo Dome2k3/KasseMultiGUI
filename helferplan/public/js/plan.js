@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let validSlotStartsCache = {}; // {activityId: Map<hourIndex, duration>} – computed from allowedTimeBlocks
     let currentUser = null; // Current authenticated user
     let currentActivity = null; // Activity associated with the currently open modal
+    let eventSettings = {}; // Loaded settings (event_friday, event_saturday, event_sunday etc.)
 
     // Token helpers for localStorage fallback (for browsers that block cookies, e.g. Chrome iOS)
     function getStoredToken() {
@@ -461,6 +462,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateTimeline() {
         const hoursCountByDay = [12, 24, 18];
         const days = ['Freitag','Samstag','Sonntag'];
+        // Append date from settings if available
+        const dateKeys = ['event_friday', 'event_saturday', 'event_sunday'];
+        const dayLabels = days.map((name, idx) => {
+            const dateVal = eventSettings[dateKeys[idx]];
+            if (dateVal) {
+                const d = new Date(dateVal + 'T00:00:00');
+                const dateStr = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                return `${name}, ${dateStr}`;
+            }
+            return name;
+        });
         const totalHours = hoursCountByDay.reduce((a,b)=>a+b,0);
         const gridTemplateColumns = `${LEFT_COL_PX}px repeat(${totalHours}, ${HOUR_PX}px)`;
 
@@ -494,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dh.style.gridColumn = `${offset+1} / ${offset+1+count}`;
             dh.style.textAlign = 'center';
             dh.style.padding = '6px 0';
-            dh.textContent = days[idx] || '';
+            dh.textContent = dayLabels[idx] || '';
             daysWrapper.appendChild(dh);
             offset += count;
         });
@@ -1173,12 +1185,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
+    // --- Top Scrollbar Sync ---
+    function setupTopScrollbar() {
+        const planContainer = document.getElementById('plan-container');
+        const scrollTop = document.getElementById('plan-scroll-top');
+        const scrollTopInner = scrollTop ? scrollTop.querySelector('.plan-scroll-top-inner') : null;
+        if (!scrollTop || !scrollTopInner || !planContainer) return;
+
+        // Match the inner width to the scroll width of the plan container
+        scrollTopInner.style.width = planContainer.scrollWidth + 'px';
+
+        let syncing = false;
+        scrollTop.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            planContainer.scrollLeft = scrollTop.scrollLeft;
+            syncing = false;
+        });
+        planContainer.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            scrollTop.scrollLeft = planContainer.scrollLeft;
+            syncing = false;
+        });
+    }
+
     // --- Initialization ---
     async function init() {
         try {
             const sres = await fetch(`${API_URL_HELFERPLAN}/settings`);
             if (sres.ok) {
                 const settings = await sres.json();
+                eventSettings = settings;
                 if (settings.event_friday) EVENT_START_DATE = `${settings.event_friday}T12:00:00Z`;
             }
         } catch (e) {
@@ -1206,6 +1244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await fetchAndRenderAllShifts();
         setupModalListeners();
         setupAuthListeners();
+        setupTopScrollbar();
 
         planTeamFilter.addEventListener('change', () => { renderHelperPool(); updateTeamLegendActiveState(); });
         viewTeamFilter.addEventListener('change', () => applyViewFilter());

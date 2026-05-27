@@ -83,6 +83,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const teardownDay1Start = document.getElementById('teardown-day-1-start');
     const teardownDay1End = document.getElementById('teardown-day-1-end');
     const teardownDay1Min = document.getElementById('teardown-day-1-min');
+    const teardownDay2 = document.getElementById('teardown-day-2');
+    const teardownDay2Start = document.getElementById('teardown-day-2-start');
+    const teardownDay2End = document.getElementById('teardown-day-2-end');
+    const teardownDay2Min = document.getElementById('teardown-day-2-min');
     const saveAufbauSettingsButton = document.getElementById('save-aufbau-settings-button');
 
     // Kuchen settings inputs
@@ -585,6 +589,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (settings.teardown_day_1_start) teardownDay1Start.value = extractHour(settings.teardown_day_1_start);
             if (settings.teardown_day_1_end) teardownDay1End.value = extractHour(settings.teardown_day_1_end);
             if (settings.teardown_day_1_min) teardownDay1Min.value = settings.teardown_day_1_min;
+            if (settings.teardown_day_2) teardownDay2.value = settings.teardown_day_2;
+            if (settings.teardown_day_2_start) teardownDay2Start.value = extractHour(settings.teardown_day_2_start);
+            if (settings.teardown_day_2_end) teardownDay2End.value = extractHour(settings.teardown_day_2_end);
+            if (settings.teardown_day_2_min) teardownDay2Min.value = settings.teardown_day_2_min;
             
             // Cake counts
             if (settings.cakes_friday) cakesFriday.value = settings.cakes_friday;
@@ -650,7 +658,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 teardown_day_1: teardownDay1.value || '',
                 teardown_day_1_start: formatHour(teardownDay1Start.value),
                 teardown_day_1_end: formatHour(teardownDay1End.value),
-                teardown_day_1_min: teardownDay1Min.value || '10'
+                teardown_day_1_min: teardownDay1Min.value || '10',
+                teardown_day_2: teardownDay2.value || '',
+                teardown_day_2_start: formatHour(teardownDay2Start.value),
+                teardown_day_2_end: formatHour(teardownDay2End.value),
+                teardown_day_2_min: teardownDay2Min.value || '10'
             };
             const res = await fetch(`${API_URL}/settings`, {
                 method: 'POST',
@@ -997,6 +1009,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const startTime = settings.teardown_day_1_start || '08:00';
             const endTime = settings.teardown_day_1_end || '20:00';
             daysData.push({ type: 'Abbau', date: teardownDate, startTime, endTime, dayNumber: 1 });
+        }
+        const teardownDate2 = settings.teardown_day_2;
+        if (teardownDate2) {
+            const startTime = settings.teardown_day_2_start || '08:00';
+            const endTime = settings.teardown_day_2_end || '20:00';
+            daysData.push({ type: 'Abbau', date: teardownDate2, startTime, endTime, dayNumber: 2 });
         }
         
         // Render each day
