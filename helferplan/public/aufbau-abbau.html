@@ -466,6 +466,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 helperName.title = `Klicken zum Ändern/Entfernen`;
                 helperName.style.cursor = 'pointer';
                 helperName.addEventListener('click', () => {
+                    if (!confirm(`"${helper.name}" wirklich aus diesem Slot entfernen?`)) {
+                        return;
+                    }
                     // Clear the shift and show dropdown
                     row.removeChild(helperName);
                     const select = createHelperSelect(type, date, shiftStartHour, slotIndex, minHelpers, null);
