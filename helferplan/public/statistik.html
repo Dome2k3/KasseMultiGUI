@@ -354,6 +354,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const avgShiftsPerHelper = totalHelpers > 0 ? (totalShifts / totalHelpers).toFixed(1) : '0';
         const avgHoursPerHelper = totalHelpers > 0 ? (totalHours / totalHelpers).toFixed(1) : '0';
         const totalCakes = statsData.total_cakes || 0;
+        const openTournamentShifts = statsData.open_tournament_shifts || 0;
         
         kpiSection.innerHTML = `
             <div class="kpi-card">
@@ -367,6 +368,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="kpi-card">
                 <h3>Gesamtschichten</h3>
                 <div class="kpi-value">${totalShifts}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Offene Schichten</h3>
+                <div class="kpi-value">${openTournamentShifts}</div>
             </div>
             <div class="kpi-card">
                 <h3>Gesamtstunden</h3>
