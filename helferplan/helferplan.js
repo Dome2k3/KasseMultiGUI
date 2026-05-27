@@ -38,7 +38,6 @@ const SESSION_EXPIRY = '24h'; // JWT token validity
 
 // Time constants
 const MS_PER_HOUR = 1000 * 60 * 60; // milliseconds in one hour
-const TOTAL_TOURNAMENT_HOURS = 54; // Fr 12:00 bis So 18:00
 const TOURNAMENT_TOTAL_HOURS = 54;
 
 // --- 3b. Sicherstellen, dass Settings-Tabelle existiert ---
@@ -1680,7 +1679,7 @@ app.get('/api/statistics', async (req, res) => {
                 segmentRoleRequirement = null;
             };
 
-            for (let hour = 0; hour < TOTAL_TOURNAMENT_HOURS; hour += 1) {
+            for (let hour = 0; hour < TOURNAMENT_TOTAL_HOURS; hour += 1) {
                 const slotRule = SlotRules.getShiftRule(activity, hour, {
                     endHourIndex: hour + 1,
                     duration: 1,
@@ -1706,7 +1705,7 @@ app.get('/api/statistics', async (req, res) => {
                 }
             }
 
-            flushSegment(TOTAL_TOURNAMENT_HOURS);
+            flushSegment(TOURNAMENT_TOTAL_HOURS);
             return sum + openSlotsForActivity;
         }, 0);
         
