@@ -396,6 +396,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Add change listener
         select.addEventListener('change', async (e) => {
             const newHelperId = e.target.value;
+            // Confirmation before removing an assigned helper
+            if (!newHelperId && selectedHelperId) {
+                const helper = helperById[selectedHelperId];
+                const name = helper ? helper.name : 'diese Person';
+                if (!confirm(`"${name}" wirklich entfernen?`)) {
+                    select.value = selectedHelperId;
+                    return;
+                }
+            }
             // Get current cake type and nuts value from the row
             const row = select.closest('.cake-row');
             const cakeTypeInput = row.querySelector('.cake-type-input');

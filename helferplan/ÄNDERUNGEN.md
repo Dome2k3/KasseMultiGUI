@@ -215,6 +215,7 @@ Alle Anforderungen wurden vollständig implementiert:
 - ✅ Gut dokumentiert und annotiert
 - ✅ Zeitblock-Validierung korrigiert (Dezember 2024)
 - ✅ Changelog-Einträge bereinigt (April 2026)
+- ✅ Rückfrage vor dem Entfernen von Personen in aufbau-abbau.html und kuchen.html (Mai 2026)
 
 ## 10. Zeitstempel-Protokoll (letzte Helferplan-Patches)
 
@@ -234,3 +235,4 @@ Alle Anforderungen wurden vollständig implementiert:
 | 2026-05-26T09:47:00Z | **Feature** `changelog.html`: Jeder Eintrag zeigt jetzt ein Badge mit dem betroffenen Datensatz-Namen und der ID (z.B. `Max Müller (ID: 42)`). Schicht-Einträge lösen den Helfernamen auf, Settings-Einträge den lesbaren Schlüsselnamen. `escapeHtml` für sichere HTML-Ausgabe ergänzt. |
 | 2026-05-26T09:47:00Z | **Feature** `index.html` + `main.js`: Zwei neue PDF-Export-Typen ergänzt: „Alle Helfer" (tabellarische Liste, nach Team filterbar) und „Statistik: Admins / Editoren" (Tabelle mit Name, E-Mail, Editor/Admin-Status, letzter Aktivität). |
 | 2026-05-26T09:47:00Z | **Feature** `plan.html` + `plan.js`: Team-Farbbadges in der Teams-Legende sind jetzt anklickbar und filtern den Helfer-Pool direkt. Aktives Team erhält einen blauen Highlight-Ring (via `data-teamId`). Hover-Animation und Hinweis „(anklicken zum Filtern)" in der Überschrift ergänzt. |
+| 2026-05-27T10:30:00Z | **Feature** `aufbau-abbau.html` + `kuchen.html`: Rückfrage vor dem Entfernen einer Person eingebaut. In `aufbau-abbau.html` erscheint ein Bestätigungs-Dialog bevor ein Helfer per Klick auf den Namensbadge aus einem Slot entfernt wird. In `kuchen.html` erscheint der Dialog, wenn im Bearbeitungs-Dropdown die Option „-- Helfer wählen --" gewählt wird (um versehentliches Entfernen bei großen Listen zu verhindern). |
