@@ -185,6 +185,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         return `${window.location.origin}/api`;
     })();
     
+    // Token helpers for localStorage fallback (for browsers that block cookies)
+    function getStoredToken() {
+        try { return localStorage.getItem('hp_session_token'); } catch(e) { return null; }
+    }
+    function getAuthHeaders() {
+        const token = getStoredToken();
+        if (!token) return {};
+        return { 'Authorization': 'Bearer ' + token };
+    }
+
     const container = document.getElementById('cakes-container');
     const viewTeamFilter = document.getElementById('view-team-filter');
     const helperTeamFilter = document.getElementById('helper-team-filter');
@@ -411,7 +421,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             const response = await fetch(`${API_URL}/cakes`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify(payload),
                 credentials: 'include'
             });
