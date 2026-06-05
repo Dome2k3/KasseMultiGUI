@@ -368,6 +368,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const avgHoursPerHelper = totalHelpers > 0 ? (totalHours / totalHelpers).toFixed(1) : '0';
         const openTournamentShifts = statsData.open_tournament_shifts || 0;
         const openSetupCleanupShifts = statsData.open_setup_cleanup_shifts || 0;
+        const totalCakes = statsData.total_cakes || 0;
 
         const pufferHint = statsData.has_puffer_activities
             ? `<p class="puffer-hint"><span aria-label="Hinweis">ℹ️</span> <strong>Hinweis:</strong> Schichten, die als <em>Puffer</em> benannt sind, werden in der Statistik nicht mitgezählt.</p>`
@@ -406,6 +407,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="kpi-card">
                 <h3>Ø Stunden/Helfer</h3>
                 <div class="kpi-value">${avgHoursPerHelper}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Summe Kuchen</h3>
+                <div class="kpi-value">${totalCakes}</div>
             </div>
         `;
     }
