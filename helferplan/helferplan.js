@@ -1592,6 +1592,15 @@ app.delete('/api/cakes/:id', attachUser, requireEditor, async (req, res) => {
 // GET: Statistik-Daten
 app.get('/api/statistics', async (req, res) => {
     try {
+        const eventFridaySetting = await safeQuery(`
+            SELECT setting_value
+            FROM helferplan_settings
+            WHERE setting_key = 'event_friday'
+            LIMIT 1
+        `);
+        const eventFriday = eventFridaySetting[0]?.setting_value || '2024-07-19';
+        const eventStartDate = new Date(`${eventFriday}T12:00:00Z`);
+
         // Get all helpers with their teams
         const helpers = await safeQuery(`
             SELECT h.id, h.name, h.team_id, h.role, t.name as team_name, t.color_hex
@@ -1599,10 +1608,16 @@ app.get('/api/statistics', async (req, res) => {
             LEFT JOIN helferplan_teams t ON h.team_id = t.id
             ORDER BY t.name, h.name
         `);
+
+        const activities = await safeQuery(`
+            SELECT id, role_requirement, allowed_time_blocks
+            FROM helferplan_activities
+        `);
         
         // Get tournament shifts (Plan)
         const tournamentShifts = await safeQuery(`
             SELECT 
+                ts.activity_id,
                 ts.helper_id,
                 ts.start_time,
                 ts.end_time
@@ -1628,6 +1643,71 @@ app.get('/api/statistics', async (req, res) => {
             WHERE helper_id IS NOT NULL
         `);
         const totalCakes = cakeCountResult[0]?.total_cakes || 0;
+
+        const assignedTournamentSlots = new Set(
+            tournamentShifts.map(shift => {
+                const shiftStart = new Date(shift.start_time);
+                const hourIndex = Math.round((shiftStart - eventStartDate) / MS_PER_HOUR);
+                return `${shift.activity_id}:${hourIndex}`;
+            })
+        );
+
+        const openTournamentShifts = activities.reduce((sum, activity) => {
+            const baseRoleRequirement = activity.role_requirement || SlotRules.DEFAULT_ROLE;
+            const coverageBlocks = activity.allowed_time_blocks
+                ? SlotRules.normalizeCoverageBlocks(JSON.parse(activity.allowed_time_blocks), baseRoleRequirement)
+                : [];
+
+            let openSlotsForActivity = 0;
+            let segmentStart = null;
+            let segmentRoleRequirement = null;
+
+            const flushSegment = (endExclusive) => {
+                if (segmentStart === null) return;
+
+                let pos = segmentStart;
+                while (pos < endExclusive) {
+                    const remaining = endExclusive - pos;
+                    const duration = remaining >= 2 ? 2 : 1;
+                    if (!assignedTournamentSlots.has(`${activity.id}:${pos}`)) {
+                        openSlotsForActivity += 1;
+                    }
+                    pos += duration;
+                }
+
+                segmentStart = null;
+                segmentRoleRequirement = null;
+            };
+
+            for (let hour = 0; hour < TOURNAMENT_TOTAL_HOURS; hour += 1) {
+                const slotRule = SlotRules.getShiftRule(activity, hour, {
+                    endHourIndex: hour + 1,
+                    duration: 1,
+                    coverageBlocks,
+                    eventStartHour: SlotRules.EVENT_START_HOUR
+                });
+
+                if (!slotRule.isNeeded) {
+                    flushSegment(hour);
+                    continue;
+                }
+
+                if (segmentStart === null) {
+                    segmentStart = hour;
+                    segmentRoleRequirement = slotRule.roleRequirement;
+                    continue;
+                }
+
+                if (slotRule.roleRequirement !== segmentRoleRequirement) {
+                    flushSegment(hour);
+                    segmentStart = hour;
+                    segmentRoleRequirement = slotRule.roleRequirement;
+                }
+            }
+
+            flushSegment(TOURNAMENT_TOTAL_HOURS);
+            return sum + openSlotsForActivity;
+        }, 0);
         
         // Calculate statistics per helper
         const helperStats = helpers.map(helper => {
@@ -1694,7 +1774,8 @@ app.get('/api/statistics', async (req, res) => {
             helper_stats: helperStats,
             shift_distribution: shiftDistribution,
             total_helpers: helpers.length,
-            total_cakes: totalCakes
+            total_cakes: totalCakes,
+            open_tournament_shifts: openTournamentShifts
         });
     } catch (err) {
         console.error('DB-Fehler GET /api/statistics', err);
