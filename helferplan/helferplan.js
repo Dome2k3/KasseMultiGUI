@@ -1610,9 +1610,15 @@ app.get('/api/statistics', async (req, res) => {
         `);
 
         const activities = await safeQuery(`
-            SELECT id, role_requirement, allowed_time_blocks
+            SELECT id, name, role_requirement, allowed_time_blocks
             FROM helferplan_activities
         `);
+
+        // Puffer-Aktivitäten werden in der Statistik nicht mitgezählt
+        const pufferActivityIds = new Set(
+            activities.filter(a => a.name && a.name.toLowerCase().includes('puffer')).map(a => a.id)
+        );
+        const hasPufferActivities = pufferActivityIds.size > 0;
         
         // Get tournament shifts (Plan)
         const tournamentShifts = await safeQuery(`
@@ -1644,15 +1650,31 @@ app.get('/api/statistics', async (req, res) => {
         `);
         const totalCakes = cakeCountResult[0]?.total_cakes || 0;
 
+        // Count open setup/cleanup shifts (Auf-/Abbau-Slots ohne Helfer)
+        const openSetupCleanupResult = await safeQuery(`
+            SELECT COUNT(*) as open_count
+            FROM helferplan_setup_cleanup_shifts
+            WHERE helper_id IS NULL
+        `);
+        const openSetupCleanupShifts = openSetupCleanupResult[0]?.open_count || 0;
+
+        // Nur Nicht-Puffer-Schichten für Statistik verwenden
+        const nonPufferTournamentShifts = tournamentShifts.filter(
+            shift => !pufferActivityIds.has(shift.activity_id)
+        );
+
         const assignedTournamentSlots = new Set(
-            tournamentShifts.map(shift => {
+            nonPufferTournamentShifts.map(shift => {
                 const shiftStart = new Date(shift.start_time);
                 const hourIndex = Math.round((shiftStart - eventStartDate) / MS_PER_HOUR);
                 return `${shift.activity_id}:${hourIndex}`;
             })
         );
 
-        const openTournamentShifts = activities.reduce((sum, activity) => {
+        // Puffer-Aktivitäten aus der Berechnung offener Turnierschichten ausschließen
+        const nonPufferActivities = activities.filter(a => !pufferActivityIds.has(a.id));
+
+        const openTournamentShifts = nonPufferActivities.reduce((sum, activity) => {
             const baseRoleRequirement = activity.role_requirement || SlotRules.DEFAULT_ROLE;
             const coverageBlocks = activity.allowed_time_blocks
                 ? SlotRules.normalizeCoverageBlocks(JSON.parse(activity.allowed_time_blocks), baseRoleRequirement)
@@ -1711,9 +1733,13 @@ app.get('/api/statistics', async (req, res) => {
         
         // Calculate statistics per helper
         const helperStats = helpers.map(helper => {
+            // Nur Nicht-Puffer-Schichten zählen
+            const helperTournamentShifts = nonPufferTournamentShifts.filter(
+                shift => shift.helper_id === helper.id
+            );
+
             // Calculate tournament shift hours
-            const tournamentHours = tournamentShifts
-                .filter(shift => shift.helper_id === helper.id)
+            const tournamentHours = helperTournamentShifts
                 .reduce((sum, shift) => {
                     const start = new Date(shift.start_time);
                     const end = new Date(shift.end_time);
@@ -1722,8 +1748,7 @@ app.get('/api/statistics', async (req, res) => {
                 }, 0);
             
             // Count tournament shifts
-            const tournamentShiftCount = tournamentShifts
-                .filter(shift => shift.helper_id === helper.id).length;
+            const tournamentShiftCount = helperTournamentShifts.length;
             
             // Calculate setup/cleanup shift hours
             const setupCleanupHours = setupCleanupShifts
@@ -1775,7 +1800,9 @@ app.get('/api/statistics', async (req, res) => {
             shift_distribution: shiftDistribution,
             total_helpers: helpers.length,
             total_cakes: totalCakes,
-            open_tournament_shifts: openTournamentShifts
+            open_tournament_shifts: openTournamentShifts,
+            open_setup_cleanup_shifts: openSetupCleanupShifts,
+            has_puffer_activities: hasPufferActivities
         });
     } catch (err) {
         console.error('DB-Fehler GET /api/statistics', err);

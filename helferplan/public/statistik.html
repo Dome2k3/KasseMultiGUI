@@ -192,6 +192,17 @@
                 grid-template-columns: 1fr;
             }
         }
+        
+        .puffer-hint {
+            grid-column: 1 / -1;
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 6px;
+            padding: 10px 16px;
+            margin: 0;
+            font-size: 14px;
+            color: #5d4037;
+        }
     </style>
 </head>
 <body>
@@ -349,29 +360,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         const totalHelpers = filteredStats.length;
-        const totalShifts = filteredStats.reduce((sum, h) => sum + h.total_shifts, 0);
+        const totalPlanShifts = filteredStats.reduce((sum, h) => sum + h.plan_shifts, 0);
+        const totalSetupShifts = filteredStats.reduce((sum, h) => sum + h.setup_cleanup_shifts, 0);
+        const totalShifts = totalPlanShifts + totalSetupShifts;
         const totalHours = filteredStats.reduce((sum, h) => sum + h.total_hours, 0);
         const avgShiftsPerHelper = totalHelpers > 0 ? (totalShifts / totalHelpers).toFixed(1) : '0';
         const avgHoursPerHelper = totalHelpers > 0 ? (totalHours / totalHelpers).toFixed(1) : '0';
-        const totalCakes = statsData.total_cakes || 0;
         const openTournamentShifts = statsData.open_tournament_shifts || 0;
+        const openSetupCleanupShifts = statsData.open_setup_cleanup_shifts || 0;
+
+        const pufferHint = statsData.has_puffer_activities
+            ? `<p class="puffer-hint">ℹ️ <strong>Hinweis:</strong> Schichten, die als <em>Puffer</em> benannt sind, werden in der Statistik nicht mitgezählt.</p>`
+            : '';
         
         kpiSection.innerHTML = `
+            ${pufferHint}
             <div class="kpi-card">
                 <h3>Anzahl Helfer</h3>
                 <div class="kpi-value">${totalHelpers}</div>
             </div>
             <div class="kpi-card">
-                <h3>Summe Kuchen</h3>
-                <div class="kpi-value">${totalCakes}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Gesamtschichten</h3>
-                <div class="kpi-value">${totalShifts}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Offene Schichten</h3>
+                <h3>Offene Schichten Turnier</h3>
                 <div class="kpi-value">${openTournamentShifts}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Offene Schichten Auf-/Abbau</h3>
+                <div class="kpi-value">${openSetupCleanupShifts}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Gesamtschichten Turnier</h3>
+                <div class="kpi-value">${totalPlanShifts}</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Gesamtschichten Auf-/Abbau</h3>
+                <div class="kpi-value">${totalSetupShifts}</div>
             </div>
             <div class="kpi-card">
                 <h3>Gesamtstunden</h3>
