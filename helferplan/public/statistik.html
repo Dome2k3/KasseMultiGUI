@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const openSetupCleanupShifts = statsData.open_setup_cleanup_shifts || 0;
 
         const pufferHint = statsData.has_puffer_activities
-            ? `<p class="puffer-hint">ℹ️ <strong>Hinweis:</strong> Schichten, die als <em>Puffer</em> benannt sind, werden in der Statistik nicht mitgezählt.</p>`
+            ? `<p class="puffer-hint"><span aria-label="Hinweis">ℹ️</span> <strong>Hinweis:</strong> Schichten, die als <em>Puffer</em> benannt sind, werden in der Statistik nicht mitgezählt.</p>`
             : '';
         
         kpiSection.innerHTML = `
