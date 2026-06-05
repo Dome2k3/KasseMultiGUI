@@ -216,6 +216,7 @@ Alle Anforderungen wurden vollständig implementiert:
 - ✅ Zeitblock-Validierung korrigiert (Dezember 2024)
 - ✅ Changelog-Einträge bereinigt (April 2026)
 - ✅ Rückfrage vor dem Entfernen von Personen in aufbau-abbau.html und kuchen.html (Mai 2026)
+- ✅ Statistik: Offene/Gesamt-Schichten für Turnier und Auf-/Abbau getrennt ausgewiesen; Puffer-Schichten ausgeschlossen mit Hinweis; Kuchen nicht in Schichtstatistik (Juni 2026)
 
 ## 10. Zeitstempel-Protokoll (letzte Helferplan-Patches)
 
@@ -241,3 +242,4 @@ Alle Anforderungen wurden vollständig implementiert:
 | 2026-05-27T15:00:00Z | **UI** `plan.html`: Scrollbalken oben am Plan-Container dupliziert (Top-Scrollbar), damit der horizontale Scroll bei großen Monitoren sofort sichtbar ist. Zeilen kompakter (28px statt 36px), um „Fenster im Fenster"-Effekt zu reduzieren. |
 | 2026-05-27T15:00:00Z | **UI** `aufbau-abbau.html`: Horizontaler Scrollbalken oben dupliziert (Top-Scrollbar) für bessere Sichtbarkeit. Slot-Liste auf max. 520px Höhe begrenzt mit eigenem vertikalen Scroll, damit der horizontale Scrollbalken auf großen Monitoren früher sichtbar ist. |
 | 2026-05-27T20:36:50Z | **Feature** `statistik.html` + `helferplan.js`: In der Helferplan-Statistik wurde die KPI „Offene Schichten“ ergänzt. Sie zeigt offene Schichten im Turnierbetrieb an und berücksichtigt bewusst kein Auf- oder Abbau. |
+| 2026-06-05T18:51:57Z | **Feature** `statistik.html` + `helferplan.js`: Offene Schichten und Gesamtschichten werden jetzt getrennt für Turnier (plan.html) und Auf-/Abbau (aufbau-abbau.html) ausgewiesen. Kuchen werden in der Schicht-Statistik nicht mitgezählt (KPI „Summe Kuchen" entfernt). Aktivitäten mit „Puffer" im Namen werden weder bei offenen noch bei belegten Turnierschichten mitgezählt; auf der Statistik-Seite erscheint ein Hinweis, wenn Puffer-Schichten vorhanden sind. |
