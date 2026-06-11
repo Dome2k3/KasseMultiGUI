@@ -16,7 +16,7 @@ const path = require('path');
 
 const PRINTER_NAME = process.env.PRINTER_NAME || 'TM-T20III';
 
-// Bon-Kennwort-Liste (zyklisch durchlaufend)
+// Bon-Rufname-Liste (zyklisch durchlaufend)
 const BON_KEYWORDS = [
     'Ass', 'Block', 'Libero', 'Schmetterball', 'Coach', 'MVP', 'Schiri', 'Champ',
     'Angriff', 'Abwehr', 'Aufschlag', 'Netzroller', 'Auszeit', 'Satzball', 'Matchball',
@@ -116,7 +116,7 @@ app.post('/finalize-bon', (req, res) => {
                 return res.status(500).json({ success: false, message: 'Fehler beim Speichern der Items' });
             }
 
-            // Bon-Kennwort für Zuordnung
+            // Bon-Rufname für Zuordnung
             const bonKeyword = getNextBonKeyword();
 
             // Bon direkt nach dem Speichern drucken
@@ -184,7 +184,7 @@ function buildCashReceiptText(bonDetails) {
     lines.push('*** Kassenbon ***');
     lines.push('');
     lines.push(`Bon Nr. ${bonDetails.id}`);
-    if (bonDetails.keyword) lines.push(`Kennwort: ${bonDetails.keyword}`);
+    if (bonDetails.keyword) lines.push(`Rufname: ${bonDetails.keyword}`);
     lines.push(`${bonDetails.timestamp}`);
     lines.push('');
     lines.push('--------------------------');
@@ -214,7 +214,7 @@ function buildKitchenReceiptText(bonDetails, kitchenItems) {
     lines.push('*** KUECHE ***');
     lines.push('');
     lines.push(`Bon Nr. ${bonDetails.id}`);
-    if (bonDetails.keyword) lines.push(`Kennwort: ${bonDetails.keyword}`);
+    if (bonDetails.keyword) lines.push(`Rufname: ${bonDetails.keyword}`);
     lines.push(`${bonDetails.timestamp}`);
     lines.push('');
     lines.push('--------------------------');
@@ -236,7 +236,7 @@ function buildFlammkuchenReceiptText(bonDetails, flammkuchenItems) {
     lines.push('*** FLAMMKUCHEN ***');
     lines.push('');
     lines.push(`Bon Nr. ${bonDetails.id}`);
-    if (bonDetails.keyword) lines.push(`Kennwort: ${bonDetails.keyword}`);
+    if (bonDetails.keyword) lines.push(`Rufname: ${bonDetails.keyword}`);
     lines.push(`${bonDetails.timestamp}`);
     lines.push('');
     lines.push('--------------------------');
