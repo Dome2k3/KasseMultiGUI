@@ -167,9 +167,8 @@ function buildCashReceiptText(bonDetails) {
     lines.push('Der Foerderverein dankt dir fuer');
     lines.push('deinen Einkauf!');
     lines.push('Save the Date:');
-    lines.push('BVT 38 - 3.-5. Juli 2026!');
-    lines.push('');
-    lines.push('');
+    lines.push('BVT 39 - 2.-4. Juli 2027!');
+    lines.push('\n\n\n\n');
     lines.push('\x1D\x56\x01'); // GS V 1 – Partial Cut
     return replaceSpecialChars(lines.join('\n'));
 }
@@ -190,8 +189,7 @@ function buildKitchenReceiptText(bonDetails, kitchenItems) {
         lines.push(`${index + 1}. ${qty}x ${item.name}`);
     });
     lines.push('--------------------------');
-    lines.push('');
-    lines.push('');
+    lines.push('\n\n\n\n');
     lines.push('\x1D\x56\x01'); // GS V 1 – Partial Cut
     return replaceSpecialChars(lines.join('\n'));
 }
@@ -212,9 +210,7 @@ function buildFlammkuchenReceiptText(bonDetails, flammkuchenItems) {
         lines.push(`${index + 1}. ${qty}x ${item.name}`);
     });
     lines.push('--------------------------');
-    lines.push('');
-    lines.push('');
-    lines.push('');
+    lines.push('\n\n\n\n');
     lines.push('\x1D\x56\x01'); // GS V 1 – Partial Cut
     return replaceSpecialChars(lines.join('\n'));
 }
@@ -224,7 +220,7 @@ function printViaCups(text, jobName) {
     return new Promise((resolve, reject) => {
         const tmpFile = path.join(os.tmpdir(), `bon-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf8');
-        const args = ['-d', PRINTER_NAME];
+        const args = ['-d', PRINTER_NAME, '-o', 'raw'];
         if (jobName) {
             args.push('-t', String(jobName));
         }
