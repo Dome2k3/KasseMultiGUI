@@ -491,11 +491,9 @@ function sendPrintRequest(bonDetails) {
             doc.setFontSize(9);
             doc.text('Der F\u00F6rderverein dankt dir f\u00FCr', center, y, { align: 'center' });
             y += 5;
-            doc.text('deinen Einkauf!', center, y, { align: 'center' });
+            doc.text('deinen Einkauf! Save the Date:', center, y, { align: 'center' });
             y += 5;
-            doc.text('Save the Date:', center, y, { align: 'center' });
-            y += 5;
-            doc.text('BVT 38 - 3.-5. Juli 2026!', center, y, { align: 'center' });
+            doc.text('BVT 39 - 2.-4. Juli 2027!', center, y, { align: 'center' });
 
             doc.save(`Bon-${bonDetails.id}.pdf`);
             console.log("Kassenbon-PDF erfolgreich erstellt");
@@ -623,15 +621,6 @@ function formatItems(receiptItems) {
         };
     }).filter(item => item !== null); // Filtert ungültige Artikel heraus
 }
-
-// Beispiel: Formatierung der `items`
-const formattedItems = formatItems(bonDetails.items);
-
-// Nun sendest du diese formatierten Items an den Server
-const bonData = {
-    totalAmount: parseFloat(bonDetails.total).toFixed(2),
-    items: formattedItems
-};
 
 // --- Funktion zum Senden des Bons an den Server ---
 function sendReceiptsToServer(bonDetails, callback) {
