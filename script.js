@@ -296,7 +296,7 @@ function finalizeBon() {
             history.push(bonDetails);
             updateHistory();
 
-            // Bon drucken (PDF + physischer Drucker)
+            // Optionaler PDF-Download (nur wenn Checkbox aktiv)
             sendPrintRequest(bonDetails);
         });
 
@@ -443,8 +443,7 @@ function sendPrintRequest(bonDetails) {
 
     if (isPdfEnabled) {
         // 1. Kassenbon-PDF (Kundenbon) – immer
-        try {
-            const { jsPDF } = window.jspdf;
+        try {            const { jsPDF } = window.jspdf;
             const pageHeight = Math.max(100, 40 + allItems.length * 5 + 40);
             const doc = new jsPDF({ unit: 'mm', format: [80, pageHeight] });
             const left = 5;
@@ -592,28 +591,6 @@ function sendPrintRequest(bonDetails) {
             }
         }
     }
-
-    // Auch an den Server senden (für physischen Drucker)
-    fetch(`${window.API_URL}/print`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            bonDetails: bonDetails,
-        }),
-    })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log("Druckauftrag erfolgreich gesendet");
-            } else {
-                console.error("Fehler beim Senden des Druckauftrags:", data.error);
-            }
-        })
-        .catch(error => {
-            console.error("Fehler beim Senden des Druckauftrags:", error);
-        });
 }
 
 function formatItems(receiptItems) {
