@@ -53,6 +53,23 @@
             top: 0;
             z-index: 10;
             border: 1px solid #004080;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        
+        .stats-table thead th:hover {
+            background: #004080;
+        }
+        
+        .stats-table thead th .sort-icon {
+            margin-left: 4px;
+            opacity: 0.5;
+            font-size: 11px;
+        }
+        
+        .stats-table thead th.sort-active .sort-icon {
+            opacity: 1;
         }
         
         .stats-table tbody td {
@@ -69,6 +86,7 @@
             background: #e3f2fd;
             font-weight: 700;
             font-size: 15px;
+            cursor: pointer;
         }
         
         .team-header td {
@@ -77,13 +95,47 @@
             border-bottom: 2px solid #005A9F;
         }
         
+        .team-header .toggle-icon {
+            display: inline-block;
+            width: 20px;
+            transition: transform 0.2s;
+            font-size: 12px;
+        }
+        
+        .team-header.collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+        
         .helper-row {
             background: white;
+        }
+        
+        .helper-row.hidden {
+            display: none;
         }
         
         .helper-name-cell {
             font-weight: 600;
             padding-left: 20px !important;
+        }
+        
+        .helper-absent {
+            text-decoration: line-through;
+            font-style: italic;
+            color: #999;
+        }
+        
+        .absent-badge {
+            display: inline-block;
+            background: #ffcdd2;
+            color: #c62828;
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            font-weight: 500;
+            font-style: normal;
+            text-decoration: none;
         }
         
         .team-summary {
@@ -99,35 +151,79 @@
         
         .kpi-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
             margin-bottom: 30px;
         }
         
         .kpi-card {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px 10px;
             text-align: center;
             display: flex;
             flex-direction: column;
             align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
         }
         
         .kpi-card h3 {
-            margin: 0 0 10px 0;
-            font-size: 14px;
+            margin: 0 0 6px 0;
+            font-size: 11px;
             color: #666;
             border: none;
             padding: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
         
         .kpi-card .kpi-value {
-            font-size: 32px;
+            font-size: 26px;
             font-weight: 700;
             color: #005A9F;
             margin: 0;
+            line-height: 1.2;
+        }
+        
+        .kpi-cluster {
+            display: contents;
+        }
+        
+        .kpi-cluster-label {
+            grid-column: 1 / -1;
+            font-size: 12px;
+            font-weight: 600;
+            color: #444;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 8px 0 2px;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 4px;
+        }
+        
+        .kpi-card.highlight-open {
+            border-color: #ff9800;
+            background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+        }
+        
+        .kpi-card.highlight-open .kpi-value {
+            color: #e65100;
+        }
+        
+        .kpi-card.highlight-total {
+            border-color: #4caf50;
+            background: linear-gradient(135deg, #e8f5e9 0%, #ffffff 100%);
+        }
+        
+        .kpi-card.highlight-total .kpi-value {
+            color: #2e7d32;
         }
         
         .distribution-section {
@@ -191,6 +287,9 @@
             .chart-container {
                 grid-template-columns: 1fr;
             }
+            .kpi-section {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
         }
         
         .puffer-hint {
@@ -202,6 +301,25 @@
             margin: 0;
             font-size: 14px;
             color: #5d4037;
+        }
+        
+        .collapse-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        
+        .collapse-controls button {
+            padding: 5px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f9f9f9;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        .collapse-controls button:hover {
+            background: #e8e8e8;
         }
     </style>
 </head>
@@ -237,17 +355,21 @@
     </div>
     
     <h2>Helfer-Statistik nach Team</h2>
+    <div class="collapse-controls">
+        <button id="expand-all-btn">▼ Alle aufklappen</button>
+        <button id="collapse-all-btn">▲ Alle zuklappen</button>
+    </div>
     <div style="overflow-x: auto;">
         <table class="stats-table">
             <thead>
                 <tr>
-                    <th>Helfer/Team</th>
-                    <th class="number-cell">Stunden Plan</th>
-                    <th class="number-cell">Schichten Plan</th>
-                    <th class="number-cell">Stunden Auf/Abbau</th>
-                    <th class="number-cell">Schichten Auf/Abbau</th>
-                    <th class="number-cell">Gesamtstunden</th>
-                    <th class="number-cell">Gesamtschichten</th>
+                    <th data-sort="name">Helfer/Team <span class="sort-icon">⇅</span></th>
+                    <th class="number-cell" data-sort="plan_hours">Stunden Plan <span class="sort-icon">⇅</span></th>
+                    <th class="number-cell" data-sort="plan_shifts">Schichten Plan <span class="sort-icon">⇅</span></th>
+                    <th class="number-cell" data-sort="setup_cleanup_hours">Stunden Auf/Abbau <span class="sort-icon">⇅</span></th>
+                    <th class="number-cell" data-sort="setup_cleanup_shifts">Schichten Auf/Abbau <span class="sort-icon">⇅</span></th>
+                    <th class="number-cell" data-sort="total_hours">Gesamtstunden <span class="sort-icon">⇅</span></th>
+                    <th class="number-cell" data-sort="total_shifts">Gesamtschichten <span class="sort-icon">⇅</span></th>
                 </tr>
             </thead>
             <tbody id="stats-tbody">
@@ -318,6 +440,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     let statsData = null;
     let teams = [];
+    let sortColumn = null;
+    let sortDirection = 'asc'; // 'asc' or 'desc'
+    let collapsedTeams = new Set(); // track collapsed team IDs
+    let allTeamsCollapsed = true; // start collapsed
     
     // Load data
     async function loadData() {
@@ -329,6 +455,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             statsData = await statsRes.json();
             teams = await teamsRes.json();
+            
+            // Initialize all teams as collapsed
+            const teamIds = new Set();
+            statsData.helper_stats.forEach(h => teamIds.add(h.team_id || 'none'));
+            collapsedTeams = new Set(teamIds);
             
             populateTeamFilter();
             renderKPIs();
@@ -376,29 +507,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         kpiSection.innerHTML = `
             ${pufferHint}
+            <div class="kpi-cluster-label">Übersicht</div>
             <div class="kpi-card">
                 <h3>Anzahl Helfer</h3>
                 <div class="kpi-value">${totalHelpers}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Offene Schichten Turnier</h3>
-                <div class="kpi-value">${openTournamentShifts}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Offene Schichten Auf-/Abbau</h3>
-                <div class="kpi-value">${openSetupCleanupShifts}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Gesamtschichten Turnier</h3>
-                <div class="kpi-value">${totalPlanShifts}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Gesamtschichten Auf-/Abbau</h3>
-                <div class="kpi-value">${totalSetupShifts}</div>
-            </div>
-            <div class="kpi-card">
-                <h3>Gesamtstunden</h3>
-                <div class="kpi-value">${totalHours.toFixed(1)}</div>
             </div>
             <div class="kpi-card">
                 <h3>Ø Schichten/Helfer</h3>
@@ -411,6 +523,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="kpi-card">
                 <h3>Summe Kuchen</h3>
                 <div class="kpi-value">${totalCakes}</div>
+            </div>
+            <div class="kpi-cluster-label">Offene Schichten</div>
+            <div class="kpi-card highlight-open">
+                <h3>Offene Turnier</h3>
+                <div class="kpi-value">${openTournamentShifts}</div>
+            </div>
+            <div class="kpi-card highlight-open">
+                <h3>Offene Auf-/Abbau</h3>
+                <div class="kpi-value">${openSetupCleanupShifts}</div>
+            </div>
+            <div class="kpi-cluster-label">Gesamt</div>
+            <div class="kpi-card highlight-total">
+                <h3>Schichten Turnier</h3>
+                <div class="kpi-value">${totalPlanShifts}</div>
+            </div>
+            <div class="kpi-card highlight-total">
+                <h3>Schichten Auf-/Abbau</h3>
+                <div class="kpi-value">${totalSetupShifts}</div>
+            </div>
+            <div class="kpi-card highlight-total">
+                <h3>Gesamtstunden</h3>
+                <div class="kpi-value">${totalHours.toFixed(1)}</div>
             </div>
         `;
     }
@@ -436,12 +570,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             helpersByTeam[teamId].helpers.push(helper);
         });
         
+        // Sort helpers within teams if sort is active
+        const sortHelpers = (helpers) => {
+            if (!sortColumn) {
+                return helpers.sort((a, b) => a.helper_name.localeCompare(b.helper_name));
+            }
+            return helpers.sort((a, b) => {
+                let valA, valB;
+                if (sortColumn === 'name') {
+                    valA = a.helper_name.toLowerCase();
+                    valB = b.helper_name.toLowerCase();
+                } else {
+                    valA = a[sortColumn] || 0;
+                    valB = b[sortColumn] || 0;
+                }
+                if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+        };
+        
         // Build table HTML
         let html = '';
         
-        Object.values(helpersByTeam).forEach(team => {
-            // Sort helpers by name
-            team.helpers.sort((a, b) => a.helper_name.localeCompare(b.helper_name));
+        Object.entries(helpersByTeam).forEach(([teamId, team]) => {
+            sortHelpers(team.helpers);
             
             // Calculate team totals
             const teamTotalPlanHours = team.helpers.reduce((sum, h) => sum + h.plan_hours, 0);
@@ -451,10 +604,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const teamTotalHours = team.helpers.reduce((sum, h) => sum + h.total_hours, 0);
             const teamTotalShifts = team.helpers.reduce((sum, h) => sum + h.total_shifts, 0);
             
-            // Team header row
+            const isCollapsed = collapsedTeams.has(teamId === 'none' ? 'none' : Number(teamId) || teamId);
+            
+            // Team header row (clickable to toggle)
             html += `
-                <tr class="team-header" style="background-color: ${team.team_color}; color: ${getTextColorForBackground(team.team_color)};">
+                <tr class="team-header ${isCollapsed ? 'collapsed' : ''}" data-team-id="${teamId}" style="background-color: ${team.team_color}; color: ${getTextColorForBackground(team.team_color)};">
                     <td colspan="7">
+                        <span class="toggle-icon">▼</span>
                         <strong>${team.team_name}</strong> 
                         (${team.helpers.length} Helfer, ${teamTotalShifts} Schichten, ${teamTotalHours.toFixed(1)}h)
                     </td>
@@ -463,15 +619,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Helper rows
             team.helpers.forEach(helper => {
+                const isAbsent = helper.abwesend === 1 || helper.abwesend === true;
+                const absentClass = isAbsent ? 'helper-absent' : '';
+                const absentBadge = isAbsent ? '<span class="absent-badge">Abwesend</span>' : '';
+                const hiddenClass = isCollapsed ? 'hidden' : '';
+                
                 html += `
-                    <tr class="helper-row">
-                        <td class="helper-name-cell">${helper.helper_name}</td>
-                        <td class="number-cell">${helper.plan_hours.toFixed(1)}</td>
-                        <td class="number-cell">${helper.plan_shifts}</td>
-                        <td class="number-cell">${helper.setup_cleanup_hours.toFixed(1)}</td>
-                        <td class="number-cell">${helper.setup_cleanup_shifts}</td>
-                        <td class="number-cell"><strong>${helper.total_hours.toFixed(1)}</strong></td>
-                        <td class="number-cell"><strong>${helper.total_shifts}</strong></td>
+                    <tr class="helper-row ${hiddenClass}" data-team-id="${teamId}">
+                        <td class="helper-name-cell ${absentClass}">${helper.helper_name}${absentBadge}</td>
+                        <td class="number-cell ${absentClass}">${helper.plan_hours.toFixed(1)}</td>
+                        <td class="number-cell ${absentClass}">${helper.plan_shifts}</td>
+                        <td class="number-cell ${absentClass}">${helper.setup_cleanup_hours.toFixed(1)}</td>
+                        <td class="number-cell ${absentClass}">${helper.setup_cleanup_shifts}</td>
+                        <td class="number-cell ${absentClass}"><strong>${helper.total_hours.toFixed(1)}</strong></td>
+                        <td class="number-cell ${absentClass}"><strong>${helper.total_shifts}</strong></td>
                     </tr>
                 `;
             });
@@ -482,18 +643,78 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         statsTbody.innerHTML = html;
+        
+        // Attach click listeners to team headers
+        statsTbody.querySelectorAll('.team-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const teamId = header.dataset.teamId;
+                const teamKey = teamId === 'none' ? 'none' : (Number(teamId) || teamId);
+                
+                if (collapsedTeams.has(teamKey)) {
+                    collapsedTeams.delete(teamKey);
+                    header.classList.remove('collapsed');
+                } else {
+                    collapsedTeams.add(teamKey);
+                    header.classList.add('collapsed');
+                }
+                
+                // Toggle visibility of helper rows for this team
+                statsTbody.querySelectorAll(`.helper-row[data-team-id="${teamId}"]`).forEach(row => {
+                    row.classList.toggle('hidden');
+                });
+            });
+        });
+    }
+    
+    // Cluster distribution: group shifts > 10
+    function clusterDistribution(distribution) {
+        const clustered = [];
+        const clusters = [
+            { min: 0, max: 10, label: null }, // individual entries 0-10
+            { min: 11, max: 15, label: '11-15' },
+            { min: 16, max: 20, label: '16-20' },
+            { min: 21, max: 25, label: '21-25' },
+            { min: 26, max: 30, label: '26-30' },
+            { min: 31, max: Infinity, label: 'über 31' }
+        ];
+        
+        // Individual entries for 0-10
+        distribution.filter(d => d.shift_count <= 10).forEach(d => {
+            clustered.push(d);
+        });
+        
+        // Clustered entries for > 10
+        const highEntries = distribution.filter(d => d.shift_count > 10);
+        if (highEntries.length > 0) {
+            const totalHelpers = distribution.reduce((sum, d) => sum + d.helper_count, 0);
+            clusters.slice(1).forEach(cluster => {
+                const entries = highEntries.filter(d => d.shift_count >= cluster.min && d.shift_count <= cluster.max);
+                if (entries.length > 0) {
+                    const count = entries.reduce((sum, e) => sum + e.helper_count, 0);
+                    clustered.push({
+                        shift_count: cluster.label,
+                        helper_count: count,
+                        percentage: ((count / totalHelpers) * 100).toFixed(1)
+                    });
+                }
+            });
+        }
+        
+        return clustered;
     }
     
     function renderDistributionCharts() {
-        const distribution = statsData.shift_distribution;
+        const distribution = clusterDistribution(statsData.shift_distribution);
         
         if (distribution.length === 0) {
             return;
         }
         
-        const labels = distribution.map(d => `${d.shift_count} Schicht${d.shift_count !== 1 ? 'en' : ''}`);
+        const labels = distribution.map(d => {
+            if (typeof d.shift_count === 'string') return d.shift_count + ' Schichten';
+            return `${d.shift_count} Schicht${d.shift_count !== 1 ? 'en' : ''}`;
+        });
         const data = distribution.map(d => d.helper_count);
-        const percentages = distribution.map(d => parseFloat(d.percentage));
         
         // Bar chart
         const barCtx = document.getElementById('distribution-bar-chart').getContext('2d');
@@ -544,7 +765,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         'rgba(156, 39, 176, 0.8)',
                         'rgba(33, 150, 243, 0.8)',
                         'rgba(255, 193, 7, 0.8)',
-                        'rgba(96, 125, 139, 0.8)'
+                        'rgba(96, 125, 139, 0.8)',
+                        'rgba(0, 150, 136, 0.8)',
+                        'rgba(121, 85, 72, 0.8)',
+                        'rgba(63, 81, 181, 0.8)',
+                        'rgba(233, 30, 99, 0.8)',
+                        'rgba(139, 195, 74, 0.8)',
+                        'rgba(255, 87, 34, 0.8)',
+                        'rgba(0, 188, 212, 0.8)',
+                        'rgba(103, 58, 183, 0.8)'
                     ],
                     borderWidth: 2
                 }]
@@ -562,7 +791,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function renderDistributionTable() {
-        const distribution = statsData.shift_distribution;
+        const distribution = clusterDistribution(statsData.shift_distribution);
         
         if (distribution.length === 0) {
             distributionTable.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px;">Keine Daten verfügbar</td></tr>';
@@ -571,9 +800,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         let html = '';
         distribution.forEach(d => {
+            const label = typeof d.shift_count === 'string' ? d.shift_count : d.shift_count;
             html += `
                 <tr>
-                    <td>${d.shift_count}</td>
+                    <td>${label}</td>
                     <td class="number">${d.helper_count}</td>
                     <td class="number">${d.percentage}%</td>
                 </tr>
@@ -596,6 +826,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Event listener for filter
     teamFilter.addEventListener('change', () => {
         renderKPIs();
+        renderTable();
+    });
+    
+    // Column sorting
+    document.querySelectorAll('.stats-table thead th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.sort;
+            if (sortColumn === col) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = col;
+                sortDirection = 'asc';
+            }
+            
+            // Update sort icons
+            document.querySelectorAll('.stats-table thead th').forEach(header => {
+                header.classList.remove('sort-active');
+                const icon = header.querySelector('.sort-icon');
+                if (icon) icon.textContent = '⇅';
+            });
+            th.classList.add('sort-active');
+            const icon = th.querySelector('.sort-icon');
+            if (icon) icon.textContent = sortDirection === 'asc' ? '▲' : '▼';
+            
+            renderTable();
+        });
+    });
+    
+    // Expand/Collapse all buttons
+    document.getElementById('expand-all-btn').addEventListener('click', () => {
+        collapsedTeams.clear();
+        renderTable();
+    });
+    
+    document.getElementById('collapse-all-btn').addEventListener('click', () => {
+        const teamIds = new Set();
+        statsData.helper_stats.forEach(h => teamIds.add(h.team_id || 'none'));
+        collapsedTeams = new Set(teamIds);
         renderTable();
     });
     

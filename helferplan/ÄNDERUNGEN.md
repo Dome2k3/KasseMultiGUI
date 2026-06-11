@@ -4,6 +4,39 @@
 
 Alle geforderten Änderungen aus dem Anforderungsdokument wurden erfolgreich implementiert.
 
+## 0. Großer Change (Juni 2026)
+
+### 0.1 Statistik-Seite (statistik.html)
+- **Teams auf-/zuklappbar**: Teams sind jetzt per Klick auf den Team-Header auf- und zuklappbar. Zu Beginn sind alle Teams zugeklappt.
+- **Buttons „Alle aufklappen" / „Alle zuklappen"**: Steuern das Auf-/Zuklappen aller Teams gleichzeitig.
+- **Spalten-Sortierung (Asc/Desc)**: Alle Datenspalten (Name, Stunden, Schichten etc.) können per Klick auf den Spaltenheader sortiert werden. Beim erneuten Klick wechselt die Sortierrichtung.
+- **KPI-Cards Redesign**: Kleinere, clustered Cards mit Gradient-Design, Hover-Effekt, und thematischer Gruppierung (Übersicht, Offene Schichten, Gesamt).
+- **Verteilung Clustering**: Schichtverteilung wird bei > 10 Schichten in Cluster gruppiert: 11-15, 16-20, 21-25, 26-30, über 31.
+- **Abwesende Helfer**: Helfer mit `abwesend = 1` werden durchgestrichen, kursiv und mit Badge „Abwesend" angezeigt.
+
+### 0.2 PDF-Export Statistik (index.html)
+- Neuer PDF-Export-Typ „Statistik" auf der Admin-Seite (index.html).
+- Exportiert die vollständige Helfer-Statistik nach Team, inklusive KPI-Zusammenfassung.
+- Team-Filter wird berücksichtigt.
+
+### 0.3 Helfer: Feld „Abwesend" (helper-add.html + Backend)
+- **Neues Datenbankfeld**: `abwesend TINYINT(1) NOT NULL DEFAULT 0` in `helferplan_helpers`.
+- **SQL-Migration**: `ALTER TABLE helferplan_helpers ADD COLUMN abwesend TINYINT(1) NOT NULL DEFAULT 0;`
+- **Backend**: GET /api/helpers und GET /api/statistics liefern das Feld `abwesend` mit.
+- **PUT /api/helpers/:id**: Akzeptiert und speichert das Feld `abwesend`.
+- **helper-add.html**: Im Bearbeitungs-Modal kann der Abwesend-Status per Checkbox geändert werden.
+- **statistik.html**: Abwesende Helfer werden durchgestrichen, kursiv und mit „Abwesend"-Badge dargestellt.
+
+### 0.4 Verteilung nach Schichtanzahl – Clustering
+Bei mehr als 10 Schichten werden die Einträge in Clustern zusammengefasst:
+- 11-15
+- 16-20
+- 21-25
+- 26-30
+- über 31
+
+Dies gilt für die Detaillierte Tabelle und die Diagramme.
+
 ## 1. Layout-Verbesserungen
 
 ### 1.1 plan.html

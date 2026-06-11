@@ -70,6 +70,23 @@ const TOURNAMENT_TOTAL_HOURS = 54;
     }
 })();
 
+// Ensure abwesend column exists in helferplan_helpers table
+(async function ensureAbwesendColumn() {
+    try {
+        await pool.query(`
+            ALTER TABLE volleyball_turnier.helferplan_helpers 
+            ADD COLUMN abwesend TINYINT(1) NOT NULL DEFAULT 0;
+        `);
+        console.log('abwesend column added to helferplan_helpers');
+    } catch (err) {
+        if (err && err.errno === 1060) {
+            console.log('abwesend column already exists');
+        } else {
+            console.log('Could not add abwesend column (this may be okay):', err && err.message ? err.message : err);
+        }
+    }
+})();
+
 // Ensure allowed_time_blocks column exists in helferplan_activities table
 (async function ensureAllowedTimeBlocksColumn() {
     try {
@@ -576,7 +593,7 @@ app.put('/api/teams/:id', attachUser, requireEditor, async (req, res) => {
 app.get('/api/helpers', async (req, res) => {
     try {
         const rows = await safeQuery(`
-            SELECT h.id, h.name, h.role, h.team_id, t.name AS team_name
+            SELECT h.id, h.name, h.role, h.team_id, h.abwesend, t.name AS team_name
             FROM helferplan_helpers h
                      LEFT JOIN helferplan_teams t ON h.team_id = t.id
             ORDER BY h.name;
@@ -636,12 +653,13 @@ app.put('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: 'Ungültige Helfer-ID.' });
 
-        const { name, team_id, role } = req.body;
+        const { name, team_id, role, abwesend } = req.body;
         if (!name || !team_id || !role) return res.status(400).json({ error: 'Name, Team-ID und Rolle sind erforderlich.' });
         const validRoles = ['Minderjaehrig', 'Erwachsen', 'Orga'];
         if (!validRoles.includes(role)) return res.status(400).json({ error: 'Ungültige Rolle.' });
 
         const trimmed = String(name).trim();
+        const abwesendValue = abwesend ? 1 : 0;
 
         // Check for name collision with another helper
         const [existing] = await pool.query(
@@ -657,11 +675,11 @@ app.put('/api/helpers/:id', attachUser, requireEditor, async (req, res) => {
         const before = beforeRows[0];
 
         await pool.query(
-            "UPDATE helferplan_helpers SET name = ?, team_id = ?, role = ? WHERE id = ?;",
-            [trimmed, team_id, role, id]
+            "UPDATE helferplan_helpers SET name = ?, team_id = ?, role = ?, abwesend = ? WHERE id = ?;",
+            [trimmed, team_id, role, abwesendValue, id]
         );
 
-        const after = { id, name: trimmed, team_id: Number(team_id), role };
+        const after = { id, name: trimmed, team_id: Number(team_id), role, abwesend: abwesendValue };
 
         await logAudit({
             userId: req.currentUser.id,
@@ -1603,7 +1621,7 @@ app.get('/api/statistics', async (req, res) => {
 
         // Get all helpers with their teams
         const helpers = await safeQuery(`
-            SELECT h.id, h.name, h.team_id, h.role, t.name as team_name, t.color_hex
+            SELECT h.id, h.name, h.team_id, h.role, h.abwesend, t.name as team_name, t.color_hex
             FROM helferplan_helpers h
             LEFT JOIN helferplan_teams t ON h.team_id = t.id
             ORDER BY t.name, h.name
@@ -1771,6 +1789,7 @@ app.get('/api/statistics', async (req, res) => {
                 team_name: helper.team_name,
                 team_color: helper.color_hex,
                 role: helper.role,
+                abwesend: helper.abwesend || 0,
                 plan_hours: tournamentHours,
                 plan_shifts: tournamentShiftCount,
                 setup_cleanup_hours: setupCleanupHours,

@@ -388,6 +388,13 @@
                     <option value="Orga">Orga</option>
                 </select>
             </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="edit-helper-abwesend" style="width: auto; margin: 0;">
+                    <span>Abwesend</span>
+                </label>
+                <small style="color: #666; margin-top: 4px; display: block;">Wenn aktiviert, wird der Helfer in der Statistik als abwesend markiert.</small>
+            </div>
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" id="edit-cancel-btn">Abbrechen</button>
                 <button type="submit" class="btn btn-primary" id="edit-save-btn">Speichern</button>
@@ -807,8 +814,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         filtered.forEach(h => {
             const tr = document.createElement('tr');
+            const absentStyle = h.abwesend == 1 ? ' style="text-decoration: line-through; font-style: italic; color: #999;"' : '';
+            const absentBadge = h.abwesend == 1 ? ' <span style="background:#ffcdd2;color:#c62828;font-size:11px;padding:1px 6px;border-radius:3px;font-style:normal;text-decoration:none;">Abwesend</span>' : '';
             tr.innerHTML = `
-                <td>${escapeHtml(h.name)}</td>
+                <td${absentStyle}>${escapeHtml(h.name)}${absentBadge}</td>
                 <td>${escapeHtml(h.team_name || '')}</td>
                 <td>${escapeHtml(roleLabel[h.role] || h.role)}</td>
                 <td><button class="btn-edit" data-id="${h.id}">Bearbeiten</button></td>
@@ -827,6 +836,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('edit-helper-name').value = helper.name;
         document.getElementById('edit-helper-team').value = helper.team_id;
         document.getElementById('edit-helper-role').value = helper.role;
+        document.getElementById('edit-helper-abwesend').checked = helper.abwesend == 1;
         const msg = document.getElementById('edit-message');
         msg.style.display = 'none';
         msg.className = '';
@@ -855,6 +865,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const name = document.getElementById('edit-helper-name').value.trim();
         const teamId = document.getElementById('edit-helper-team').value;
         const role = document.getElementById('edit-helper-role').value;
+        const abwesend = document.getElementById('edit-helper-abwesend').checked;
         const msg = document.getElementById('edit-message');
         const saveBtn = document.getElementById('edit-save-btn');
 
@@ -873,7 +884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 credentials: 'include',
-                body: JSON.stringify({ name, team_id: parseInt(teamId), role })
+                body: JSON.stringify({ name, team_id: parseInt(teamId), role, abwesend })
             });
 
             if (res.ok) {
