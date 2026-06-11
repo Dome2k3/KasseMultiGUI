@@ -8,14 +8,13 @@ const mysql = require("mysql2");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 
-// Drucker
-const { SerialPort } = require('serialport'); // Für den SerialPort weiterhin CommonJS
-const esc = '\x1B'; // ESC-Zeichen für Steuerbefehle
-const INIT = esc + '\x40'; // ESC @: Drucker initialisieren
-const setEncoding = esc + '\x74' + '\x02'; // ESC t 2: CP850 aktivieren
-const FEED = '\x1B\x64\x03'; // ESC d 3: Papierzufuhr (weiterer Abstand)
-// ESC/POS-Befehl für den Abschneider
-const CUT = '\x1D\x56\x42\x00'; // GS V 66 0: Partieller Abschnitt (Standard für Epson TM)
+// Drucker (CUPS via lp)
+const { execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const PRINTER_NAME = process.env.PRINTER_NAME || 'TM-T20III';
 
 const app = express();
 app.use(express.json());
@@ -87,8 +86,19 @@ app.post('/finalize-bon', (req, res) => {
                 return res.status(500).json({ success: false, message: 'Fehler beim Speichern der Items' });
             }
 
-            // Optional: Drucken hier aufrufen (printReceipt) - wie du es aktuell tust
-            // await printReceipt({...bonDetails, id: bonId, timestamp: new Date().toLocaleString()});
+            // Bon direkt nach dem Speichern drucken
+            const printPayload = {
+                ...bonDetails,
+                id: bonId,
+                timestamp: new Date().toLocaleString('de-DE'),
+                totalAmount
+            };
+            try {
+                await printReceipt(printPayload);
+                console.log('Bon Nr.' + bonId + ' erfolgreich gedruckt');
+            } catch (printErr) {
+                console.error('Druckfehler (Bon wurde gespeichert):', printErr.message);
+            }
 
             return res.json({ success: true, id: bonId });
         });
@@ -123,37 +133,7 @@ app.get('/items', (req, res) => {
 // Server starten
 //app.listen(3000, () => console.log("Server läuft auf http://localhost:3000"));
 
-// SerialPort zum Drucken
-const PRINTER_PATH = process.env.PRINTER_PATH || '/dev/usb/lp0';
-const PRINTER_BAUD = parseInt(process.env.PRINTER_BAUD || '9600', 10);
-let port = null;
-let isPortOpen = false;
-
-try {
-    port = new SerialPort({
-        path: PRINTER_PATH,
-        baudRate: PRINTER_BAUD
-    });
-
-    port.on('open', () => {
-        console.log(`Drucker-Port ${PRINTER_PATH} geöffnet`);
-        isPortOpen = true;
-    });
-    port.on('error', (err) => {
-        console.error('Drucker-Fehler:', err.message);
-        isPortOpen = false;
-    });
-} catch (err) {
-    console.error(`Drucker-Port ${PRINTER_PATH} konnte nicht geöffnet werden:`, err.message);
-    console.warn('Physischer Bondruck ist deaktiviert. PDF-Druck funktioniert weiterhin.');
-}
-
-// Sleep-Funktion, um eine Verzögerung zu erzeugen (in Millisekunden)
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Sonderzeichen ersetzen
+// Sonderzeichen ersetzen (für Thermodrucker-Kompatibilität)
 function replaceSpecialChars(text) {
     return text
         .replace(/€/g, "[EUR]")
@@ -164,191 +144,132 @@ function replaceSpecialChars(text) {
         .replace(/ß/g, "ss");
 }
 
-// Hilfsfunktion: Daten schreiben und auf drain warten
-function writeData(data) {
+// Kassenbon-Text aus strukturierten Items aufbauen
+function buildCashReceiptText(bonDetails) {
+    const lines = [];
+    lines.push('*** Kassenbon ***');
+    lines.push('');
+    lines.push(`Bon Nr. ${bonDetails.id}`);
+    lines.push(`${bonDetails.timestamp}`);
+    lines.push('');
+    lines.push('--------------------------');
+    lines.push('Artikel              Preis');
+    lines.push('--------------------------');
+    bonDetails.items.forEach((item, index) => {
+        const qty = item.quantity || 1;
+        const total = parseFloat(item.total || 0).toFixed(2);
+        lines.push(`${index + 1}. ${qty}x ${item.name}  ${total} EUR`);
+    });
+    lines.push('--------------------------');
+    lines.push(`Gesamt: ${parseFloat(bonDetails.totalAmount || bonDetails.total || 0).toFixed(2)} EUR`);
+    lines.push('--------------------------');
+    lines.push('');
+    lines.push('Der Foerderverein dankt dir fuer');
+    lines.push('deinen Einkauf!');
+    lines.push('Save the Date:');
+    lines.push('BVT 38 - 3.-5. Juli 2026!');
+    lines.push('');
+    lines.push('');
+    return replaceSpecialChars(lines.join('\n'));
+}
+
+// Küchenbon-Text aus strukturierten Items aufbauen
+function buildKitchenReceiptText(bonDetails, kitchenItems) {
+    const lines = [];
+    lines.push('*** KUECHE ***');
+    lines.push('');
+    lines.push(`Bon Nr. ${bonDetails.id}`);
+    lines.push(`${bonDetails.timestamp}`);
+    lines.push('');
+    lines.push('--------------------------');
+    lines.push('Artikel');
+    lines.push('--------------------------');
+    kitchenItems.forEach((item, index) => {
+        const qty = item.quantity || 1;
+        lines.push(`${index + 1}. ${qty}x ${item.name}`);
+    });
+    lines.push('--------------------------');
+    lines.push('');
+    lines.push('');
+    return replaceSpecialChars(lines.join('\n'));
+}
+
+// Flammkuchenbon-Text aus strukturierten Items aufbauen
+function buildFlammkuchenReceiptText(bonDetails, flammkuchenItems) {
+    const lines = [];
+    lines.push('*** FLAMMKUCHEN ***');
+    lines.push('');
+    lines.push(`Bon Nr. ${bonDetails.id}`);
+    lines.push(`${bonDetails.timestamp}`);
+    lines.push('');
+    lines.push('--------------------------');
+    lines.push('Flammkuchen');
+    lines.push('--------------------------');
+    flammkuchenItems.forEach((item, index) => {
+        const qty = item.quantity || 1;
+        lines.push(`${index + 1}. ${qty}x ${item.name}`);
+    });
+    lines.push('--------------------------');
+    lines.push('');
+    lines.push('');
+    lines.push('');
+    return replaceSpecialChars(lines.join('\n'));
+}
+
+// Bon-Text über CUPS/lp an den Drucker schicken
+function printViaCups(text, jobName) {
     return new Promise((resolve, reject) => {
-        if (!port) {
-            return reject(new Error('Kein Drucker-Port konfiguriert'));
+        const tmpFile = path.join(os.tmpdir(), `bon-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+        fs.writeFileSync(tmpFile, text, 'utf8');
+        const args = ['-d', PRINTER_NAME];
+        if (jobName) {
+            args.push('-t', String(jobName));
         }
-        port.write(data, (err) => {
-            if (err) {
-                return reject(err);
-            }
-            port.drain((err) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve();
+        args.push(tmpFile);
+        execFile('lp', args, (error, stdout, stderr) => {
+            fs.unlink(tmpFile, (unlinkErr) => {
+                if (unlinkErr) console.error('Temp-Datei konnte nicht geloescht werden:', unlinkErr.message);
             });
+            if (error) {
+                return reject(new Error(stderr || error.message));
+            }
+            resolve(stdout);
         });
     });
 }
 
-// Funktion zum Drucken und Schneiden des Kassenbons
-async function printCashReceipt(bonDetails) {
-    if (!isPortOpen) {
-        console.error('Port ist nicht geöffnet!');
-        return;
-    }
-    let receiptText = `
-*** Kassenbon ***
-
-Bon Nr. ${bonDetails.id}
-${bonDetails.timestamp}
-
---------------------------
-Artikel                Preis
---------------------------
-${bonDetails.items.map((item, index) => {
-        const priceMatch = item.match(/€(\d+\.\d+)/);
-        const price = priceMatch ? priceMatch[1] : '0.00';
-        let itemText = `${index + 1}. ${item.replace(/^\d+\.\s*/, '')}`;
-        return `${itemText}`;
-    }).join('\n')}
-
---------------------------
-Gesamt: €${bonDetails.total}
---------------------------
-
-Der Foerderverein dankt dir fuer
-deinen Einkauf!
-Save the Date:
-BVT 38 - 3.-5. Juli 2026!
-\n
-`;
-    receiptText = replaceSpecialChars(receiptText);
-    try {
-        await writeData(INIT + setEncoding);
-        await writeData(receiptText);
-        console.log("Kassenbon erfolgreich gesendet");
-        await writeData(FEED);
-        console.log("Papierzufuhr fuer Kassenbon durchgefuehrt");
-        await writeData(CUT);
-        console.log("Kassenbon abgeschnitten");
-    } catch (err) {
-        console.error("Fehler beim Kassenbon: " + err.message);
-    }
-}
-
-// Funktion zum Drucken und Schneiden des Küchenbons
-async function printKitchenReceipt(bonDetails, kitchenItems) {
-    if (!isPortOpen) {
-        console.error('Port ist nicht geöffnet!');
-        return;
-    }
-    let kitchenReceipt = `
-*** KÜCHE ***
-
-Bon Nr. ${bonDetails.id}
-${bonDetails.timestamp}
-
---------------------------
-Artikel
---------------------------
-${kitchenItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}
---------------------------
-\n\n
-`;
-    kitchenReceipt = replaceSpecialChars(kitchenReceipt);
-    try {
-        await writeData(INIT + setEncoding);
-        await writeData(kitchenReceipt);
-        console.log("Küchenbon erfolgreich gesendet");
-        // Papierzufuhr (Leerraum) hinzufügen
-        await writeData(FEED);
-        console.log("Papierzufuhr für Küchenbon durchgeführt");
-        await writeData(CUT);
-        console.log("Küchenbon abgeschnitten");
-    } catch (err) {
-        console.error("Fehler beim Küchenbon: " + err.message);
-    }
-}
-
-// Funktion zum Drucken und Schneiden des Flammkuchenbons
-async function printFlammkuchenReceipt(bonDetails) {
-    if (!isPortOpen) {
-        console.error('Port ist nicht geöffnet!');
-        return;
-    }
-
-    // console.log("bonDetails.items (Original):", bonDetails.items);
-
-    // Filtere die Items, die 'Flammkuchen' im Namen haben
-    const flammkuchenItems = bonDetails.items.filter(item => item.includes('Flammkuchen'));
-
-    // console.log("Flammkuchen-Artikel gefunden:", flammkuchenItems);
-
-    if (flammkuchenItems.length === 0) {
-        console.warn("Kein Flammkuchen in der Bestellung – Bon wird NICHT erstellt!");
-    } else {
-        console.log("Flammkuchen-Bon wird gedruckt...");
-        // Hier dein Code zum Drucken des Flammkuchen-Bons
-    }
-
-    if (flammkuchenItems.length > 0) {
-        let flammkuchenReceipt = `
-*** FLAMMKUCHEN ***
-
-Bon Nr. ${bonDetails.id}
-${bonDetails.timestamp}
-
---------------------------
-Flammkuchen
---------------------------
-${flammkuchenItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}
-
---------------------------
-\n\n\n\n
-`;
-        flammkuchenReceipt = replaceSpecialChars(flammkuchenReceipt);
-        try {
-            await writeData(INIT + setEncoding);
-            await writeData(flammkuchenReceipt);
-            console.log("Flammkuchenbon erfolgreich gesendet");
-            // Papierzufuhr (Leerraum) hinzufügen
-            await writeData(FEED);
-            console.log("Papierzufuhr für Flammkuchenbon durchgeführt");
-            await writeData(CUT);
-            console.log("Flammkuchenbon abgeschnitten");
-        } catch (err) {
-            console.error("Fehler beim Flammkuchenbon: " + err.message);
-        }
-    }
-}
-
-// Funktion zum Drucken aller Bons
+// Alle Bons (Kasse, Küche, Flammkuchen) drucken – erwartet strukturierte Items {name, quantity, total}
 async function printReceipt(bonDetails) {
-    if (!isPortOpen) {
-        console.error('Port ist nicht geöffnet!');
-        return;
-    }
-    const flammkuchenItems = bonDetails.items.filter(item => item.includes('Flammkuchen'));
-    const kitchenItems = bonDetails.items.filter(item => !item.includes('Flammkuchen'));
+    const flammkuchenItems = bonDetails.items.filter(item => item.name && item.name.includes('Flammkuchen'));
+    const kitchenItems = bonDetails.items.filter(item => !(item.name && item.name.includes('Flammkuchen')));
 
-    // Bon für die Kasse drucken
-    await printCashReceipt(bonDetails);
+    await printViaCups(buildCashReceiptText(bonDetails), `Kassenbon-${bonDetails.id}`);
+    console.log('Kassenbon erfolgreich gedruckt (Bon Nr. ' + bonDetails.id + ')');
 
-    // Drucke die Küche, falls es solche Artikel gibt
     if (kitchenItems.length > 0) {
-        await printKitchenReceipt(bonDetails, kitchenItems);
+        await printViaCups(buildKitchenReceiptText(bonDetails, kitchenItems), `Kueche-${bonDetails.id}`);
+        console.log('Küchenbon erfolgreich gedruckt');
     }
 
-    // Drucke den Flammkuchen-Bon
     if (flammkuchenItems.length > 0) {
-        await printFlammkuchenReceipt(bonDetails, flammkuchenItems);
+        await printViaCups(buildFlammkuchenReceiptText(bonDetails, flammkuchenItems), `Flammkuchen-${bonDetails.id}`);
+        console.log('Flammkuchenbon erfolgreich gedruckt');
     }
 }
 
-// ➤ API-Route zum Drucken aus dem Client (script.js)
-// POST-Route für Druckanforderung
-app.post('/print', (req, res) => {
+// ➤ API-Route zum Drucken aus dem Client (Fallback / Kompatibilität)
+app.post('/print', async (req, res) => {
     const { bonDetails } = req.body;
     if (!bonDetails) {
         return res.status(400).json({ error: "Bon Details fehlen" });
     }
-    // console.log("Druckauftrag erhalten:", bonDetails);
-    printReceipt(bonDetails);
-    return res.status(200).json({ success: true });
+    try {
+        await printReceipt(bonDetails);
+        return res.status(200).json({ success: true });
+    } catch (err) {
+        console.error('Fehler beim manuellen Druckauftrag:', err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 
