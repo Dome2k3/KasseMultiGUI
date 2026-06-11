@@ -821,6 +821,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     await exportCakesPDF(teamFilter, orientation);
                 } else if (exportType === 'helpers') {
                     await exportHelpersPDF(teamFilter, orientation);
+                } else if (exportType === 'statistics') {
+                    await exportStatisticsPDF(teamFilter, orientation);
                 } else if (exportType === 'users') {
                     await exportUsersPDF(orientation);
                 }
@@ -1392,6 +1394,102 @@ document.addEventListener('DOMContentLoaded', () => {
         doc.setFont(undefined, 'italic');
         doc.text(`Gesamt: ${users.length} Benutzer`, 10, pageHeight - 5);
         doc.save('Admins-Editoren.pdf');
+    }
+
+    async function exportStatisticsPDF(teamFilter, orientation) {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('jsPDF library nicht geladen. Bitte laden Sie die Seite neu.');
+        }
+
+        // Load statistics data
+        const statsRes = await fetch(`${API_URL}/statistics`, { credentials: 'include' });
+        const statsData = await statsRes.json();
+
+        let helpers = statsData.helper_stats;
+        if (teamFilter) {
+            helpers = helpers.filter(h => String(h.team_id) === String(teamFilter));
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        // Title
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'bold');
+        doc.text('Helferplan Statistik', pageWidth / 2, 15, { align: 'center' });
+
+        if (teamFilter) {
+            const team = allTeamsData.find(t => t.id == teamFilter);
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Team: ${team ? team.name : teamFilter}`, pageWidth / 2, 22, { align: 'center' });
+        }
+
+        // KPI summary
+        let yPos = teamFilter ? 30 : 25;
+        const totalHelpers = helpers.length;
+        const totalShifts = helpers.reduce((s, h) => s + h.total_shifts, 0);
+        const totalHours = helpers.reduce((s, h) => s + h.total_hours, 0);
+        const avgShifts = totalHelpers > 0 ? (totalShifts / totalHelpers).toFixed(1) : '0';
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(`Helfer: ${totalHelpers} | Gesamtschichten: ${totalShifts} | Gesamtstunden: ${totalHours.toFixed(1)} | Ø Schichten/Helfer: ${avgShifts}`, 10, yPos);
+        yPos += 8;
+
+        // Group by team
+        const byTeam = {};
+        helpers.forEach(h => {
+            const tid = h.team_id || 'none';
+            if (!byTeam[tid]) byTeam[tid] = { name: h.team_name || 'Kein Team', helpers: [] };
+            byTeam[tid].helpers.push(h);
+        });
+
+        // Table headers
+        const colX = [10, 55, 80, 100, 125, 145, 170];
+        const headers = ['Name', 'Std Plan', 'Sch. Plan', 'Std A/A', 'Sch. A/A', 'Ges. Std', 'Ges. Sch.'];
+
+        doc.setFontSize(7);
+        doc.setFont(undefined, 'bold');
+        headers.forEach((h, i) => doc.text(h, colX[i], yPos));
+        yPos += 1;
+        doc.line(10, yPos, pageWidth - 10, yPos);
+        yPos += 4;
+
+        doc.setFont(undefined, 'normal');
+
+        Object.values(byTeam).forEach(team => {
+            if (yPos > pageHeight - 15) { doc.addPage(); yPos = 15; }
+
+            // Team header
+            doc.setFont(undefined, 'bold');
+            doc.setFontSize(8);
+            doc.text(`${team.name} (${team.helpers.length} Helfer)`, 10, yPos);
+            yPos += 5;
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(7);
+
+            team.helpers.sort((a, b) => a.helper_name.localeCompare(b.helper_name));
+            team.helpers.forEach(h => {
+                if (yPos > pageHeight - 10) { doc.addPage(); yPos = 15; }
+
+                const nameText = (h.abwesend == 1) ? `${h.helper_name} (Abwesend)` : h.helper_name;
+                doc.text(nameText, colX[0], yPos);
+                doc.text(h.plan_hours.toFixed(1), colX[1], yPos);
+                doc.text(String(h.plan_shifts), colX[2], yPos);
+                doc.text(h.setup_cleanup_hours.toFixed(1), colX[3], yPos);
+                doc.text(String(h.setup_cleanup_shifts), colX[4], yPos);
+                doc.text(h.total_hours.toFixed(1), colX[5], yPos);
+                doc.text(String(h.total_shifts), colX[6], yPos);
+                yPos += 4;
+            });
+            yPos += 3;
+        });
+
+        const teamName = teamFilter ? allTeamsData.find(t => t.id == teamFilter)?.name || 'Team' : 'Alle';
+        doc.save(`Statistik-${teamName}.pdf`);
     }
     let currentUser = null;
 
