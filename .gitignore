@@ -16,3 +16,6 @@ Thumbs.db
 # Environment files
 .env
 .env.local
+
+# Runtime state
+.bon_keyword_index
