@@ -800,7 +800,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         let html = '';
         distribution.forEach(d => {
-            const label = typeof d.shift_count === 'string' ? d.shift_count : d.shift_count;
+            const label = d.shift_count;
             html += `
                 <tr>
                     <td>${label}</td>

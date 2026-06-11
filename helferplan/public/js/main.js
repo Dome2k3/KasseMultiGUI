@@ -1475,7 +1475,7 @@ document.addEventListener('DOMContentLoaded', () => {
             team.helpers.forEach(h => {
                 if (yPos > pageHeight - 10) { doc.addPage(); yPos = 15; }
 
-                const nameText = h.abwesend ? `${h.helper_name} (Abwesend)` : h.helper_name;
+                const nameText = (h.abwesend == 1) ? `${h.helper_name} (Abwesend)` : h.helper_name;
                 doc.text(nameText, colX[0], yPos);
                 doc.text(h.plan_hours.toFixed(1), colX[1], yPos);
                 doc.text(String(h.plan_shifts), colX[2], yPos);
