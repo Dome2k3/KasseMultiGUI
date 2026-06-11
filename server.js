@@ -16,6 +16,36 @@ const path = require('path');
 
 const PRINTER_NAME = process.env.PRINTER_NAME || 'TM-T20III';
 
+// Bon-Kennwort-Liste (zyklisch durchlaufend)
+const BON_KEYWORDS = [
+    'Ass', 'Block', 'Libero', 'Schmetterball', 'Coach', 'MVP', 'Schiri', 'Champ',
+    'Angriff', 'Abwehr', 'Aufschlag', 'Netzroller', 'Auszeit', 'Satzball', 'Matchball',
+    'Tiebreak', 'Flugball', 'Meister', 'Profi', 'Trainer', 'Flitzer', 'Joker',
+    'Champion', 'Kapitaen', 'Legende', 'Edelfan', 'Maskottchen', 'Zuschauer',
+    'Ehrenrunde', 'Heimsieg', 'Pokal', 'Medaille', 'Fairplay', 'Startaufstellung',
+    'Heimvorteil', 'Finalist', 'Stuermer'
+];
+
+// Datei zum Speichern des aktuellen Keyword-Index
+const KEYWORD_INDEX_FILE = path.join(__dirname, '.bon_keyword_index');
+
+function getNextBonKeyword() {
+    let index = 0;
+    try {
+        if (fs.existsSync(KEYWORD_INDEX_FILE)) {
+            index = parseInt(fs.readFileSync(KEYWORD_INDEX_FILE, 'utf8'), 10) || 0;
+        }
+    } catch (e) { /* ignore */ }
+    const keyword = BON_KEYWORDS[index % BON_KEYWORDS.length];
+    const nextIndex = (index + 1) % BON_KEYWORDS.length;
+    try {
+        fs.writeFileSync(KEYWORD_INDEX_FILE, String(nextIndex), 'utf8');
+    } catch (e) {
+        console.error('Fehler beim Speichern des Keyword-Index:', e.message);
+    }
+    return keyword;
+}
+
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -86,12 +116,16 @@ app.post('/finalize-bon', (req, res) => {
                 return res.status(500).json({ success: false, message: 'Fehler beim Speichern der Items' });
             }
 
+            // Bon-Kennwort für Zuordnung
+            const bonKeyword = getNextBonKeyword();
+
             // Bon direkt nach dem Speichern drucken
             const printPayload = {
                 ...bonDetails,
                 id: bonId,
                 timestamp: new Date().toLocaleString('de-DE'),
-                totalAmount
+                totalAmount,
+                keyword: bonKeyword
             };
             try {
                 await printReceipt(printPayload);
@@ -100,7 +134,7 @@ app.post('/finalize-bon', (req, res) => {
                 console.error('Druckfehler (Bon wurde gespeichert):', printErr.message);
             }
 
-            return res.json({ success: true, id: bonId });
+            return res.json({ success: true, id: bonId, keyword: bonKeyword });
         });
     });
 });
@@ -150,6 +184,7 @@ function buildCashReceiptText(bonDetails) {
     lines.push('*** Kassenbon ***');
     lines.push('');
     lines.push(`Bon Nr. ${bonDetails.id}`);
+    if (bonDetails.keyword) lines.push(`Kennwort: ${bonDetails.keyword}`);
     lines.push(`${bonDetails.timestamp}`);
     lines.push('');
     lines.push('--------------------------');
@@ -179,6 +214,7 @@ function buildKitchenReceiptText(bonDetails, kitchenItems) {
     lines.push('*** KUECHE ***');
     lines.push('');
     lines.push(`Bon Nr. ${bonDetails.id}`);
+    if (bonDetails.keyword) lines.push(`Kennwort: ${bonDetails.keyword}`);
     lines.push(`${bonDetails.timestamp}`);
     lines.push('');
     lines.push('--------------------------');
@@ -200,6 +236,7 @@ function buildFlammkuchenReceiptText(bonDetails, flammkuchenItems) {
     lines.push('*** FLAMMKUCHEN ***');
     lines.push('');
     lines.push(`Bon Nr. ${bonDetails.id}`);
+    if (bonDetails.keyword) lines.push(`Kennwort: ${bonDetails.keyword}`);
     lines.push(`${bonDetails.timestamp}`);
     lines.push('');
     lines.push('--------------------------');

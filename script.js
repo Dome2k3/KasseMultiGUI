@@ -5,6 +5,16 @@ let history = []; // Speichert alle Bons
 let receipts = {}; // Startet leer, wird mit jedem Artikel befüllt
 let bonDetails = { items: [] }; // Standardwert als leeres Array
 
+// Bon-Kennwort-Liste (zyklisch durchlaufend)
+const BON_KEYWORDS = [
+    'Ass', 'Block', 'Libero', 'Schmetterball', 'Coach', 'MVP', 'Schiri', 'Champ',
+    'Angriff', 'Abwehr', 'Aufschlag', 'Netzroller', 'Auszeit', 'Satzball', 'Matchball',
+    'Tiebreak', 'Flugball', 'Meister', 'Profi', 'Trainer', 'Flitzer', 'Joker',
+    'Champion', 'Kapitän', 'Legende', 'Edelfan', 'Maskottchen', 'Zuschauer',
+    'Ehrenrunde', 'Heimsieg', 'Pokal', 'Medaille', 'Fairplay', 'Startaufstellung',
+    'Heimvorteil', 'Finalist', 'Stürmer'
+];
+
 // Artikel laden und Preis loggen
 fetch(`${window.API_URL}/items`)
     .then(response => response.json())
@@ -286,10 +296,14 @@ function finalizeBon() {
         }
 
         // Erst in DB speichern, dann mit DB-ID drucken
-        sendReceiptsToServer({ totalAmount: totalAmount, items: formattedItems }, function(dbId) {
+        sendReceiptsToServer({ totalAmount: totalAmount, items: formattedItems }, function(dbId, keyword) {
             // Bon-ID aus der Datenbank verwenden
             if (dbId) {
                 bonDetails.id = dbId;
+            }
+            // Keyword für Zuordnung
+            if (keyword) {
+                bonDetails.keyword = keyword;
             }
 
             // In History aufnehmen
@@ -458,6 +472,10 @@ function sendPrintRequest(bonDetails) {
             doc.setFontSize(9);
             doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
             y += 5;
+            if (bonDetails.keyword) {
+                doc.text(`Kennwort: ${bonDetails.keyword}`, left, y);
+                y += 5;
+            }
             doc.text(bonDetails.timestamp, left, y);
             y += 5;
             doc.line(left, y, right, y);
@@ -519,6 +537,10 @@ function sendPrintRequest(bonDetails) {
                 doc.setFontSize(9);
                 doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
                 y += 5;
+                if (bonDetails.keyword) {
+                    doc.text(`Kennwort: ${bonDetails.keyword}`, left, y);
+                    y += 5;
+                }
                 doc.text(bonDetails.timestamp, left, y);
                 y += 5;
                 doc.line(left, y, right, y);
@@ -563,6 +585,10 @@ function sendPrintRequest(bonDetails) {
                 doc.setFontSize(9);
                 doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
                 y += 5;
+                if (bonDetails.keyword) {
+                    doc.text(`Kennwort: ${bonDetails.keyword}`, left, y);
+                    y += 5;
+                }
                 doc.text(bonDetails.timestamp, left, y);
                 y += 5;
                 doc.line(left, y, right, y);
@@ -640,17 +666,17 @@ function sendReceiptsToServer(bonDetails, callback) {
                 console.log("Daten erfolgreich gespeichert:", data);
 
                 if (data.success) {
-                    // Callback mit DB-ID aufrufen
-                    if (callback) callback(data.id);
+                    // Callback mit DB-ID und Keyword aufrufen
+                    if (callback) callback(data.id, data.keyword);
                     // Nach dem Speichern: Historie aus der DB neu laden für diese GUI
                     loadRecentBons();
                 } else {
-                    if (callback) callback(null);
+                    if (callback) callback(null, null);
                 }
             })
             .catch(error => {
                 console.error("Fehler beim Speichern des Bons:", error);
-                if (callback) callback(null);
+                if (callback) callback(null, null);
             });
     } else {
         console.error("Bon-Daten sind leer oder ungültig.");
