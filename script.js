@@ -5,7 +5,7 @@ let history = []; // Speichert alle Bons
 let receipts = {}; // Startet leer, wird mit jedem Artikel befüllt
 let bonDetails = { items: [] }; // Standardwert als leeres Array
 
-// Bon-Kennwort-Liste (zyklisch durchlaufend)
+// Bon-Rufname-Liste (zyklisch durchlaufend)
 const BON_KEYWORDS = [
     'Ass', 'Block', 'Libero', 'Schmetterball', 'Coach', 'MVP', 'Schiri', 'Champ',
     'Angriff', 'Abwehr', 'Aufschlag', 'Netzroller', 'Auszeit', 'Satzball', 'Matchball',
@@ -473,7 +473,7 @@ function sendPrintRequest(bonDetails) {
             doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
             y += 5;
             if (bonDetails.keyword) {
-                doc.text(`Kennwort: ${bonDetails.keyword}`, left, y);
+                doc.text(`Rufname: ${bonDetails.keyword}`, left, y);
                 y += 5;
             }
             doc.text(bonDetails.timestamp, left, y);
@@ -538,7 +538,7 @@ function sendPrintRequest(bonDetails) {
                 doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
                 y += 5;
                 if (bonDetails.keyword) {
-                    doc.text(`Kennwort: ${bonDetails.keyword}`, left, y);
+                    doc.text(`Rufname: ${bonDetails.keyword}`, left, y);
                     y += 5;
                 }
                 doc.text(bonDetails.timestamp, left, y);
@@ -586,7 +586,7 @@ function sendPrintRequest(bonDetails) {
                 doc.text(`Bon Nr. ${bonDetails.id}`, left, y);
                 y += 5;
                 if (bonDetails.keyword) {
-                    doc.text(`Kennwort: ${bonDetails.keyword}`, left, y);
+                    doc.text(`Rufname: ${bonDetails.keyword}`, left, y);
                     y += 5;
                 }
                 doc.text(bonDetails.timestamp, left, y);
