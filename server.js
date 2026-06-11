@@ -170,6 +170,7 @@ function buildCashReceiptText(bonDetails) {
     lines.push('BVT 38 - 3.-5. Juli 2026!');
     lines.push('');
     lines.push('');
+    lines.push('\x1D\x56\x01'); // GS V 1 – Partial Cut
     return replaceSpecialChars(lines.join('\n'));
 }
 
@@ -191,6 +192,7 @@ function buildKitchenReceiptText(bonDetails, kitchenItems) {
     lines.push('--------------------------');
     lines.push('');
     lines.push('');
+    lines.push('\x1D\x56\x01'); // GS V 1 – Partial Cut
     return replaceSpecialChars(lines.join('\n'));
 }
 
@@ -213,6 +215,7 @@ function buildFlammkuchenReceiptText(bonDetails, flammkuchenItems) {
     lines.push('');
     lines.push('');
     lines.push('');
+    lines.push('\x1D\x56\x01'); // GS V 1 – Partial Cut
     return replaceSpecialChars(lines.join('\n'));
 }
 
@@ -240,19 +243,27 @@ function printViaCups(text, jobName) {
 
 // Alle Bons (Kasse, Küche, Flammkuchen) drucken – erwartet strukturierte Items {name, quantity, total}
 async function printReceipt(bonDetails) {
-    const flammkuchenItems = bonDetails.items.filter(item => item.name && item.name.includes('Flammkuchen'));
-    const kitchenItems = bonDetails.items.filter(item => !(item.name && item.name.includes('Flammkuchen')));
+    // Nur gültige Items verwenden (filtert "undefined"-Einträge)
+    const validItems = bonDetails.items.filter(item => item && typeof item.name === 'string' && item.name.length > 0);
+    if (validItems.length === 0) {
+        console.warn('printReceipt: Keine gültigen Items vorhanden, Druck abgebrochen.');
+        return;
+    }
 
-    await printViaCups(buildCashReceiptText(bonDetails), `Kassenbon-${bonDetails.id}`);
+    const printDetails = { ...bonDetails, items: validItems };
+    const flammkuchenItems = validItems.filter(item => item.name.includes('Flammkuchen'));
+    const kitchenItems = validItems.filter(item => !item.name.includes('Flammkuchen'));
+
+    await printViaCups(buildCashReceiptText(printDetails), `Kassenbon-${bonDetails.id}`);
     console.log('Kassenbon erfolgreich gedruckt (Bon Nr. ' + bonDetails.id + ')');
 
     if (kitchenItems.length > 0) {
-        await printViaCups(buildKitchenReceiptText(bonDetails, kitchenItems), `Kueche-${bonDetails.id}`);
+        await printViaCups(buildKitchenReceiptText(printDetails, kitchenItems), `Kueche-${bonDetails.id}`);
         console.log('Küchenbon erfolgreich gedruckt');
     }
 
     if (flammkuchenItems.length > 0) {
-        await printViaCups(buildFlammkuchenReceiptText(bonDetails, flammkuchenItems), `Flammkuchen-${bonDetails.id}`);
+        await printViaCups(buildFlammkuchenReceiptText(printDetails, flammkuchenItems), `Flammkuchen-${bonDetails.id}`);
         console.log('Flammkuchenbon erfolgreich gedruckt');
     }
 }
