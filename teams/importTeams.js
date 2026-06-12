@@ -10,7 +10,7 @@ const path = require('path');
 
 // Spreadsheet konfigurieren
 const SPREADSHEET_ID = '1TA4WG5B73yDE1iN8x1vvtQ30yfVdWnorqeHr7lMFErk';
-const RANGE = 'Anmeldungen 2025!G3:J161'; // Spalte G-H-J
+const RANGE = 'Anmeldungen 2026!G3:J157'; // Spalte G-H-J
 
 module.exports = async function importTeams(db) {
     // Service-Account Datei laden
