@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BVT Kommunikation</title>
+    <link rel="stylesheet" href="kommunikation.css">
+</head>
+<body>
+<header class="topbar">
+    <a class="back-link" href="../admin.html">Zurueck</a>
+    <div>
+        <p class="eyebrow">Deutschlands groesstes Outdoor-Volleyballturnier</p>
+        <h1>BVT Kommunikationszentrale</h1>
+    </div>
+    <div class="event-pill">
+        <span id="eventNameTop">BVT</span>
+        <strong id="eventDatesTop">-</strong>
+    </div>
+</header>
+
+<main class="dashboard-shell">
+    <section class="hero-band">
+        <div class="hero-copy">
+            <p class="eyebrow">Orga-Cockpit</p>
+            <h2>Alle Mails, Behoerdenkontakte und Erinnerungen an einem Platz.</h2>
+            <p>
+                Der Bereich sammelt Versandplanung, QS-Freigabe, Empfaengerlisten,
+                Textvorlagen und Meilensteine fuer die jaehrliche Turnierorganisation.
+            </p>
+        </div>
+        <div class="hero-status">
+            <span>Wir befinden uns gerade bei</span>
+            <strong id="currentPhase">Kommunikation laden</strong>
+            <small id="currentFocus">Datenbank wird abgefragt</small>
+        </div>
+    </section>
+
+    <section class="kpi-grid" aria-label="Kennzahlen">
+        <article class="kpi">
+            <span class="kpi-label">Geplante Punkte</span>
+            <strong id="kpiTotal">0</strong>
+            <small>Mails und Meilensteine</small>
+        </article>
+        <article class="kpi">
+            <span class="kpi-label">QS offen</span>
+            <strong id="kpiReview">0</strong>
+            <small>bereit fuer Meta-Mail</small>
+        </article>
+        <article class="kpi">
+            <span class="kpi-label">Versendet</span>
+            <strong id="kpiSent">0</strong>
+            <small>nachverfolgbare Kontakte</small>
+        </article>
+        <article class="kpi">
+            <span class="kpi-label">Erinnerungen</span>
+            <strong id="kpiReminders">0</strong>
+            <small>faellig oder bald faellig</small>
+        </article>
+        <article class="kpi">
+            <span class="kpi-label">Naechster Termin</span>
+            <strong id="kpiNextDate">-</strong>
+            <small id="kpiNextTitle">kein Termin</small>
+        </article>
+    </section>
+
+    <section class="focus-grid">
+        <article class="panel next-panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Naechste Schritte</p>
+                    <h2>Was als Naechstes ansteht</h2>
+                </div>
+            </div>
+            <ol class="next-list" id="nextSteps"></ol>
+        </article>
+
+        <article class="panel reminder-panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Automatische Erinnerung</p>
+                    <h2>Faellige Kommunikation</h2>
+                </div>
+            </div>
+            <div class="reminder-list" id="reminderList"></div>
+        </article>
+    </section>
+
+    <section class="timeline-grid">
+        <article class="panel planning-panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Gantt-Chart</p>
+                    <h2>Planung und Platzhalter</h2>
+                </div>
+                <button type="button" class="ghost-button" id="reloadData">Daten neu laden</button>
+            </div>
+            <div class="timeline" id="timeline"></div>
+        </article>
+    </section>
+
+    <section class="tools-grid">
+        <article class="panel copy-panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Vorlagen</p>
+                    <h2>Jahr kopieren</h2>
+                </div>
+            </div>
+            <form id="copyYearForm" class="entry-form compact-form">
+                <label>
+                    Quelle
+                    <input id="sourceEventName" list="eventNameOptions" type="text" placeholder="z.B. BVT 38">
+                </label>
+                <label>
+                    Ziel
+                    <input id="targetEventName" type="text" placeholder="z.B. BVT 39">
+                </label>
+                <label>
+                    Ziel Freitag
+                    <input id="targetEventStart" type="date">
+                </label>
+                <label>
+                    Ziel Sonntag
+                    <input id="targetEventEnd" type="date">
+                </label>
+                <button type="submit" class="primary-button wide">Jahr kopieren</button>
+                <div class="copy-status wide" id="copyStatus"></div>
+            </form>
+            <datalist id="eventNameOptions"></datalist>
+        </article>
+    </section>
+
+    <section class="work-grid lower-grid">
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Eintrag</p>
+                    <h2 id="formTitle">Mail oder Meilenstein anlegen</h2>
+                </div>
+            </div>
+            <form id="entryForm" class="entry-form">
+                <label>
+                    Typ
+                    <select id="entryType">
+                        <option value="mail">Mail</option>
+                        <option value="milestone">Meilenstein / Platzhalter</option>
+                    </select>
+                </label>
+                <label>
+                    Eventname
+                    <input id="eventName" type="text" value="BVT 39">
+                </label>
+                <label>
+                    Event Freitag
+                    <input id="eventStart" type="date" value="2027-07-02">
+                </label>
+                <label>
+                    Event Sonntag
+                    <input id="eventEnd" type="date" value="2027-07-04">
+                </label>
+                <label>
+                    Versanddatum / Termin
+                    <input id="sendDate" type="date" required>
+                </label>
+                <label>
+                    Titel
+                    <input id="title" type="text" placeholder="z.B. Genehmigung Ordnungsamt" required>
+                </label>
+                <label>
+                    Meta-Mail fuer QS
+                    <input id="metaEmail" type="email" value="tsv.auerbach.turnier@gmail.com">
+                </label>
+                <label class="wide">
+                    Empfaenger, kommagetrennt
+                    <input id="recipients" type="text" placeholder="person@example.de, amt@example.de">
+                </label>
+                <label class="wide">
+                    Status
+                    <select id="status">
+                        <option value="draft">Entwurf</option>
+                        <option value="review">QS offen</option>
+                        <option value="ready">Freigegeben</option>
+                        <option value="sent">Gesendet</option>
+                        <option value="done">Erledigt</option>
+                        <option value="cancelled">Abgebrochen</option>
+                    </select>
+                </label>
+                <div class="wide">
+                    <div class="rich-toolbar" aria-label="Formatierung">
+                        <button type="button" data-command="bold">B</button>
+                        <button type="button" data-command="italic">I</button>
+                        <button type="button" data-command="insertUnorderedList">Liste</button>
+                        <button type="button" data-smiley="😊">Smiley</button>
+                    </div>
+                    <div id="bodyHtml" class="rich-editor" contenteditable="true">
+                        Hallo zusammen,<br><br>
+                        bitte vormerken: Das BVT findet von Freitag bis Sonntag statt.<br><br>
+                        Viele Gruesse<br>
+                        Orga-Team
+                    </div>
+                </div>
+                <div class="form-actions wide">
+                    <button type="submit" class="primary-button" id="saveEntryButton">Eintrag speichern</button>
+                    <button type="button" class="ghost-button hidden" id="cancelEditButton">Bearbeiten abbrechen</button>
+                </div>
+            </form>
+        </article>
+
+        <article class="panel mail-panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Kommunikation</p>
+                    <h2>Mails und Meilensteine</h2>
+                </div>
+                <button type="button" class="ghost-button" id="exportJson">JSON exportieren</button>
+            </div>
+            <div class="mail-list" id="mailList"></div>
+        </article>
+    </section>
+
+    <section class="panel preview-panel">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">QS-Versand</p>
+                <h2>Mail an Meta-Adresse vorbereiten</h2>
+            </div>
+            <a class="primary-button" id="mailtoLink" href="#">QS-Mail oeffnen</a>
+        </div>
+        <div class="preview-box" id="previewBox">
+            Waehle einen Mail-Eintrag aus, um die vorbereitete QS-Mail zu sehen.
+        </div>
+    </section>
+</main>
+
+<script src="../config.js"></script>
+<script src="kommunikation.js"></script>
+</body>
+</html>
