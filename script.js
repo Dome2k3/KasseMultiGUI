@@ -648,6 +648,15 @@ function formatItems(receiptItems) {
     }).filter(item => item !== null); // Filtert ungültige Artikel heraus
 }
 
+// Beispiel: Formatierung der `items`
+const formattedItems = formatItems(bonDetails.items);
+
+// Nun sendest du diese formatierten Items an den Server
+const bonData = {
+    totalAmount: parseFloat(bonDetails.total).toFixed(2),
+    items: formattedItems
+};
+
 // --- Funktion zum Senden des Bons an den Server ---
 function sendReceiptsToServer(bonDetails, callback) {
     console.log("Bon Details zum Speichern:", bonDetails);

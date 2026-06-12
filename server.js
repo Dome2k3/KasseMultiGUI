@@ -1,4 +1,8 @@
-require('dotenv').config({ path: '/var/www/html/kasse/Umgebung.env' });
+const fs = require('fs');
+const path = require('path');
+
+const localEnvPath = path.join(__dirname, 'Umgebung.env');
+require('dotenv').config({ path: fs.existsSync(localEnvPath) ? localEnvPath : '/var/www/html/kasse/Umgebung.env' });
 
 const nodemailer = require("nodemailer");
 
@@ -10,9 +14,7 @@ const bodyParser = require("body-parser");
 
 // Drucker (CUPS via lp)
 const { execFile } = require('child_process');
-const fs = require('fs');
 const os = require('os');
-const path = require('path');
 
 const PRINTER_NAME = process.env.PRINTER_NAME || 'TM-T20III';
 
@@ -847,6 +849,399 @@ app.delete('/config-gebinde/:id', (req, res) => {
     });
 });
 
+function normalizeKommunikationRow(row) {
+    let recipients = [];
+    if (Array.isArray(row.empfaenger)) {
+        recipients = row.empfaenger;
+    } else if (typeof row.empfaenger === 'string' && row.empfaenger.trim()) {
+        try {
+            recipients = JSON.parse(row.empfaenger);
+        } catch (e) {
+            recipients = [];
+        }
+    }
 
+    const dateOnly = (value) => {
+        if (!value) return '';
+        if (value instanceof Date) {
+            const year = value.getFullYear();
+            const month = String(value.getMonth() + 1).padStart(2, '0');
+            const day = String(value.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        return String(value).slice(0, 10);
+    };
+
+    return {
+        id: row.id,
+        type: row.typ,
+        eventName: row.event_name,
+        eventStart: dateOnly(row.event_start),
+        eventEnd: dateOnly(row.event_end),
+        title: row.titel,
+        metaEmail: row.meta_email,
+        recipients,
+        sendDate: dateOnly(row.versanddatum),
+        subject: row.betreff,
+        bodyHtml: row.text_html,
+        bodyText: row.text_plain,
+        status: row.status,
+        priority: row.prioritaet,
+        owner: row.verantwortung,
+        note: row.bemerkung,
+        sentAt: row.geschickt_am,
+        createdAt: row.erstellt_am,
+        updatedAt: row.aktualisiert_am
+    };
+}
+
+function kommunikationPayload(item) {
+    const type = item.type || item.typ || 'mail';
+    const title = item.title || item.titel;
+    const eventName = item.eventName || item.event_name;
+    const eventStart = item.eventStart || item.event_start;
+    const eventEnd = item.eventEnd || item.event_end;
+    const sendDate = item.sendDate || item.versanddatum;
+    const metaEmail = item.metaEmail || item.meta_email;
+    const recipients = Array.isArray(item.recipients) ? item.recipients : (item.empfaenger || []);
+
+    return {
+        type,
+        title,
+        eventName,
+        eventStart,
+        eventEnd,
+        sendDate,
+        metaEmail,
+        recipients,
+        subject: item.subject || item.betreff || title,
+        bodyHtml: item.bodyHtml || item.text_html || '',
+        bodyText: item.bodyText || item.text_plain || '',
+        status: item.status || 'draft',
+        priority: item.priority || item.prioritaet || 'normal',
+        owner: item.owner || item.verantwortung || 'Orga',
+        note: item.note || item.bemerkung || null
+    };
+}
+
+function validateKommunikationPayload(payload) {
+    return payload.title && payload.eventName && payload.eventStart && payload.eventEnd && payload.sendDate && payload.metaEmail;
+}
+
+app.get('/kommunikation/api/eintraege', (req, res) => {
+    db.query(
+        `SELECT *
+           FROM kommunikation_eintraege
+          ORDER BY versanddatum ASC, id ASC`,
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows.map(normalizeKommunikationRow));
+        }
+    );
+});
+
+app.post('/kommunikation/api/eintraege', (req, res) => {
+    const payload = kommunikationPayload(req.body || {});
+
+    if (!validateKommunikationPayload(payload)) {
+        return res.status(400).json({ error: 'Pflichtfelder fehlen' });
+    }
+
+    db.query(
+        `INSERT INTO kommunikation_eintraege
+            (typ, event_name, event_start, event_end, titel, meta_email, empfaenger,
+             versanddatum, betreff, text_html, text_plain, status, prioritaet, verantwortung, bemerkung)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            payload.type,
+            payload.eventName,
+            payload.eventStart,
+            payload.eventEnd,
+            payload.title,
+            payload.metaEmail,
+            JSON.stringify(payload.recipients),
+            payload.sendDate,
+            payload.subject,
+            payload.bodyHtml,
+            payload.bodyText,
+            payload.status,
+            payload.priority,
+            payload.owner,
+            payload.note
+        ],
+        (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ success: true, id: result.insertId });
+        }
+    );
+});
+
+app.put('/kommunikation/api/eintraege/:id', (req, res) => {
+    const payload = kommunikationPayload(req.body || {});
+
+    if (!validateKommunikationPayload(payload)) {
+        return res.status(400).json({ error: 'Pflichtfelder fehlen' });
+    }
+
+    db.query(
+        `UPDATE kommunikation_eintraege
+            SET typ = ?,
+                event_name = ?,
+                event_start = ?,
+                event_end = ?,
+                titel = ?,
+                meta_email = ?,
+                empfaenger = ?,
+                versanddatum = ?,
+                betreff = ?,
+                text_html = ?,
+                text_plain = ?,
+                status = ?,
+                prioritaet = ?,
+                verantwortung = ?,
+                bemerkung = ?,
+                geschickt_am = IF(? = 'sent' AND geschickt_am IS NULL, NOW(), geschickt_am)
+          WHERE id = ?`,
+        [
+            payload.type,
+            payload.eventName,
+            payload.eventStart,
+            payload.eventEnd,
+            payload.title,
+            payload.metaEmail,
+            JSON.stringify(payload.recipients),
+            payload.sendDate,
+            payload.subject,
+            payload.bodyHtml,
+            payload.bodyText,
+            payload.status,
+            payload.priority,
+            payload.owner,
+            payload.note,
+            payload.status,
+            req.params.id
+        ],
+        (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (result.affectedRows === 0) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+            res.json({ success: true });
+        }
+    );
+});
+
+app.patch('/kommunikation/api/eintraege/:id/status', (req, res) => {
+    const allowed = ['draft', 'review', 'ready', 'sent', 'done', 'cancelled'];
+    const status = req.body && req.body.status;
+    if (!allowed.includes(status)) {
+        return res.status(400).json({ error: 'Ungueltiger Status' });
+    }
+
+    db.query(
+        `UPDATE kommunikation_eintraege
+            SET status = ?,
+                geschickt_am = IF(? = 'sent', NOW(), geschickt_am)
+          WHERE id = ?`,
+        [status, status, req.params.id],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        }
+    );
+});
+
+
+
+function toIsoDate(value) {
+    if (!value) return '';
+    if (value instanceof Date) {
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    return String(value).slice(0, 10);
+}
+
+function addDaysIso(value, days) {
+    const date = new Date(`${toIsoDate(value)}T12:00:00`);
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+}
+
+function dateDiffDays(from, to) {
+    const fromDate = new Date(`${toIsoDate(from)}T12:00:00`);
+    const toDate = new Date(`${toIsoDate(to)}T12:00:00`);
+    return Math.round((toDate.getTime() - fromDate.getTime()) / 86400000);
+}
+
+app.post('/kommunikation/api/jahr-kopieren', async (req, res) => {
+    const { sourceEventName, targetEventName, targetEventStart, targetEventEnd } = req.body || {};
+
+    if (!sourceEventName || !targetEventName || !targetEventStart || !targetEventEnd) {
+        return res.status(400).json({ error: 'Quelle, Ziel und Ziel-Daten sind erforderlich' });
+    }
+
+    try {
+        const dbp = db.promise();
+        const [sourceRows] = await dbp.execute(
+            `SELECT *
+               FROM kommunikation_eintraege
+              WHERE event_name = ?
+              ORDER BY versanddatum ASC, id ASC`,
+            [sourceEventName]
+        );
+
+        if (!sourceRows.length) {
+            return res.status(404).json({ error: 'Keine Eintraege fuer das Quell-Event gefunden' });
+        }
+
+        const shiftDays = dateDiffDays(sourceRows[0].event_start, targetEventStart);
+        let inserted = 0;
+        let skipped = 0;
+
+        for (const row of sourceRows) {
+            const targetSendDate = addDaysIso(row.versanddatum, shiftDays);
+            const [existing] = await dbp.execute(
+                `SELECT id
+                   FROM kommunikation_eintraege
+                  WHERE event_name = ?
+                    AND titel = ?
+                    AND versanddatum = ?
+                  LIMIT 1`,
+                [targetEventName, row.titel, targetSendDate]
+            );
+
+            if (existing.length) {
+                skipped += 1;
+                continue;
+            }
+
+            await dbp.execute(
+                `INSERT INTO kommunikation_eintraege
+                    (typ, event_name, event_start, event_end, titel, meta_email, empfaenger,
+                     versanddatum, betreff, text_html, text_plain, status, prioritaet, verantwortung, bemerkung)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
+                [
+                    row.typ,
+                    targetEventName,
+                    targetEventStart,
+                    targetEventEnd,
+                    row.titel,
+                    row.meta_email,
+                    typeof row.empfaenger === 'string' ? row.empfaenger : JSON.stringify(row.empfaenger || []),
+                    targetSendDate,
+                    row.betreff,
+                    row.text_html,
+                    row.text_plain,
+                    row.prioritaet,
+                    row.verantwortung,
+                    `Kopiert aus ${sourceEventName}. ${row.bemerkung || ''}`.trim()
+                ]
+            );
+            inserted += 1;
+        }
+
+        res.json({ success: true, inserted, skipped });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+async function ensureKommunikationReminderLog() {
+    await db.promise().query(`
+        CREATE TABLE IF NOT EXISTS kommunikation_erinnerungen_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            eintrag_id INT NOT NULL,
+            erinnerung_am DATE NOT NULL,
+            mail_an VARCHAR(255) NOT NULL,
+            erstellt_am TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_kommunikation_erinnerung (eintrag_id, erinnerung_am)
+        )
+    `);
+}
+
+async function sendDueKommunikationReminders() {
+    if (process.env.KOMM_REMINDER_ENABLED === 'false') return;
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return;
+
+    const reminderDays = Math.max(0, parseInt(process.env.KOMM_REMINDER_DAYS || '14', 10) || 14);
+    const dbp = db.promise();
+    await ensureKommunikationReminderLog();
+
+    const [rows] = await dbp.execute(
+        `SELECT e.*
+           FROM kommunikation_eintraege e
+          WHERE e.status IN ('draft', 'review', 'ready')
+            AND e.versanddatum <= DATE_ADD(CURDATE(), INTERVAL ${reminderDays} DAY)
+            AND NOT EXISTS (
+                SELECT 1
+                  FROM kommunikation_erinnerungen_log l
+                 WHERE l.eintrag_id = e.id
+                   AND l.erinnerung_am = CURDATE()
+            )
+          ORDER BY e.meta_email ASC, e.versanddatum ASC, e.id ASC`
+    );
+
+    if (!rows.length) return;
+
+    const grouped = rows.reduce((map, row) => {
+        const target = row.meta_email || process.env.SMTP_USER;
+        if (!map.has(target)) map.set(target, []);
+        map.get(target).push(row);
+        return map;
+    }, new Map());
+
+    const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587', 10),
+        secure: false,
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+        }
+    });
+
+    for (const [mailTo, entries] of grouped.entries()) {
+        const lines = entries.map((row) => {
+            const date = row.versanddatum instanceof Date ? row.versanddatum.toLocaleDateString('de-DE') : String(row.versanddatum).slice(0, 10);
+            return `<li><strong>${row.titel}</strong><br>${date} · ${row.status} · ${row.typ}</li>`;
+        }).join('');
+
+        await transporter.sendMail({
+            from: process.env.SMTP_SENDER || process.env.SMTP_USER,
+            to: mailTo,
+            subject: `BVT Kommunikation: ${entries.length} Erinnerung(en)`,
+            html: `
+                <h2>BVT Kommunikation - faellige Eintraege</h2>
+                <p>Folgende Eintraege sind faellig oder innerhalb der naechsten ${reminderDays} Tage geplant:</p>
+                <ul>${lines}</ul>
+            `,
+            text: entries.map((row) => `${row.versanddatum}: ${row.titel} (${row.status})`).join('\n')
+        });
+
+        for (const row of entries) {
+            await dbp.execute(
+                `INSERT IGNORE INTO kommunikation_erinnerungen_log
+                    (eintrag_id, erinnerung_am, mail_an)
+                 VALUES (?, CURDATE(), ?)`,
+                [row.id, mailTo]
+            );
+        }
+    }
+}
+
+if (process.env.KOMM_REMINDER_ENABLED !== 'false') {
+    setTimeout(() => {
+        sendDueKommunikationReminders().catch((err) => {
+            console.error('Kommunikations-Erinnerung fehlgeschlagen:', err.message);
+        });
+    }, 30000);
+
+    setInterval(() => {
+        sendDueKommunikationReminders().catch((err) => {
+            console.error('Kommunikations-Erinnerung fehlgeschlagen:', err.message);
+        });
+    }, 6 * 60 * 60 * 1000);
+}
 
 app.listen(3000, () => console.log("Statistik-Server läuft auf http://localhost:3000"));
