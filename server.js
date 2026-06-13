@@ -929,10 +929,20 @@ function validateKommunikationPayload(payload) {
 }
 
 app.get('/kommunikation/api/eintraege', (req, res) => {
+    const params = [];
+    let sql = `SELECT *
+                 FROM kommunikation_eintraege`;
+
+    if (req.query.eventName) {
+        sql += ` WHERE event_name = ?`;
+        params.push(req.query.eventName);
+    }
+
+    sql += ` ORDER BY versanddatum ASC, id ASC`;
+
     db.query(
-        `SELECT *
-           FROM kommunikation_eintraege
-          ORDER BY versanddatum ASC, id ASC`,
+        sql,
+        params,
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(rows.map(normalizeKommunikationRow));
