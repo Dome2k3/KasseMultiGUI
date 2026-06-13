@@ -2,230 +2,187 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Team Anmeldung</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    tr.neutral { background-color: #f9f9f9; }
-    tr.angemeldet { background-color: #c8f7c5; }
-    tr.abgemeldet { background-color: #f7c5c5; }
-    input[type="number"] { width: 80px; padding: 4px; }
-    button { padding: 6px 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 2px; }
-    button.angemeldet { background-color: #4CAF50; color: white; }
-    button.abgemeldet { background-color: #f44336; color: white; }
-    button.extra { background-color: #2196F3; color: white; }
-    button.alpha { background-color: #eee; color: #333; }
-    #stats { margin-bottom: 12px; font-size: 16px; }
-    #search { padding: 6px; width: 220px; margin-bottom: 10px; }
-    #importBtn { background-color: #ff9800; color: white; font-weight: bold; padding: 8px 14px; border-radius: 6px; }
-    #importBtn[disabled] { opacity: 0.6; cursor: not-allowed; }
-    #importMessage { margin-left: 10px; font-style: italic; }
-    #alphaFilter { margin-bottom: 8px; }
-  </style>
-  <script src="../config.js"></script>
-  <script src="teams.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BVT Teams</title>
+  <link rel="stylesheet" href="teams.css" />
 </head>
 <body>
-<h1>Navigation</h1>
-<div class="action-buttons">
-  <button class="back-button" onclick="window.location.href='../admin.html'">Admin-Dashboard</button>
-  <button class="back-button" onclick="window.location.href='../index.html'">Kassen</button>
-</div>
+<header class="topbar">
+  <a class="back-link" href="/kasse/admin.html">Admin</a>
+  <div>
+    <p class="eyebrow">Deutschlands groesstes Outdoor-Volleyballturnier</p>
+    <h1>BVT Teamzentrale</h1>
+  </div>
+  <div class="event-pill">
+    <span id="sheetNameTop">Anmeldungen 2026</span>
+    <strong id="importStatusTop">bereit</strong>
+  </div>
+</header>
 
+<main class="dashboard-shell">
+  <section class="hero-band">
+    <div class="hero-copy">
+      <p class="eyebrow">Teams, Zahlung und Nachruecker</p>
+      <h2>Uebersicht und Abmeldungen direkt an einem Platz.</h2>
+      <p>
+        Import aus Google Sheets, Zahlungsstatus, Spielniveau und Nachruecker-Mails
+        laufen hier zusammen.
+      </p>
+    </div>
+    <div class="hero-status">
+      <span>Naechster bezahlter Nachruecker</span>
+      <strong id="nextReplacementHero">wird geladen</strong>
+      <small id="nextReplacementDetail">Datenbank wird abgefragt</small>
+    </div>
+  </section>
 
-<h1>Team Anmeldung</h1>
+  <section class="kpi-grid" aria-label="Kennzahlen">
+    <article class="kpi">
+      <span class="kpi-label">Teams</span>
+      <strong id="teamCount">0</strong>
+      <small>sichtbar nach Filter</small>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">Angemeldet</span>
+      <strong id="angemeldetCount">0</strong>
+      <small>fest im Feld</small>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">Nachruecker</span>
+      <strong id="waitlistCount">0</strong>
+      <small>davon <span id="paidWaitlistCount">0</span> bezahlt</small>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">Bezahlt</span>
+      <strong id="paidCount">0</strong>
+      <small>laut Spalte W</small>
+    </article>
+    <article class="kpi">
+      <span class="kpi-label">Teilnehmer</span>
+      <strong id="teilnehmerCount">0</strong>
+      <small>manuell gepflegt</small>
+    </article>
+  </section>
 
-<div id="controls">
-  <button id="importBtn">Google Sheet Import starten</button>
-  <span id="importMessage"></span>
-</div>
+  <section class="focus-grid">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Google Sheet</p>
+          <h2>Import konfigurieren</h2>
+        </div>
+        <button type="button" class="ghost-button" id="reloadConfig">Neu laden</button>
+      </div>
+      <form id="importConfigForm" class="entry-form">
+        <label class="wide">
+          Spreadsheet-Link oder ID
+          <input id="spreadsheetId" type="text" autocomplete="off" />
+        </label>
+        <label>
+          Tabellenblatt
+          <input id="sheetName" type="text" value="Anmeldungen 2026" />
+        </label>
+        <label>
+          Startzeile
+          <input id="startRow" type="number" min="1" value="3" />
+        </label>
+        <label>
+          Endzeile optional
+          <input id="endRow" type="number" min="1" placeholder="leer = bis unten" />
+        </label>
+        <div class="form-actions wide">
+          <button type="submit" class="primary-button">Konfiguration speichern</button>
+          <button type="button" class="primary-button amber-button" id="importBtn">Google Sheet Import starten</button>
+        </div>
+        <div class="copy-status wide" id="importMessage"></div>
+      </form>
+    </article>
 
-<!-- Statistik -->
-<div id="stats">
-  Gesamt: <span id="teamCount">0</span> |
-  Angemeldet: <span id="angemeldetCount">0</span> |
-  Abgemeldet: <span id="abgemeldetCount">0</span> |
-  Teilnehmer: <span id="teilnehmerCount">0</span>
-</div>
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Abmeldung & Nachruecker</p>
+          <h2>Management</h2>
+        </div>
+      </div>
+      <form id="managementForm" class="entry-form">
+        <label class="wide">
+          Abzumeldendes Team
+          <select id="cancelTeamSelect"></select>
+        </label>
+        <label class="wide">
+          Nachruecker
+          <select id="replacementTeamSelect"></select>
+        </label>
+        <label>
+          Bereitschaftsanfragen
+          <input id="standbyCount" type="number" min="1" value="3" />
+        </label>
+        <div class="form-actions wide">
+          <button type="submit" class="primary-button">Abmeldung verarbeiten</button>
+          <button type="button" class="ghost-button" id="prepareStandbyMails">Nachruecker anfragen</button>
+        </div>
+        <div class="copy-status wide" id="managementMessage"></div>
+      </form>
+    </article>
+  </section>
 
-<!-- Buchstaben Filter -->
-<div id="alphaFilter"></div>
+  <section class="panel table-panel">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Teamliste</p>
+        <h2>Uebersicht</h2>
+      </div>
+      <div class="table-tools">
+        <select id="statusFilter" aria-label="Statusfilter">
+          <option value="">Alle Status</option>
+          <option value="neutral">Neutral</option>
+          <option value="angemeldet">Angemeldet</option>
+          <option value="abgemeldet">Abgemeldet</option>
+          <option value="nachruecker">Nachruecker</option>
+        </select>
+        <select id="paymentFilter" aria-label="Zahlungsfilter">
+          <option value="">Alle Zahlungen</option>
+          <option value="paid">Bezahlt</option>
+          <option value="open">Nicht bezahlt/offen</option>
+        </select>
+        <input type="text" id="search" placeholder="Team, Melder oder E-Mail suchen" />
+      </div>
+    </div>
+    <div id="alphaFilter" class="alpha-filter"></div>
+    <div class="table-wrap">
+      <table id="teamTable">
+        <thead>
+        <tr>
+          <th>Nr.</th>
+          <th>Team</th>
+          <th>Melder</th>
+          <th>E-Mail</th>
+          <th>Status</th>
+          <th>Zahlung</th>
+          <th>Level</th>
+          <th>Teilnehmer</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
 
-<input type="text" id="search" placeholder="Team suchen..." oninput="filterTeams()" />
+  <section class="panel preview-panel">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Mailvorschau</p>
+        <h2>Entwuerfe im Standard-Mailprogramm</h2>
+      </div>
+      <button type="button" class="primary-button hidden" id="openAllDrafts">Alle Entwuerfe oeffnen</button>
+    </div>
+    <div class="mail-preview-list" id="mailPreviewList">
+      <div class="empty-state">Noch keine Mail vorbereitet.</div>
+    </div>
+  </section>
+</main>
 
-<table id="teamTable">
-  <thead>
-  <tr>
-    <th>ID</th>
-    <th>Team</th>
-    <th>Anmelder</th>
-    <th>E-Mail</th>
-    <th>Status</th>
-    <th>Teilnehmer</th>
-    <th>Extra</th>
-  </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
-<script>
-  const API_BASE = window.API_URL_TEAMS // <-- ggf. anpassen
-  let teams = [];
-  let currentAlphaFilter = '';
-
-  document.getElementById('importBtn').addEventListener('click', async () => {
-    const ok = confirm('⚠️ Achtung! Der Import überschreibt ALLE bestehenden Team-Daten. Fortfahren?');
-    if (!ok) return;
-
-    const btn = document.getElementById('importBtn');
-    const msg = document.getElementById('importMessage');
-    btn.disabled = true;
-    msg.textContent = 'Import läuft... bitte warten ⏳';
-
-    try {
-      const res = await fetch(`${API_BASE}/import-teams`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        msg.textContent = '✅ Import erfolgreich. Daten werden neu geladen...';
-        await loadTeams(); // neue Daten laden
-      } else {
-        msg.textContent = '❌ Import fehlgeschlagen: ' + (data.message || res.statusText);
-      }
-    } catch (err) {
-      console.error(err);
-      msg.textContent = '⚠️ Import fehlgeschlagen (Netzwerk/Server)';
-    } finally {
-      btn.disabled = false;
-      setTimeout(() => { document.getElementById('importMessage').textContent = ''; }, 5000);
-    }
-  });
-
-  // Alphabet-Buttons
-  function renderAlphaButtons() {
-    const container = document.getElementById('alphaFilter');
-    container.innerHTML = '';
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(letter => {
-      const b = document.createElement('button');
-      b.className = 'alpha';
-      b.textContent = letter;
-      b.onclick = () => { currentAlphaFilter = letter; renderTeams(); updateStats(); };
-      container.appendChild(b);
-    });
-    const all = document.createElement('button');
-    all.className = 'alpha';
-    all.textContent = 'Alle';
-    all.onclick = () => { currentAlphaFilter = ''; renderTeams(); updateStats(); };
-    container.appendChild(all);
-  }
-
-  async function loadTeams() {
-    try {
-      const res = await fetch(`${API_BASE}/teams`);
-      teams = await res.json();
-      renderAlphaButtons();
-      renderTeams();
-      updateStats();
-    } catch (err) {
-      console.error('Fehler beim Laden der Teams', err);
-      alert('Fehler beim Laden der Teams (siehe Konsole).');
-    }
-  }
-
-  function renderTeams() {
-    const tbody = document.querySelector('#teamTable tbody');
-    tbody.innerHTML = '';
-    const searchFilter = document.getElementById('search').value.trim().toLowerCase();
-
-    teams.forEach(team => {
-      if (currentAlphaFilter && !team.name.toUpperCase().startsWith(currentAlphaFilter)) return;
-      if (searchFilter && !team.name.toLowerCase().includes(searchFilter) && !(team.anmelder||'').toLowerCase().includes(searchFilter) && !(team.email||'').toLowerCase().includes(searchFilter)) return;
-
-      const tr = document.createElement('tr');
-      tr.className = team.status || 'neutral';
-      const statusButtonClass = team.status === 'angemeldet' ? 'angemeldet' : (team.status === 'abgemeldet' ? 'abgemeldet' : '');
-
-      tr.innerHTML = `
-        <td>${team.id ?? ''}</td>
-        <td>${team.name ?? ''}</td>
-        <td>${team.anmelder ?? ''}</td>
-        <td>${team.email ?? ''}</td>
-        <td><button class="${statusButtonClass}" onclick="toggleStatus(${team.id})">${team.status === 'angemeldet' ? 'Abmelden' : 'Anmelden'}</button></td>
-        <td><input type="number" value="${team.teilnehmerzahl ?? 0}" onchange="updateTeilnehmer(${team.id}, this.value)"></td>
-        <td><button class="extra" onclick="extraAction(${team.id})">Extra</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function updateStats() {
-    // Statistik nur für aktuell sichtbare / gefilterte Teams
-    const searchFilter = document.getElementById('search').value.trim().toLowerCase();
-    const filtered = teams.filter(team => {
-      if (currentAlphaFilter && !team.name.toUpperCase().startsWith(currentAlphaFilter)) return false;
-      if (searchFilter && !team.name.toLowerCase().includes(searchFilter) && !(team.anmelder||'').toLowerCase().includes(searchFilter) && !(team.email||'').toLowerCase().includes(searchFilter)) return false;
-      return true;
-    });
-
-    const teamCount = filtered.length;
-    const angemeldetCount = filtered.filter(t => t.status === 'angemeldet').length;
-    const abgemeldetCount = filtered.filter(t => t.status === 'abgemeldet').length;
-    const teilnehmerCount = filtered.reduce((s,t)=> s + (t.teilnehmerzahl ? Number(t.teilnehmerzahl) : 0), 0);
-
-    document.getElementById('teamCount').textContent = teamCount;
-    document.getElementById('angemeldetCount').textContent = angemeldetCount;
-    document.getElementById('abgemeldetCount').textContent = abgemeldetCount;
-    document.getElementById('teilnehmerCount').textContent = teilnehmerCount;
-  }
-
-  async function toggleStatus(id) {
-    const t = teams.find(x => x.id === id);
-    if (!t) return;
-    const newStatus = t.status === 'angemeldet' ? 'abgemeldet' : 'angemeldet';
-    try {
-      await fetch(`${API_BASE}/teams/${id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-      t.status = newStatus;
-      renderTeams();
-      updateStats();
-    } catch (err) {
-      console.error(err);
-      alert('Fehler beim Ändern des Status');
-    }
-  }
-
-  async function updateTeilnehmer(id, value) {
-    const t = teams.find(x => x.id === id);
-    if (!t) return;
-    const newVal = parseInt(value || 0, 10);
-    try {
-      await fetch(`${API_BASE}/teams/${id}/teilnehmer`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teilnehmerzahl: newVal })
-      });
-      t.teilnehmerzahl = newVal;
-      updateStats();
-    } catch (err) {
-      console.error(err);
-      alert('Fehler beim Aktualisieren der Teilnehmerzahl');
-    }
-  }
-
-  function extraAction(id) {
-    alert('Extra-Button für Team ID ' + id);
-  }
-
-  function filterTeams() {
-    renderTeams();
-    updateStats();
-  }
-
-  // initial
-  loadTeams();
-</script>
+<script src="teams-page.js"></script>
 </body>
 </html>

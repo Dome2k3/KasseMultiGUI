@@ -16,6 +16,9 @@ Thumbs.db
 # Environment files
 .env
 .env.local
+Umgebung.env
+teams/Umgebung.env
+teams/bvt_team_importer.json
 
 # Runtime state
 .bon_keyword_index

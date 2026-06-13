@@ -1,16 +1,22 @@
 // teams.js
-require('dotenv').config({path: '/var/www/html/kasse/Umgebung.env'});
-
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const importTeams = require('./importTeams'); // unser Import-Modul
+
+require('dotenv').config({ path: process.env.ENV_FILE || '/var/www/html/kasse/Umgebung.env' });
+require('dotenv').config({ path: path.join(__dirname, '..', 'Umgebung.env'), override: false });
+require('dotenv').config({ path: path.join(__dirname, 'Umgebung.env'), override: false });
+
+const importTeams = require('./importTeams');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-// DB-Pool
+const importConfigPath = process.env.TEAMS_IMPORT_CONFIG_FILE || path.join(__dirname, 'teams-config.json');
+
 const db = mysql.createPool({
     host: process.env.MYSQL_HOST,
     port: process.env.MYSQL_PORT || 3306,
@@ -22,57 +28,137 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// --- Endpoints ---
+function readImportConfig() {
+    let saved = {};
+    if (fs.existsSync(importConfigPath)) {
+        saved = JSON.parse(fs.readFileSync(importConfigPath, 'utf8'));
+    }
+    return importTeams.normalizeConfig({
+        ...importTeams.DEFAULT_IMPORT_CONFIG,
+        ...saved
+    });
+}
 
-// Alle Teams abrufen
+function writeImportConfig(config) {
+    const normalized = importTeams.normalizeConfig(config);
+    fs.writeFileSync(importConfigPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+    return normalized;
+}
+
+async function getTeamById(id) {
+    const [rows] = await db.query('SELECT * FROM teams WHERE id=? LIMIT 1', [id]);
+    return rows[0] || null;
+}
+
 app.get('/teams', async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM teams ORDER BY name ASC');
+        await importTeams.ensureTeamColumns(db);
+        const [rows] = await db.query(`
+            SELECT *
+            FROM teams
+            ORDER BY warteliste ASC, sheet_row ASC, name ASC
+        `);
         res.json(rows);
     } catch (err) {
         console.error('GET /teams Fehler:', err);
-        res.status(500).json({error: 'Datenbankfehler'});
+        res.status(500).json({ error: 'Datenbankfehler' });
     }
 });
 
-// Status ändern
+app.get('/import-config', (req, res) => {
+    try {
+        res.json(readImportConfig());
+    } catch (err) {
+        console.error('GET /import-config Fehler:', err);
+        res.status(500).json({ error: err.message || 'Konfiguration konnte nicht gelesen werden' });
+    }
+});
+
+app.put('/import-config', (req, res) => {
+    try {
+        const config = writeImportConfig(req.body || {});
+        res.json({ success: true, config });
+    } catch (err) {
+        console.error('PUT /import-config Fehler:', err);
+        res.status(400).json({ success: false, message: err.message || 'Konfiguration ungueltig' });
+    }
+});
+
 app.put('/teams/:id/status', async (req, res) => {
     try {
-        const {id} = req.params;
-        const {status} = req.body;
+        const { id } = req.params;
+        const { status } = req.body;
         await db.query('UPDATE teams SET status=? WHERE id=?', [status, id]);
-        res.json({success: true});
+        res.json({ success: true });
     } catch (err) {
         console.error('PUT /teams/:id/status Fehler:', err);
-        res.status(500).json({error: 'Datenbankfehler'});
+        res.status(500).json({ error: 'Datenbankfehler' });
     }
 });
 
-// Teilnehmerzahl ändern
 app.put('/teams/:id/teilnehmer', async (req, res) => {
     try {
-        const {id} = req.params;
-        const {teilnehmerzahl} = req.body;
+        const { id } = req.params;
+        const { teilnehmerzahl } = req.body;
         await db.query('UPDATE teams SET teilnehmerzahl=? WHERE id=?', [teilnehmerzahl, id]);
-        res.json({success: true});
+        res.json({ success: true });
     } catch (err) {
         console.error('PUT /teams/:id/teilnehmer Fehler:', err);
-        res.status(500).json({error: 'Datenbankfehler'});
+        res.status(500).json({ error: 'Datenbankfehler' });
     }
 });
 
-// Import starten (überschreibt die Tabelle)
+app.post('/teams/management/cancel', async (req, res) => {
+    const { cancelTeamId, replacementTeamId } = req.body || {};
+    const connection = await db.getConnection();
+
+    try {
+        await importTeams.ensureTeamColumns(connection);
+        await connection.beginTransaction();
+
+        const [cancelRows] = await connection.query('SELECT * FROM teams WHERE id=? LIMIT 1 FOR UPDATE', [cancelTeamId]);
+        const cancelTeam = cancelRows[0];
+        if (!cancelTeam) {
+            throw new Error('Abzumeldendes Team wurde nicht gefunden.');
+        }
+
+        let replacementTeam = null;
+        await connection.query('UPDATE teams SET status=? WHERE id=?', ['abgemeldet', cancelTeamId]);
+
+        if (replacementTeamId) {
+            const [replacementRows] = await connection.query('SELECT * FROM teams WHERE id=? LIMIT 1 FOR UPDATE', [replacementTeamId]);
+            replacementTeam = replacementRows[0];
+            if (!replacementTeam) {
+                throw new Error('Nachruecker-Team wurde nicht gefunden.');
+            }
+            if (!Number(replacementTeam.bezahlt)) {
+                throw new Error('Der ausgewaehlte Nachruecker ist nicht als bezahlt markiert.');
+            }
+            await connection.query('UPDATE teams SET status=?, warteliste=0 WHERE id=?', ['angemeldet', replacementTeamId]);
+        }
+
+        await connection.commit();
+        res.json({ success: true, cancelTeam, replacementTeam });
+    } catch (err) {
+        await connection.rollback();
+        console.error('POST /teams/management/cancel Fehler:', err);
+        res.status(400).json({ success: false, message: err.message || 'Abmeldung fehlgeschlagen' });
+    } finally {
+        connection.release();
+    }
+});
+
 app.post('/import-teams', async (req, res) => {
     try {
-        // optional: hier kann man noch auth/secret prüfen (nicht eingebaut)
-        await importTeams(db);
-        res.json({success: true, message: 'Import erfolgreich abgeschlossen'});
+        const requestedConfig = req.body && req.body.config ? req.body.config : readImportConfig();
+        const config = req.body && req.body.saveConfig ? writeImportConfig(requestedConfig) : importTeams.normalizeConfig(requestedConfig);
+        const result = await importTeams(db, config);
+        res.json({ success: true, message: 'Import erfolgreich abgeschlossen', result });
     } catch (err) {
         console.error('POST /import-teams Fehler:', err);
-        res.status(500).json({success: false, message: err.message || 'Import fehlgeschlagen'});
+        res.status(500).json({ success: false, message: err.message || 'Import fehlgeschlagen' });
     }
 });
 
-// Server starten
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server läuft auf Port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server laeuft auf Port ${PORT}`));
