@@ -13,6 +13,8 @@ const DEFAULT_BODY = [
 
 let selectedId = null;
 let editingId = null;
+let selectedEventName = "";
+let allItems = [];
 let items = [];
 
 function formatDate(value) {
@@ -44,6 +46,41 @@ function sortedItems() {
     return [...items].sort((a, b) => String(a.sendDate || "").localeCompare(String(b.sendDate || "")));
 }
 
+function uniqueEventNames() {
+    return [...new Set(allItems.map((item) => item.eventName).filter(Boolean))].sort();
+}
+
+function chooseEventName(names) {
+    if (selectedEventName && names.includes(selectedEventName)) return selectedEventName;
+    if (!names.length) return "";
+
+    const ranked = names
+        .map((name) => {
+            const eventItems = allItems.filter((item) => item.eventName === name);
+            const latestStart = eventItems
+                .map((item) => dateOnly(item.eventStart))
+                .sort()
+                .at(-1) || "";
+            return { name, latestStart };
+        })
+        .sort((a, b) => a.latestStart.localeCompare(b.latestStart) || a.name.localeCompare(b.name));
+    return ranked[ranked.length - 1].name;
+}
+
+function applyEventFilter() {
+    items = selectedEventName
+        ? allItems.filter((item) => item.eventName === selectedEventName)
+        : [...allItems];
+
+    if (selectedId && !items.some((item) => String(item.id) === String(selectedId))) {
+        selectedId = null;
+    }
+
+    if (editingId && !items.some((item) => String(item.id) === String(editingId))) {
+        resetFormMode();
+    }
+}
+
 function openItems() {
     return sortedItems().filter((item) => !["sent", "done", "cancelled"].includes(item.status));
 }
@@ -67,14 +104,12 @@ async function loadItems() {
     try {
         const response = await fetch(ENDPOINT);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        items = await response.json();
-        if (selectedId && !items.some((item) => String(item.id) === String(selectedId))) {
-            selectedId = null;
-        }
-        if (editingId && !items.some((item) => String(item.id) === String(editingId))) {
-            resetFormMode();
-        }
+        allItems = await response.json();
+        selectedEventName = chooseEventName(uniqueEventNames());
+        applyEventFilter();
+        const shouldPrimeForm = !editingId && !document.getElementById("title").value.trim();
         render();
+        if (shouldPrimeForm) setSelectedEventDefaults();
     } catch (error) {
         renderError(`Kommunikation konnte nicht geladen werden: ${error.message}`);
     }
@@ -94,6 +129,7 @@ function renderError(message) {
 }
 
 function render() {
+    renderEventOptions();
     renderEventHeader();
     renderKpis();
     renderNextSteps();
@@ -101,12 +137,10 @@ function render() {
     renderTimeline();
     renderItems();
     renderPreview();
-    renderEventOptions();
 }
 
 function renderEventHeader() {
     const first = sortedItems()[0];
-    document.getElementById("eventNameTop").textContent = first?.eventName || "BVT Kommunikation";
     document.getElementById("eventDatesTop").textContent = first
         ? `${formatDate(first.eventStart)} - ${formatDate(first.eventEnd)}`
         : "-";
@@ -261,15 +295,33 @@ function renderPreview() {
 }
 
 function renderEventOptions() {
-    const names = [...new Set(items.map((item) => item.eventName).filter(Boolean))].sort();
+    const names = uniqueEventNames();
+    const eventFilter = document.getElementById("eventFilter");
+
+    eventFilter.innerHTML = names.length
+        ? names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")
+        : "<option value=\"\">Keine Events</option>";
+    eventFilter.value = selectedEventName;
+
     document.getElementById("eventNameOptions").innerHTML = names
         .map((name) => `<option value="${escapeHtml(name)}"></option>`)
         .join("");
 
     const source = document.getElementById("sourceEventName");
     if (!source.value && names.length) {
-        source.value = names[names.length - 1];
+        source.value = selectedEventName || names[names.length - 1];
     }
+}
+
+function setSelectedEventDefaults() {
+    if (editingId) return;
+    const first = sortedItems()[0];
+    if (!first) return;
+
+    setFieldValue("eventName", first.eventName);
+    setFieldValue("eventStart", dateOnly(first.eventStart));
+    setFieldValue("eventEnd", dateOnly(first.eventEnd));
+    setFieldValue("metaEmail", first.metaEmail);
 }
 
 function stripHtml(html) {
@@ -337,6 +389,7 @@ function resetFormMode() {
     document.getElementById("formTitle").textContent = "Mail oder Meilenstein anlegen";
     document.getElementById("saveEntryButton").textContent = "Eintrag speichern";
     document.getElementById("cancelEditButton").classList.add("hidden");
+    setSelectedEventDefaults();
 }
 
 document.getElementById("entryForm").addEventListener("submit", async (event) => {
@@ -354,6 +407,7 @@ document.getElementById("entryForm").addEventListener("submit", async (event) =>
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
         selectedId = editingId || (payload.type === "mail" ? result.id : selectedId);
+        selectedEventName = payload.eventName;
         resetFormMode();
         setFieldValue("eventName", payload.eventName);
         setFieldValue("eventStart", payload.eventStart);
@@ -420,6 +474,7 @@ document.getElementById("copyYearForm").addEventListener("submit", async (event)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
+        selectedEventName = payload.targetEventName;
         copyStatus.textContent = `${result.inserted} Eintraege kopiert, ${result.skipped} vorhandene uebersprungen.`;
         await loadItems();
     } catch (error) {
@@ -444,6 +499,12 @@ document.querySelector(".rich-toolbar").addEventListener("click", (event) => {
 
 document.getElementById("reloadData").addEventListener("click", loadItems);
 document.getElementById("cancelEditButton").addEventListener("click", resetFormMode);
+document.getElementById("eventFilter").addEventListener("change", (event) => {
+    selectedEventName = event.target.value;
+    applyEventFilter();
+    resetFormMode();
+    render();
+});
 
 document.getElementById("exportJson").addEventListener("click", () => {
     const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });

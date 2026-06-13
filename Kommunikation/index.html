@@ -14,7 +14,8 @@
         <h1>BVT Kommunikationszentrale</h1>
     </div>
     <div class="event-pill">
-        <span id="eventNameTop">BVT</span>
+        <label for="eventFilter">Event</label>
+        <select id="eventFilter"></select>
         <strong id="eventDatesTop">-</strong>
     </div>
 </header>
@@ -110,11 +111,11 @@
             <form id="copyYearForm" class="entry-form compact-form">
                 <label>
                     Quelle
-                    <input id="sourceEventName" list="eventNameOptions" type="text" placeholder="z.B. BVT 38">
+                    <input id="sourceEventName" list="eventNameOptions" type="text" placeholder="z.B. 2026 - BVT 38">
                 </label>
                 <label>
                     Ziel
-                    <input id="targetEventName" type="text" placeholder="z.B. BVT 39">
+                    <input id="targetEventName" type="text" placeholder="z.B. 2027 - BVT 39">
                 </label>
                 <label>
                     Ziel Freitag
@@ -149,7 +150,7 @@
                 </label>
                 <label>
                     Eventname
-                    <input id="eventName" type="text" value="BVT 39">
+                    <input id="eventName" type="text" value="2026 - BVT 38">
                 </label>
                 <label>
                     Event Freitag

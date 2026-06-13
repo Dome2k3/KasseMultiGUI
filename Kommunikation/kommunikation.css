@@ -104,17 +104,30 @@ h2 {
 
 .event-pill {
     display: grid;
-    gap: 2px;
+    gap: 6px;
     justify-items: end;
     padding: 10px 14px;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: #fff;
+    min-width: min(340px, 100%);
 }
 
-.event-pill span {
+.event-pill label {
     color: var(--muted);
     font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.event-pill select {
+    min-height: 38px;
+    min-width: 260px;
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    background: #fff;
+    font-weight: 700;
 }
 
 .dashboard-shell {
