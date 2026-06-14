@@ -1258,7 +1258,4 @@ if (process.env.KOMM_REMINDER_ENABLED !== 'false') {
 const teamsRouter = require('./teams/teams');
 app.use('/', teamsRouter);
 
-// Statische Dateien (HTML, CSS, JS) aus dem Projekt-Root bereitstellen
-app.use(express.static(__dirname));
-
 app.listen(process.env.PORT || 3000, () => console.log("Statistik-Server läuft auf http://localhost:3000"));

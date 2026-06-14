@@ -12,7 +12,13 @@ function resolveKeyFile() {
         '/etc/secrets/bvt_team_importer',
         path.join(__dirname, 'bvt_team_importer.json')
     ];
-    return candidates.find((f) => fs.existsSync(f)) || candidates[candidates.length - 1];
+    const found = candidates.find((f) => fs.existsSync(f));
+    if (!found) {
+        console.warn('Warnung: Kein Google-Service-Account-Key gefunden. Erwartet unter:', candidates[0], 'oder', candidates[2]);
+        console.warn('Bitte GOOGLE_SERVICE_ACCOUNT_FILE-Umgebungsvariable setzen oder die Datei ablegen.');
+        throw new Error('Google-Service-Account-Key nicht gefunden. Bitte GOOGLE_SERVICE_ACCOUNT_FILE setzen oder bvt_team_importer.json bereitstellen.');
+    }
+    return found;
 }
 
 const DEFAULT_IMPORT_CONFIG = {
