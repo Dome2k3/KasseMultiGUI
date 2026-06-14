@@ -1,6 +1,25 @@
 // importTeams.js
 const { google } = require('googleapis');
+const fs = require('fs');
 const path = require('path');
+
+function resolveKeyFile() {
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_FILE) {
+        return process.env.GOOGLE_SERVICE_ACCOUNT_FILE;
+    }
+    const candidates = [
+        '/etc/secrets/bvt_team_importer.json',
+        '/etc/secrets/bvt_team_importer',
+        path.join(__dirname, 'bvt_team_importer.json')
+    ];
+    const found = candidates.find((f) => fs.existsSync(f));
+    if (!found) {
+        console.warn('Warnung: Kein Google-Service-Account-Key gefunden. Gesucht unter:', candidates.join(', '));
+        console.warn('Bitte GOOGLE_SERVICE_ACCOUNT_FILE-Umgebungsvariable setzen oder die Datei ablegen.');
+        throw new Error('Google-Service-Account-Key nicht gefunden. Bitte GOOGLE_SERVICE_ACCOUNT_FILE setzen oder bvt_team_importer.json bereitstellen.');
+    }
+    return found;
+}
 
 const DEFAULT_IMPORT_CONFIG = {
     spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID || '1TA4WG5B73yDE1iN8x1vvtQ30yfVdWnorqeHr7lMFErk',
@@ -125,7 +144,7 @@ async function ensureTeamColumns(db) {
 
 module.exports = async function importTeams(db, importConfig = {}) {
     const config = normalizeConfig(importConfig);
-    const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_FILE || path.join(__dirname, 'bvt_team_importer.json');
+    const keyFile = resolveKeyFile();
 
     await ensureTeamColumns(db);
 
