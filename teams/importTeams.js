@@ -1,6 +1,19 @@
 // importTeams.js
 const { google } = require('googleapis');
+const fs = require('fs');
 const path = require('path');
+
+function resolveKeyFile() {
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_FILE) {
+        return process.env.GOOGLE_SERVICE_ACCOUNT_FILE;
+    }
+    const candidates = [
+        '/etc/secrets/bvt_team_importer.json',
+        '/etc/secrets/bvt_team_importer',
+        path.join(__dirname, 'bvt_team_importer.json')
+    ];
+    return candidates.find((f) => fs.existsSync(f)) || candidates[candidates.length - 1];
+}
 
 const DEFAULT_IMPORT_CONFIG = {
     spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID || '1TA4WG5B73yDE1iN8x1vvtQ30yfVdWnorqeHr7lMFErk',
@@ -125,7 +138,7 @@ async function ensureTeamColumns(db) {
 
 module.exports = async function importTeams(db, importConfig = {}) {
     const config = normalizeConfig(importConfig);
-    const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_FILE || path.join(__dirname, 'bvt_team_importer.json');
+    const keyFile = resolveKeyFile();
 
     await ensureTeamColumns(db);
 

@@ -1,4 +1,4 @@
-const API_BASE = window.API_URL_TEAMS || 'http://192.168.0.187:3002';
+const API_BASE = window.API_URL_TEAMS || '';
 
 let teams = [];
 let currentAlphaFilter = '';

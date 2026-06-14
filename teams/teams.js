@@ -11,10 +11,6 @@ require('dotenv').config({ path: path.join(__dirname, 'Umgebung.env'), override:
 
 const importTeams = require('./importTeams');
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-
 const importConfigPath = process.env.TEAMS_IMPORT_CONFIG_FILE || path.join(__dirname, 'teams-config.json');
 
 const db = mysql.createPool({
@@ -50,7 +46,9 @@ async function getTeamById(id) {
     return rows[0] || null;
 }
 
-app.get('/teams', async (req, res) => {
+const router = express.Router();
+
+router.get('/teams', async (req, res) => {
     try {
         await importTeams.ensureTeamColumns(db);
         const [rows] = await db.query(`
@@ -65,7 +63,7 @@ app.get('/teams', async (req, res) => {
     }
 });
 
-app.get('/import-config', (req, res) => {
+router.get('/import-config', (req, res) => {
     try {
         res.json(readImportConfig());
     } catch (err) {
@@ -74,7 +72,7 @@ app.get('/import-config', (req, res) => {
     }
 });
 
-app.put('/import-config', (req, res) => {
+router.put('/import-config', (req, res) => {
     try {
         const config = writeImportConfig(req.body || {});
         res.json({ success: true, config });
@@ -84,7 +82,7 @@ app.put('/import-config', (req, res) => {
     }
 });
 
-app.put('/teams/:id/status', async (req, res) => {
+router.put('/teams/:id/status', async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
@@ -96,7 +94,7 @@ app.put('/teams/:id/status', async (req, res) => {
     }
 });
 
-app.put('/teams/:id/teilnehmer', async (req, res) => {
+router.put('/teams/:id/teilnehmer', async (req, res) => {
     try {
         const { id } = req.params;
         const { teilnehmerzahl } = req.body;
@@ -108,7 +106,7 @@ app.put('/teams/:id/teilnehmer', async (req, res) => {
     }
 });
 
-app.post('/teams/management/cancel', async (req, res) => {
+router.post('/teams/management/cancel', async (req, res) => {
     const { cancelTeamId, replacementTeamId } = req.body || {};
     const connection = await db.getConnection();
 
@@ -148,7 +146,7 @@ app.post('/teams/management/cancel', async (req, res) => {
     }
 });
 
-app.post('/import-teams', async (req, res) => {
+router.post('/import-teams', async (req, res) => {
     try {
         const requestedConfig = req.body && req.body.config ? req.body.config : readImportConfig();
         const config = req.body && req.body.saveConfig ? writeImportConfig(requestedConfig) : importTeams.normalizeConfig(requestedConfig);
@@ -160,5 +158,13 @@ app.post('/import-teams', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3002;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server laeuft auf Port ${PORT}`));
+module.exports = router;
+
+if (require.main === module) {
+    const app = express();
+    app.use(cors());
+    app.use(express.json({ limit: '1mb' }));
+    app.use('/', router);
+    const PORT = process.env.PORT || 3002;
+    app.listen(PORT, '0.0.0.0', () => console.log(`Teams-Server laeuft auf Port ${PORT}`));
+}

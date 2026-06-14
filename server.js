@@ -1254,4 +1254,11 @@ if (process.env.KOMM_REMINDER_ENABLED !== 'false') {
     }, 6 * 60 * 60 * 1000);
 }
 
-app.listen(3000, () => console.log("Statistik-Server läuft auf http://localhost:3000"));
+// Teams-API einbinden
+const teamsRouter = require('./teams/teams');
+app.use('/', teamsRouter);
+
+// Statische Dateien (HTML, CSS, JS) aus dem Projekt-Root bereitstellen
+app.use(express.static(__dirname));
+
+app.listen(process.env.PORT || 3000, () => console.log("Statistik-Server läuft auf http://localhost:3000"));
