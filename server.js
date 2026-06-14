@@ -1258,4 +1258,4 @@ if (process.env.KOMM_REMINDER_ENABLED !== 'false') {
 const teamsRouter = require('./teams/teams');
 app.use('/', teamsRouter);
 
-app.listen(process.env.PORT || 3000, () => console.log("Statistik-Server läuft auf http://localhost:3000"));
+app.listen(process.env.PORT || 3000, () => console.log(`Statistik-Server läuft auf Port ${process.env.PORT || 3000}`));

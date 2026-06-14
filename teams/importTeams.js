@@ -14,7 +14,7 @@ function resolveKeyFile() {
     ];
     const found = candidates.find((f) => fs.existsSync(f));
     if (!found) {
-        console.warn('Warnung: Kein Google-Service-Account-Key gefunden. Erwartet unter:', candidates[0], 'oder', candidates[2]);
+        console.warn('Warnung: Kein Google-Service-Account-Key gefunden. Gesucht unter:', candidates.join(', '));
         console.warn('Bitte GOOGLE_SERVICE_ACCOUNT_FILE-Umgebungsvariable setzen oder die Datei ablegen.');
         throw new Error('Google-Service-Account-Key nicht gefunden. Bitte GOOGLE_SERVICE_ACCOUNT_FILE setzen oder bvt_team_importer.json bereitstellen.');
     }
