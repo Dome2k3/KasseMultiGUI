@@ -1,18 +1,17 @@
 [Unit]
-Description=Teams-Server
+Description=KasseMultiGUI Server
 Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/node /var/www/html/kasse/teams/teams.js
-WorkingDirectory=/var/www/html/kasse/teams
+ExecStart=/usr/bin/node /var/www/html/kasse/server.js
+WorkingDirectory=/var/www/html/kasse
 Restart=always
 RestartSec=5
 User=dome2k3
 Environment=NODE_ENV=production
-Environment=PORT=3002
+Environment=PORT=3000
 
-# Logs direkt ins journalctl
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=kasse
