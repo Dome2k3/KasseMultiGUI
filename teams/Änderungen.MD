@@ -38,3 +38,13 @@
   - Nachruecker-Mail ohne Zahlungsinformationen.
   - Bereitschaftsanfrage an eine frei waehlbare Anzahl bezahlter Nachruecker.
   - Mails werden als `mailto:`-Entwuerfe im Standard-Mailprogramm geoeffnet.
+
+## 2026-06-15
+
+- Render-Fix fuer die Teams-Seite:
+  - `server.js` liefert statische Dateien jetzt ueber `express.static(__dirname)` aus.
+  - Die Teams-API bleibt vor der statischen Auslieferung gemountet, damit `/teams` JSON liefert und `/teams/teams.html` die HTML-Seite.
+  - Der Hauptserver nutzt jetzt `mysql.createPool()` statt `mysql.createConnection()`, damit ein DB-Verbindungsfehler den Prozess beim Start nicht sofort beendet.
+  - `package.json` enthaelt jetzt den `start`-Befehl fuer Render und die benoetigten Dependencies fuer Server, Teams-Import und Google Sheets.
+  - Die Teams-Seite nutzt jetzt standardmaessig den API-Namespace `/teams/api`, damit `/teams/teams.html` und die API-Endpunkte nicht miteinander kollidieren.
+  - Die bisherigen Root-Endpunkte bleiben als Fallback gemountet.

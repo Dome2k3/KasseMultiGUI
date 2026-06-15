@@ -1,4 +1,4 @@
-const API_BASE = window.API_URL_TEAMS || '';
+const API_BASE = (window.API_URL_TEAMS || '/teams/api').replace(/\/$/, '');
 
 let teams = [];
 let currentAlphaFilter = '';

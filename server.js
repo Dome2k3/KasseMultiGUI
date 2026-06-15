@@ -1259,10 +1259,11 @@ if (process.env.KOMM_REMINDER_ENABLED !== 'false') {
 
 // Teams-API einbinden
 const teamsRouter = require('./teams/teams');
+app.use('/teams/api', teamsRouter);
 app.use('/', teamsRouter);
 
 // Statische Oberflaechen (z.B. /teams/teams.html) aus diesem Projekt ausliefern.
-// Die API-Routen stehen davor, damit /teams weiterhin JSON liefert.
+// Die API-Routen stehen davor, damit /teams/api/... JSON liefert.
 app.use(express.static(__dirname));
 
 app.listen(process.env.PORT || 3000, () => console.log(`Statistik-Server läuft auf Port ${process.env.PORT || 3000}`));
