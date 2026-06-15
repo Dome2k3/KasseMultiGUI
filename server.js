@@ -1259,8 +1259,12 @@ if (process.env.KOMM_REMINDER_ENABLED !== 'false') {
 
 // Teams-API einbinden
 const teamsRouter = require('./teams/teams');
-app.use('/teams/api', teamsRouter);
-app.use('/', teamsRouter);
+if (typeof teamsRouter === 'function') {
+    app.use('/teams/api', teamsRouter);
+    app.use('/', teamsRouter);
+} else {
+    console.error('Teams-Router konnte nicht eingebunden werden: teams/teams.js exportiert keinen Express-Router.');
+}
 
 // Statische Oberflaechen (z.B. /teams/teams.html) aus diesem Projekt ausliefern.
 // Die API-Routen stehen davor, damit /teams/api/... JSON liefert.
