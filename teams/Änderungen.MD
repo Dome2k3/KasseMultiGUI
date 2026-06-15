@@ -50,3 +50,4 @@
   - Die bisherigen Root-Endpunkte bleiben als Fallback gemountet.
   - `importTeams.js` laedt `googleapis` erst beim Import. Dadurch startet `kasse.service`/`teams.service` auch dann, wenn das Modul auf dem Server fehlt.
   - `teams/package.json` enthaelt jetzt die Standalone-Dependencies fuer den Teams-Service.
+  - `teams.html` laedt jetzt `../config.js` vor `teams-page.js`, damit `window.API_URL_TEAMS` fuer die Raspi-Teams-API verwendet wird.
