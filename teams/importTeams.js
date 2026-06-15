@@ -134,6 +134,7 @@ function isWaitlist(value) {
 }
 
 function deriveStatus({ waitlist, paid, cancelled }) {
+    if (cancelled && paid) return 'rueckgabe';
     if (cancelled) return 'abgemeldet';
     if (waitlist) return 'offen';
     return paid ? 'angemeldet' : 'offen';

@@ -121,7 +121,8 @@ router.post('/teams/management/cancel', async (req, res) => {
         }
 
         let replacementTeam = null;
-        await connection.query('UPDATE teams SET status=? WHERE id=?', ['abgemeldet', cancelTeamId]);
+        const cancelStatus = Number(cancelTeam.bezahlt) ? 'rueckgabe' : 'abgemeldet';
+        await connection.query('UPDATE teams SET status=? WHERE id=?', [cancelStatus, cancelTeamId]);
 
         if (replacementTeamId) {
             const [replacementRows] = await connection.query('SELECT * FROM teams WHERE id=? LIMIT 1 FOR UPDATE', [replacementTeamId]);

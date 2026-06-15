@@ -57,11 +57,6 @@
       <strong id="paidCount">0</strong>
       <small>laut Spalte W</small>
     </article>
-    <article class="kpi">
-      <span class="kpi-label">Teilnehmer</span>
-      <strong id="teilnehmerCount">0</strong>
-      <small>manuell gepflegt</small>
-    </article>
   </section>
 
   <section class="focus-grid">
@@ -114,13 +109,8 @@
           Nachruecker
           <select id="replacementTeamSelect"></select>
         </label>
-        <label class="wide">
-          Bereitschaftsanfrage an Nachruecker
-          <select id="standbyTeamSelect"></select>
-        </label>
         <div class="form-actions wide">
           <button type="submit" class="primary-button">Abmeldung verarbeiten</button>
-          <button type="button" class="ghost-button" id="prepareStandbyMails">Nachruecker anfragen</button>
         </div>
         <div class="copy-status wide" id="managementMessage"></div>
       </form>
@@ -140,11 +130,15 @@
         <option value="offen">Offen</option>
         <option value="angemeldet">Angemeldet</option>
         <option value="abgemeldet">Abgemeldet</option>
+        <option value="rueckgabe">Rueckgabe</option>
       </select>
       <select id="paymentFilter" aria-label="Zahlungsfilter">
         <option value="">Alle Zahlungen</option>
         <option value="paid">Bezahlt</option>
         <option value="open">Nicht bezahlt/offen</option>
+      </select>
+      <select id="levelFilter" aria-label="Levelfilter">
+        <option value="">Alle Level</option>
       </select>
       <input type="text" id="search" placeholder="Team, Melder oder E-Mail suchen" />
     </div>
@@ -169,13 +163,13 @@
     </div>
   </details>
 
-  <section class="panel table-panel">
-    <div class="panel-head">
+  <details class="panel table-panel" open>
+    <summary class="panel-head table-summary">
       <div>
         <p class="eyebrow">Warteliste</p>
         <h2>Nachruecker</h2>
       </div>
-    </div>
+    </summary>
     <div class="table-wrap">
       <table id="waitlistTable">
         <thead>
@@ -192,20 +186,7 @@
         <tbody></tbody>
       </table>
     </div>
-  </section>
-
-  <section class="panel preview-panel">
-    <div class="panel-head">
-      <div>
-        <p class="eyebrow">Mailvorschau</p>
-        <h2>Entwuerfe im Standard-Mailprogramm</h2>
-      </div>
-      <button type="button" class="primary-button hidden" id="openAllDrafts">Alle Entwuerfe oeffnen</button>
-    </div>
-    <div class="mail-preview-list" id="mailPreviewList">
-      <div class="empty-state">Noch keine Mail vorbereitet.</div>
-    </div>
-  </section>
+  </details>
 </main>
 
 <script src="../config.js"></script>

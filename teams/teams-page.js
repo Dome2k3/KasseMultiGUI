@@ -2,7 +2,6 @@ const API_BASE = (window.API_URL_TEAMS || '/teams/api').replace(/\/$/, '');
 
 let teams = [];
 let currentAlphaFilter = '';
-let preparedDrafts = [];
 
 const els = {
   importBtn: document.getElementById('importBtn'),
@@ -20,23 +19,19 @@ const els = {
   waitlistCount: document.getElementById('waitlistCount'),
   paidWaitlistCount: document.getElementById('paidWaitlistCount'),
   paidCount: document.getElementById('paidCount'),
-  teilnehmerCount: document.getElementById('teilnehmerCount'),
   nextReplacementHero: document.getElementById('nextReplacementHero'),
   nextReplacementDetail: document.getElementById('nextReplacementDetail'),
   cancelTeamSelect: document.getElementById('cancelTeamSelect'),
   replacementTeamSelect: document.getElementById('replacementTeamSelect'),
-  standbyTeamSelect: document.getElementById('standbyTeamSelect'),
   managementForm: document.getElementById('managementForm'),
   managementMessage: document.getElementById('managementMessage'),
-  prepareStandbyMails: document.getElementById('prepareStandbyMails'),
   search: document.getElementById('search'),
   statusFilter: document.getElementById('statusFilter'),
   paymentFilter: document.getElementById('paymentFilter'),
+  levelFilter: document.getElementById('levelFilter'),
   alphaFilter: document.getElementById('alphaFilter'),
   teamTableBody: document.querySelector('#teamTable tbody'),
-  waitlistTableBody: document.querySelector('#waitlistTable tbody'),
-  mailPreviewList: document.getElementById('mailPreviewList'),
-  openAllDrafts: document.getElementById('openAllDrafts')
+  waitlistTableBody: document.querySelector('#waitlistTable tbody')
 };
 
 function escapeHtml(value) {
@@ -61,6 +56,7 @@ function statusLabel(status) {
     offen: 'Offen',
     angemeldet: 'Angemeldet',
     abgemeldet: 'Abgemeldet',
+    rueckgabe: 'Rueckgabe',
     nachruecker: 'Offen',
     angefragt: 'Angefragt',
     positive: 'Positive Rueckmeldung'
@@ -113,6 +109,11 @@ function whatsappUrl(team, body) {
 
 function bankDetails(team) {
   return `\n\nFalls ihr noch nicht ueberwiesen habt, hier unsere Bankdaten:\nTSV RW Auerbach - Abt Volleyball\nVolksbank Darmstadt Mainz eG. BIC: MVBMDE55\nIBAN: DE31 5519 0000 0055 6431 18\nStichwort: BVT2026 - ${team.name}`;
+}
+
+function paymentAmount(team) {
+  const match = String(team.bezahlstatus || '').replace(',', '.').match(/\d+(?:\.\d+)?/);
+  return match ? `${match[0].replace('.', ',')} EUR` : '';
 }
 
 function getImportConfigFromForm() {
@@ -185,10 +186,27 @@ async function runImport() {
 async function loadTeams() {
   teams = await fetchJson(`${API_BASE}/teams`);
   renderAlphaButtons();
+  renderLevelFilter();
   renderManagementOptions();
   renderTeams();
   renderWaitlist();
   updateStats();
+}
+
+function renderLevelFilter() {
+  const levels = [...new Set(teams
+    .map((team) => String(team.level || '').trim())
+    .filter((level) => level && level !== 'nicht angegeben'))]
+    .sort((a, b) => a.localeCompare(b, 'de'));
+  const current = els.levelFilter.value;
+
+  els.levelFilter.innerHTML = '<option value="">Alle Level</option>' + levels.map((level) => (
+    `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`
+  )).join('');
+
+  if (levels.includes(current)) {
+    els.levelFilter.value = current;
+  }
 }
 
 function getReplacementCandidates() {
@@ -209,10 +227,6 @@ function renderManagementOptions() {
 
   els.replacementTeamSelect.innerHTML = '<option value="">Keinen Nachruecker fest eintragen</option>' + replacements.map((team, index) => (
     `<option value="${team.id}" ${index === 0 ? 'selected' : ''}>${escapeHtml(teamOptionLabel(team))}</option>`
-  )).join('');
-
-  els.standbyTeamSelect.innerHTML = '<option value="">Nachruecker auswaehlen</option>' + replacements.map((team) => (
-    `<option value="${team.id}">${escapeHtml(teamOptionLabel(team))}</option>`
   )).join('');
 
   const next = replacements.find(isPaid) || replacements[0];
@@ -238,6 +252,7 @@ function getFilteredTeams() {
   const search = normalize(els.search.value);
   const status = els.statusFilter.value;
   const payment = els.paymentFilter.value;
+  const level = els.levelFilter.value;
 
   return teams.filter((team) => {
     if (isWaitlist(team)) return false;
@@ -247,6 +262,7 @@ function getFilteredTeams() {
     if (status && (team.status || 'offen') !== status) return false;
     if (payment === 'paid' && !isPaid(team)) return false;
     if (payment === 'open' && isPaid(team)) return false;
+    if (level && String(team.level || '') !== level) return false;
     return true;
   });
 }
@@ -257,6 +273,7 @@ function renderTeams() {
     const status = team.status || 'offen';
     const paidClass = isPaid(team) ? 'paid' : 'open';
     const paidLabel = isPaid(team) ? 'Bezahlt' : 'Offen';
+    const amount = paymentAmount(team);
 
     return `
       <tr class="${escapeHtml(status)}">
@@ -273,7 +290,8 @@ function renderTeams() {
         <td><span class="badge ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></td>
         <td>
           <span class="badge ${paidClass}">${paidLabel}</span>
-          <div class="muted">${escapeHtml(team.bezahlstatus || '')}</div>
+          ${amount ? `<span class="payment-amount ${paidClass}">${escapeHtml(amount)}</span>` : ''}
+          ${!amount && team.bezahlstatus ? `<div class="muted">${escapeHtml(team.bezahlstatus)}</div>` : ''}
         </td>
         <td><span class="level-pill">${escapeHtml(team.level || 'nicht angegeben')}</span></td>
         <td><input class="teilnehmer-input" type="number" min="0" value="${Number(team.teilnehmerzahl || 0)}" data-team-id="${team.id}"></td>
@@ -290,6 +308,7 @@ function renderWaitlist() {
   els.waitlistTableBody.innerHTML = waitlist.map((team) => {
     const paidClass = isPaid(team) ? 'paid' : 'open';
     const paidLabel = isPaid(team) ? 'Bezahlt' : 'Offen';
+    const amount = paymentAmount(team);
     const draft = standbyDraft(team);
     const whatsApp = whatsappUrl(team, draft.body);
     const status = team.status || 'offen';
@@ -310,7 +329,8 @@ function renderWaitlist() {
         </td>
         <td>
           <span class="badge ${paidClass}">${paidLabel}</span>
-          <div class="muted">${escapeHtml(team.bezahlstatus || '')}</div>
+          ${amount ? `<span class="payment-amount ${paidClass}">${escapeHtml(amount)}</span>` : ''}
+          ${!amount && team.bezahlstatus ? `<div class="muted">${escapeHtml(team.bezahlstatus)}</div>` : ''}
         </td>
         <td>
           <select class="waitlist-status" data-waitlist-status-id="${team.id}">
@@ -334,7 +354,6 @@ function updateStats() {
   els.waitlistCount.textContent = waitlist.length;
   els.paidWaitlistCount.textContent = waitlist.filter(isPaid).length;
   els.paidCount.textContent = filtered.filter(isPaid).length;
-  els.teilnehmerCount.textContent = filtered.reduce((sum, team) => sum + Number(team.teilnehmerzahl || 0), 0);
 }
 
 async function updateTeilnehmer(id, value) {
@@ -401,34 +420,12 @@ function standbyDraft(team) {
   };
 }
 
-function renderMailPreviews(drafts) {
-  preparedDrafts = drafts;
-  els.openAllDrafts.classList.toggle('hidden', drafts.length === 0);
-
-  if (!drafts.length) {
-    els.mailPreviewList.innerHTML = '<div class="empty-state">Noch keine Mail vorbereitet.</div>';
-    return;
-  }
-
-  els.mailPreviewList.innerHTML = drafts.map((draft, index) => `
-    <article class="mail-card">
-      <h3>${escapeHtml(draft.subject)}</h3>
-      <div class="muted">An: ${escapeHtml(draft.to || 'keine E-Mail hinterlegt')}</div>
-      <pre>${escapeHtml(draft.body)}</pre>
-      <div class="mail-actions">
-        <a class="primary-button" href="${escapeHtml(buildMailto(draft))}">Entwurf oeffnen</a>
-        <button type="button" class="ghost-button" data-open-draft="${index}">Vorschau erneut oeffnen</button>
-      </div>
-    </article>
-  `).join('');
-}
-
 function openDraft(draft) {
   window.location.href = buildMailto(draft);
 }
 
-function openAllDrafts() {
-  preparedDrafts.forEach((draft, index) => {
+function openDrafts(drafts) {
+  drafts.forEach((draft, index) => {
     window.setTimeout(() => openDraft(draft), index * 700);
   });
 }
@@ -457,27 +454,13 @@ async function processCancellation(event) {
 
     const drafts = [cancellationDraft(cancelTeam)];
     if (replacementTeam) drafts.push(replacementDraft(replacementTeam));
-    renderMailPreviews(drafts);
-    openAllDrafts();
+    openDrafts(drafts);
 
-    els.managementMessage.textContent = 'Abmeldung gespeichert. Mailentwuerfe wurden vorbereitet.';
+    els.managementMessage.textContent = 'Abmeldung gespeichert. Mailentwuerfe wurden geoeffnet.';
     await loadTeams();
   } catch (err) {
     console.error(err);
     els.managementMessage.textContent = `Abmeldung fehlgeschlagen: ${err.message}`;
-  }
-}
-
-function prepareStandbyMails() {
-  const teamId = Number(els.standbyTeamSelect.value || 0);
-  const team = teams.find((item) => Number(item.id) === teamId);
-
-  if (team) {
-    renderMailPreviews([standbyDraft(team)]);
-    openAllDrafts();
-    els.managementMessage.textContent = `Bereitschaftsanfrage fuer "${team.name}" vorbereitet.`;
-  } else {
-    els.managementMessage.textContent = 'Bitte einen Nachruecker fuer die Anfrage auswaehlen.';
   }
 }
 
@@ -497,8 +480,6 @@ els.reloadConfig.addEventListener('click', async () => {
 
 els.importBtn.addEventListener('click', runImport);
 els.managementForm.addEventListener('submit', processCancellation);
-els.prepareStandbyMails.addEventListener('click', prepareStandbyMails);
-els.openAllDrafts.addEventListener('click', openAllDrafts);
 
 els.alphaFilter.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-letter]');
@@ -510,7 +491,7 @@ els.alphaFilter.addEventListener('click', (event) => {
   updateStats();
 });
 
-[els.search, els.statusFilter, els.paymentFilter].forEach((input) => {
+[els.search, els.statusFilter, els.paymentFilter, els.levelFilter].forEach((input) => {
   input.addEventListener('input', () => {
     renderTeams();
     renderWaitlist();
@@ -547,15 +528,7 @@ els.waitlistTableBody.addEventListener('click', (event) => {
   const team = teams.find((item) => Number(item.id) === Number(button.dataset.standbyTeam));
   if (!team) return;
 
-  els.standbyTeamSelect.value = String(team.id);
-  renderMailPreviews([standbyDraft(team)]);
-  openAllDrafts();
-});
-
-els.mailPreviewList.addEventListener('click', (event) => {
-  const button = event.target.closest('button[data-open-draft]');
-  if (!button) return;
-  openDraft(preparedDrafts[Number(button.dataset.openDraft)]);
+  openDraft(standbyDraft(team));
 });
 
 (async function init() {

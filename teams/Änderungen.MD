@@ -71,3 +71,14 @@
 - Die Mailtexte unterscheiden zwischen bezahlten und noch offenen Teams; offene Teams bekommen die Bankdaten mit Teamname im Verwendungszweck.
 - Bei Abmeldung mit Nachruecker wird das abzumeldende Team auf `abgemeldet` gesetzt und der Nachruecker mit der naechsten Teamnummer in die Teamliste uebernommen.
 - Die bestehende Datenbankspalte `status` wird automatisch von alten `ENUM`-Definitionen auf `VARCHAR(40)` umgestellt, damit neue Statuswerte wie `offen`, `angefragt` und `positive` gespeichert werden koennen.
+
+## 2026-06-15 UI- und Status-Update
+
+- Zahlung gilt weiterhin ab 90 EUR als bezahlt.
+- Abgemeldete und bereits bezahlte Teams erhalten den Status `rueckgabe`.
+- Die Zahlungszahl wird kleiner und farblich umrandet neben dem Zahlungsstatus angezeigt.
+- Die Nachruecker-Liste ist jetzt ebenfalls einklappbar.
+- Die globale Mailvorschau wurde entfernt; Mailentwuerfe oeffnen direkt aus Management oder Nachruecker-Aktion.
+- Die separate Bereitschaftsanfrage-Auswahl im Management wurde entfernt.
+- Die Teilnehmer-KPI wurde entfernt.
+- Die Teamliste hat jetzt einen Level-Filter.
