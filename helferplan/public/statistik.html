@@ -501,6 +501,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const openSetupCleanupShifts = statsData.open_setup_cleanup_shifts || 0;
         const totalCakes = statsData.total_cakes || 0;
         const helpersWithMinTwoShifts = filteredStats.filter(h => h.total_shifts >= 2).length;
+        const helpersWithMinTenHours = filteredStats.filter(h => h.total_hours >= 10).length;
 
         const pufferHint = statsData.has_puffer_activities
             ? `<p class="puffer-hint"><span aria-label="Hinweis">ℹ️</span> <strong>Hinweis:</strong> Schichten, die als <em>Puffer</em> benannt sind, werden in der Statistik nicht mitgezählt.</p>`
@@ -516,6 +517,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="kpi-card">
                 <h3>Helfer mit &ge; 2 Schichten</h3>
                 <div class="kpi-value">${helpersWithMinTwoShifts}</div>
+            </div>
+            <div class="kpi-card">
+            <h3>Helfer mit &ge; 10 Stunden</h3>
+            <div class="kpi-value">${helpersWithMinTenHours}</div>
             </div>
             <div class="kpi-card">
                 <h3>Gesamtschichten</h3>
