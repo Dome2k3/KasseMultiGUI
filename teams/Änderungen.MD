@@ -48,3 +48,5 @@
   - `package.json` enthaelt jetzt den `start`-Befehl fuer Render und die benoetigten Dependencies fuer Server, Teams-Import und Google Sheets.
   - Die Teams-Seite nutzt jetzt standardmaessig den API-Namespace `/teams/api`, damit `/teams/teams.html` und die API-Endpunkte nicht miteinander kollidieren.
   - Die bisherigen Root-Endpunkte bleiben als Fallback gemountet.
+  - `importTeams.js` laedt `googleapis` erst beim Import. Dadurch startet `kasse.service`/`teams.service` auch dann, wenn das Modul auf dem Server fehlt.
+  - `teams/package.json` enthaelt jetzt die Standalone-Dependencies fuer den Teams-Service.

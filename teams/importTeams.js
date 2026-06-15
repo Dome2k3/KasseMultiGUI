@@ -1,7 +1,17 @@
 // importTeams.js
-const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
+
+function loadGoogleApis() {
+    try {
+        return require('googleapis').google;
+    } catch (err) {
+        if (err && err.code === 'MODULE_NOT_FOUND') {
+            throw new Error('Node-Modul "googleapis" fehlt. Bitte auf dem Server in /var/www/html/kasse oder /var/www/html/kasse/teams "npm install" ausfuehren.');
+        }
+        throw err;
+    }
+}
 
 function resolveKeyFile() {
     if (process.env.GOOGLE_SERVICE_ACCOUNT_FILE) {
@@ -145,6 +155,7 @@ async function ensureTeamColumns(db) {
 module.exports = async function importTeams(db, importConfig = {}) {
     const config = normalizeConfig(importConfig);
     const keyFile = resolveKeyFile();
+    const google = loadGoogleApis();
 
     await ensureTeamColumns(db);
 
