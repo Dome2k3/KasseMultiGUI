@@ -114,9 +114,9 @@
           Nachruecker
           <select id="replacementTeamSelect"></select>
         </label>
-        <label>
-          Bereitschaftsanfragen
-          <input id="standbyCount" type="number" min="1" value="3" />
+        <label class="wide">
+          Bereitschaftsanfrage an Nachruecker
+          <select id="standbyTeamSelect"></select>
         </label>
         <div class="form-actions wide">
           <button type="submit" class="primary-button">Abmeldung verarbeiten</button>
@@ -127,27 +127,26 @@
     </article>
   </section>
 
-  <section class="panel table-panel">
-    <div class="panel-head">
+  <details class="panel table-panel" open>
+    <summary class="panel-head table-summary">
       <div>
         <p class="eyebrow">Teamliste</p>
         <h2>Uebersicht</h2>
       </div>
-      <div class="table-tools">
-        <select id="statusFilter" aria-label="Statusfilter">
-          <option value="">Alle Status</option>
-          <option value="neutral">Neutral</option>
-          <option value="angemeldet">Angemeldet</option>
-          <option value="abgemeldet">Abgemeldet</option>
-          <option value="nachruecker">Nachruecker</option>
-        </select>
-        <select id="paymentFilter" aria-label="Zahlungsfilter">
-          <option value="">Alle Zahlungen</option>
-          <option value="paid">Bezahlt</option>
-          <option value="open">Nicht bezahlt/offen</option>
-        </select>
-        <input type="text" id="search" placeholder="Team, Melder oder E-Mail suchen" />
-      </div>
+    </summary>
+    <div class="table-tools table-tools-row">
+      <select id="statusFilter" aria-label="Statusfilter">
+        <option value="">Alle Status</option>
+        <option value="offen">Offen</option>
+        <option value="angemeldet">Angemeldet</option>
+        <option value="abgemeldet">Abgemeldet</option>
+      </select>
+      <select id="paymentFilter" aria-label="Zahlungsfilter">
+        <option value="">Alle Zahlungen</option>
+        <option value="paid">Bezahlt</option>
+        <option value="open">Nicht bezahlt/offen</option>
+      </select>
+      <input type="text" id="search" placeholder="Team, Melder oder E-Mail suchen" />
     </div>
     <div id="alphaFilter" class="alpha-filter"></div>
     <div class="table-wrap">
@@ -158,10 +157,36 @@
           <th>Team</th>
           <th>Melder</th>
           <th>E-Mail</th>
+          <th>Telefon</th>
           <th>Status</th>
           <th>Zahlung</th>
           <th>Level</th>
           <th>Teilnehmer</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+
+  <section class="panel table-panel">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Warteliste</p>
+        <h2>Nachruecker</h2>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="waitlistTable">
+        <thead>
+        <tr>
+          <th>Nr.</th>
+          <th>Team</th>
+          <th>Melder</th>
+          <th>Telefon</th>
+          <th>Zahlung</th>
+          <th>Status</th>
+          <th>Aktion</th>
         </tr>
         </thead>
         <tbody></tbody>

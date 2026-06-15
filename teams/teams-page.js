@@ -25,7 +25,7 @@ const els = {
   nextReplacementDetail: document.getElementById('nextReplacementDetail'),
   cancelTeamSelect: document.getElementById('cancelTeamSelect'),
   replacementTeamSelect: document.getElementById('replacementTeamSelect'),
-  standbyCount: document.getElementById('standbyCount'),
+  standbyTeamSelect: document.getElementById('standbyTeamSelect'),
   managementForm: document.getElementById('managementForm'),
   managementMessage: document.getElementById('managementMessage'),
   prepareStandbyMails: document.getElementById('prepareStandbyMails'),
@@ -34,6 +34,7 @@ const els = {
   paymentFilter: document.getElementById('paymentFilter'),
   alphaFilter: document.getElementById('alphaFilter'),
   teamTableBody: document.querySelector('#teamTable tbody'),
+  waitlistTableBody: document.querySelector('#waitlistTable tbody'),
   mailPreviewList: document.getElementById('mailPreviewList'),
   openAllDrafts: document.getElementById('openAllDrafts')
 };
@@ -56,12 +57,15 @@ function normalize(value) {
 
 function statusLabel(status) {
   const labels = {
-    neutral: 'Neutral',
+    neutral: 'Offen',
+    offen: 'Offen',
     angemeldet: 'Angemeldet',
     abgemeldet: 'Abgemeldet',
-    nachruecker: 'Nachruecker'
+    nachruecker: 'Offen',
+    angefragt: 'Angefragt',
+    positive: 'Positive Rueckmeldung'
   };
-  return labels[status] || status || 'Neutral';
+  return labels[status] || status || 'Offen';
 }
 
 function isPaid(team) {
@@ -84,9 +88,31 @@ function firstName(team) {
 }
 
 function teamOptionLabel(team) {
-  const marker = isWaitlist(team) ? 'NR' : (team.original_nummer || team.id);
+  const marker = team.original_nummer || (isWaitlist(team) ? 'NR' : team.id);
   const paid = isPaid(team) ? 'bezahlt' : 'offen';
   return `${marker} - ${team.name} (${paid})`;
+}
+
+function phoneDisplay(team) {
+  return String(team.telefon || '').trim();
+}
+
+function whatsappNumber(phone) {
+  let digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = `49${digits.slice(1)}`;
+  return digits;
+}
+
+function whatsappUrl(team, body) {
+  const number = whatsappNumber(team.telefon);
+  if (!number) return '';
+  return `https://wa.me/${number}?text=${encodeURIComponent(body)}`;
+}
+
+function bankDetails(team) {
+  return `\n\nFalls ihr noch nicht ueberwiesen habt, hier unsere Bankdaten:\nTSV RW Auerbach - Abt Volleyball\nVolksbank Darmstadt Mainz eG. BIC: MVBMDE55\nIBAN: DE31 5519 0000 0055 6431 18\nStichwort: BVT2026 - ${team.name}`;
 }
 
 function getImportConfigFromForm() {
@@ -161,12 +187,13 @@ async function loadTeams() {
   renderAlphaButtons();
   renderManagementOptions();
   renderTeams();
+  renderWaitlist();
   updateStats();
 }
 
 function getReplacementCandidates() {
   return teams
-    .filter((team) => isWaitlist(team) && isPaid(team) && team.status !== 'abgemeldet' && team.status !== 'angemeldet')
+    .filter((team) => isWaitlist(team) && team.status !== 'abgemeldet' && team.status !== 'angemeldet')
     .sort((a, b) => Number(a.sheet_row || a.id) - Number(b.sheet_row || b.id));
 }
 
@@ -184,13 +211,17 @@ function renderManagementOptions() {
     `<option value="${team.id}" ${index === 0 ? 'selected' : ''}>${escapeHtml(teamOptionLabel(team))}</option>`
   )).join('');
 
-  const next = replacements[0];
+  els.standbyTeamSelect.innerHTML = '<option value="">Nachruecker auswaehlen</option>' + replacements.map((team) => (
+    `<option value="${team.id}">${escapeHtml(teamOptionLabel(team))}</option>`
+  )).join('');
+
+  const next = replacements.find(isPaid) || replacements[0];
   if (next) {
     els.nextReplacementHero.textContent = next.name;
-    els.nextReplacementDetail.textContent = `${next.anmelder || 'Melder unbekannt'} - ${next.bezahlstatus || 'bezahlt'}`;
+    els.nextReplacementDetail.textContent = `${next.anmelder || 'Melder unbekannt'} - ${isPaid(next) ? 'bezahlt' : 'Zahlung offen'}`;
   } else {
-    els.nextReplacementHero.textContent = 'kein bezahlter Nachruecker';
-    els.nextReplacementDetail.textContent = 'Bitte Zahlungsstatus in Spalte W pruefen.';
+    els.nextReplacementHero.textContent = 'kein Nachruecker';
+    els.nextReplacementDetail.textContent = 'Bitte Warteliste in Spalte A pruefen.';
   }
 }
 
@@ -209,10 +240,11 @@ function getFilteredTeams() {
   const payment = els.paymentFilter.value;
 
   return teams.filter((team) => {
-    const haystack = normalize(`${team.name} ${team.anmelder} ${team.email} ${team.level} ${team.bezahlstatus}`);
+    if (isWaitlist(team)) return false;
+    const haystack = normalize(`${team.name} ${team.anmelder} ${team.email} ${team.telefon} ${team.level} ${team.bezahlstatus}`);
     if (currentAlphaFilter && !normalize(team.name).startsWith(normalize(currentAlphaFilter))) return false;
     if (search && !haystack.includes(search)) return false;
-    if (status && (team.status || 'neutral') !== status) return false;
+    if (status && (team.status || 'offen') !== status) return false;
     if (payment === 'paid' && !isPaid(team)) return false;
     if (payment === 'open' && isPaid(team)) return false;
     return true;
@@ -222,7 +254,7 @@ function getFilteredTeams() {
 function renderTeams() {
   const filtered = getFilteredTeams();
   els.teamTableBody.innerHTML = filtered.map((team) => {
-    const status = team.status || 'neutral';
+    const status = team.status || 'offen';
     const paidClass = isPaid(team) ? 'paid' : 'open';
     const paidLabel = isPaid(team) ? 'Bezahlt' : 'Offen';
 
@@ -237,6 +269,7 @@ function renderTeams() {
         </td>
         <td>${escapeHtml(team.anmelder || '')}</td>
         <td>${escapeHtml(team.email || '')}</td>
+        <td>${escapeHtml(phoneDisplay(team) || '-')}</td>
         <td><span class="badge ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></td>
         <td>
           <span class="badge ${paidClass}">${paidLabel}</span>
@@ -249,9 +282,53 @@ function renderTeams() {
   }).join('');
 }
 
+function renderWaitlist() {
+  const waitlist = teams
+    .filter(isWaitlist)
+    .sort((a, b) => Number(a.sheet_row || a.id) - Number(b.sheet_row || b.id));
+
+  els.waitlistTableBody.innerHTML = waitlist.map((team) => {
+    const paidClass = isPaid(team) ? 'paid' : 'open';
+    const paidLabel = isPaid(team) ? 'Bezahlt' : 'Offen';
+    const draft = standbyDraft(team);
+    const whatsApp = whatsappUrl(team, draft.body);
+    const status = team.status || 'offen';
+
+    return `
+      <tr class="${escapeHtml(status)}">
+        <td>${escapeHtml(team.original_nummer || '')}</td>
+        <td>
+          <div class="team-name">
+            <strong>${escapeHtml(team.name || '')}</strong>
+            <small>Zeile ${escapeHtml(team.sheet_row || '-')}</small>
+          </div>
+        </td>
+        <td>${escapeHtml(team.anmelder || '')}</td>
+        <td>
+          <div>${escapeHtml(phoneDisplay(team) || '-')}</div>
+          ${whatsApp ? `<a class="mini-link" href="${escapeHtml(whatsApp)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+        </td>
+        <td>
+          <span class="badge ${paidClass}">${paidLabel}</span>
+          <div class="muted">${escapeHtml(team.bezahlstatus || '')}</div>
+        </td>
+        <td>
+          <select class="waitlist-status" data-waitlist-status-id="${team.id}">
+            <option value="offen" ${status === 'offen' || status === 'nachruecker' ? 'selected' : ''}>Offen</option>
+            <option value="angefragt" ${status === 'angefragt' ? 'selected' : ''}>Angefragt</option>
+            <option value="positive" ${status === 'positive' ? 'selected' : ''}>Positive Rueckmeldung</option>
+            <option value="abgemeldet" ${status === 'abgemeldet' ? 'selected' : ''}>Abgemeldet</option>
+          </select>
+        </td>
+        <td><button type="button" class="ghost-button compact-button" data-standby-team="${team.id}">Anfragen</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function updateStats() {
   const filtered = getFilteredTeams();
-  const waitlist = filtered.filter(isWaitlist);
+  const waitlist = teams.filter(isWaitlist);
   els.teamCount.textContent = filtered.length;
   els.angemeldetCount.textContent = filtered.filter((team) => team.status === 'angemeldet').length;
   els.waitlistCount.textContent = waitlist.length;
@@ -269,6 +346,19 @@ async function updateTeilnehmer(id, value) {
 
   const team = teams.find((item) => Number(item.id) === Number(id));
   if (team) team.teilnehmerzahl = Number(value || 0);
+  updateStats();
+}
+
+async function updateWaitlistStatus(id, status) {
+  await fetchJson(`${API_BASE}/teams/${id}/waitlist-status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  });
+
+  const team = teams.find((item) => Number(item.id) === Number(id));
+  if (team) team.status = status;
+  renderManagementOptions();
   updateStats();
 }
 
@@ -290,18 +380,24 @@ function cancellationDraft(team) {
 }
 
 function replacementDraft(team) {
+  const paymentText = isPaid(team)
+    ? 'Eure Zahlung ist bei uns bereits als bezahlt markiert.'
+    : `Da bei uns noch keine Zahlung als bezahlt markiert ist, brauchen wir nach eurer Zusage noch die Ueberweisung.${bankDetails(team)}`;
+
   return {
     to: team.email,
     subject: `Freier Startplatz beim BVT 2026 - ${team.name}`,
-    body: `Hallo ${firstName(team)},\n\nGute Nachrichten: Beim Bergstraesser Volleyballturnier 2026 ist ein Startplatz frei geworden und ihr seid als naechstes bezahltes Nachruecker-Team an der Reihe.\n\nBitte gebt uns kurz Bescheid, ob ihr den Platz annehmen koennt. Sobald ihr bestaetigt, tragen wir euch fest ein.\n\nViele Gruesse\nDominik\nBVT Orga`
+    body: `Hallo ${firstName(team)},\n\nGute Nachrichten: Beim Bergstraesser Volleyballturnier 2026 ist ein Startplatz frei geworden und ihr seid als Nachruecker-Team an der Reihe.\n\nBitte gebt mir kurz Bescheid, ob ihr den Platz annehmen koennt. Sobald ihr bestaetigt, tragen wir euch fest ein.\n\n${paymentText}\n\nViele Gruesse\nDominik\nBVT Orga`
   };
 }
 
 function standbyDraft(team) {
+  const paymentText = isPaid(team) ? '' : bankDetails(team);
+
   return {
     to: team.email,
-    subject: `BVT 2026 Warteliste - seid ihr weiterhin bereit?`,
-    body: `Hallo ${firstName(team)},\n\nwir klaeren aktuell die naechsten Nachrueckerplaetze fuer das Bergstraesser Volleyballturnier 2026.\n\nKoennt ihr bitte kurz antworten, ob ihr weiterhin kurzfristig bereit steht, falls ein weiterer Startplatz frei wird? Diese Mail ist noch keine feste Zusage, hilft uns aber sehr bei der Planung.\n\nViele Gruesse\nDominik\nBVT Orga`
+    subject: `BVT 2026 Warteliste - seid ihr noch am Start?`,
+    body: `Hi ${firstName(team)},\n\nihr seid die naechsten auf der Warteliste beim Bergstraesser Volleyballturnier. Seid ihr noch am Start, sobald etwas frei wird? Aktuell kommen immer mal wieder ein paar Abmeldungen rein.${paymentText}\n\nViele Gruesse\nDominik`
   };
 }
 
@@ -373,18 +469,15 @@ async function processCancellation(event) {
 }
 
 function prepareStandbyMails() {
-  const count = Math.max(1, Number(els.standbyCount.value || 1));
-  const excluded = Number(els.replacementTeamSelect.value || 0);
-  const candidates = getReplacementCandidates()
-    .filter((team) => Number(team.id) !== excluded)
-    .slice(0, count);
+  const teamId = Number(els.standbyTeamSelect.value || 0);
+  const team = teams.find((item) => Number(item.id) === teamId);
 
-  renderMailPreviews(candidates.map(standbyDraft));
-  if (candidates.length) {
+  if (team) {
+    renderMailPreviews([standbyDraft(team)]);
     openAllDrafts();
-    els.managementMessage.textContent = `${candidates.length} Bereitschaftsmail(s) vorbereitet.`;
+    els.managementMessage.textContent = `Bereitschaftsanfrage fuer "${team.name}" vorbereitet.`;
   } else {
-    els.managementMessage.textContent = 'Keine bezahlten Nachruecker fuer Bereitschaftsmails gefunden.';
+    els.managementMessage.textContent = 'Bitte einen Nachruecker fuer die Anfrage auswaehlen.';
   }
 }
 
@@ -413,12 +506,14 @@ els.alphaFilter.addEventListener('click', (event) => {
   currentAlphaFilter = button.dataset.letter;
   renderAlphaButtons();
   renderTeams();
+  renderWaitlist();
   updateStats();
 });
 
 [els.search, els.statusFilter, els.paymentFilter].forEach((input) => {
   input.addEventListener('input', () => {
     renderTeams();
+    renderWaitlist();
     updateStats();
   });
 });
@@ -432,6 +527,29 @@ els.teamTableBody.addEventListener('change', async (event) => {
   } catch (err) {
     alert(`Teilnehmerzahl konnte nicht gespeichert werden: ${err.message}`);
   }
+});
+
+els.waitlistTableBody.addEventListener('change', async (event) => {
+  const select = event.target.closest('select[data-waitlist-status-id]');
+  if (!select) return;
+
+  try {
+    await updateWaitlistStatus(select.dataset.waitlistStatusId, select.value);
+  } catch (err) {
+    alert(`Nachruecker-Status konnte nicht gespeichert werden: ${err.message}`);
+  }
+});
+
+els.waitlistTableBody.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-standby-team]');
+  if (!button) return;
+
+  const team = teams.find((item) => Number(item.id) === Number(button.dataset.standbyTeam));
+  if (!team) return;
+
+  els.standbyTeamSelect.value = String(team.id);
+  renderMailPreviews([standbyDraft(team)]);
+  openAllDrafts();
 });
 
 els.mailPreviewList.addEventListener('click', (event) => {

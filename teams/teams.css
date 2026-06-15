@@ -287,6 +287,10 @@ select {
   justify-content: flex-end;
 }
 
+.table-tools-row {
+  margin-bottom: 14px;
+}
+
 .table-tools select {
   width: 170px;
 }
@@ -324,9 +328,42 @@ select {
   border-radius: 8px;
 }
 
+.table-summary {
+  margin-bottom: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.table-summary::-webkit-details-marker {
+  display: none;
+}
+
+.table-summary::after {
+  content: "Einklappen";
+  flex: 0 0 auto;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--green-dark);
+  background: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+details:not([open]) .table-summary {
+  margin-bottom: 0;
+}
+
+details:not([open]) .table-summary::after {
+  content: "Aufklappen";
+}
+
 table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1240px;
   border-collapse: collapse;
   background: #fff;
 }
@@ -364,6 +401,18 @@ tr.nachruecker {
   box-shadow: inset 4px 0 0 var(--amber);
 }
 
+tr.offen {
+  box-shadow: inset 4px 0 0 var(--blue);
+}
+
+tr.angefragt {
+  box-shadow: inset 4px 0 0 var(--amber);
+}
+
+tr.positive {
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
 .team-name {
   display: grid;
   gap: 3px;
@@ -392,8 +441,13 @@ tr.nachruecker {
   background: #e5f4ee;
 }
 
+.badge.offen {
+  background: var(--blue);
+}
+
 .badge.angemeldet,
-.badge.paid {
+.badge.paid,
+.badge.positive {
   background: var(--green);
 }
 
@@ -403,6 +457,10 @@ tr.nachruecker {
 }
 
 .badge.nachruecker {
+  background: var(--amber);
+}
+
+.badge.angefragt {
   background: var(--amber);
 }
 
@@ -421,6 +479,27 @@ tr.nachruecker {
 
 .teilnehmer-input {
   width: 82px;
+}
+
+.waitlist-status {
+  min-width: 190px;
+}
+
+.compact-button {
+  min-height: 34px;
+  padding-inline: 10px;
+}
+
+.mini-link {
+  display: inline-flex;
+  margin-top: 5px;
+  color: var(--green-dark);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.mini-link:hover {
+  text-decoration: underline;
 }
 
 .preview-panel {

@@ -51,3 +51,23 @@
   - `importTeams.js` laedt `googleapis` erst beim Import. Dadurch startet `kasse.service`/`teams.service` auch dann, wenn das Modul auf dem Server fehlt.
   - `teams/package.json` enthaelt jetzt die Standalone-Dependencies fuer den Teams-Service.
   - `teams.html` laedt jetzt `../config.js` vor `teams-page.js`, damit `window.API_URL_TEAMS` fuer die Raspi-Teams-API verwendet wird.
+  - `Umgebung.env` nutzt fuer den Google-Service-Account jetzt den Raspi-Pfad `/var/www/html/kasse/teams/bvt_team_importer.json`.
+
+## 2026-06-15 Nachruecker-Update
+
+- Die Teamliste ist jetzt einklappbar.
+- Nachruecker aus Spalte A werden grafisch getrennt in einer eigenen Wartelisten-Tabelle angezeigt.
+- Importlogik angepasst:
+  - Spalte W gilt als bezahlt, wenn dort `100` bzw. ein Betrag ab 100 steht.
+  - Leere Spalte W gilt als offen.
+  - Bezahlte regulaere Teams werden automatisch als `angemeldet` importiert.
+  - Wenn Spalte E gefuellt ist, wird das Team als `abgemeldet` importiert.
+  - Spalte F wird als Ersatz-Team-Info gespeichert.
+  - Spalte K wird als Telefonnummer importiert.
+- Die Datenbank wird automatisch um `telefon`, `abmeldung_info` und `ersatz_team` erweitert.
+- Nachruecker haben eigene Statuswerte: `offen`, `angefragt`, `positive` und `abgemeldet`.
+- In der Nachruecker-Liste gibt es eine WhatsApp-Verknuepfung mit vorbereitetem Rueckfrage-Text.
+- Bereitschaftsanfragen werden jetzt fuer einen gezielt ausgewaehlten Nachruecker vorbereitet.
+- Die Mailtexte unterscheiden zwischen bezahlten und noch offenen Teams; offene Teams bekommen die Bankdaten mit Teamname im Verwendungszweck.
+- Bei Abmeldung mit Nachruecker wird das abzumeldende Team auf `abgemeldet` gesetzt und der Nachruecker mit der naechsten Teamnummer in die Teamliste uebernommen.
+- Die bestehende Datenbankspalte `status` wird automatisch von alten `ENUM`-Definitionen auf `VARCHAR(40)` umgestellt, damit neue Statuswerte wie `offen`, `angefragt` und `positive` gespeichert werden koennen.

@@ -129,10 +129,22 @@ router.post('/teams/management/cancel', async (req, res) => {
             if (!replacementTeam) {
                 throw new Error('Nachruecker-Team wurde nicht gefunden.');
             }
-            if (!Number(replacementTeam.bezahlt)) {
-                throw new Error('Der ausgewaehlte Nachruecker ist nicht als bezahlt markiert.');
-            }
-            await connection.query('UPDATE teams SET status=?, warteliste=0 WHERE id=?', ['angemeldet', replacementTeamId]);
+            const [numberRows] = await connection.query(`
+                SELECT MAX(CAST(original_nummer AS UNSIGNED)) AS max_nummer
+                FROM teams
+                WHERE warteliste=0 AND original_nummer REGEXP '^[0-9]+$'
+            `);
+            const nextNumber = Number(numberRows[0]?.max_nummer || 0) + 1;
+            await connection.query(
+                'UPDATE teams SET status=?, warteliste=0, original_nummer=? WHERE id=?',
+                ['angemeldet', String(nextNumber), replacementTeamId]
+            );
+            replacementTeam = {
+                ...replacementTeam,
+                status: 'angemeldet',
+                warteliste: 0,
+                original_nummer: String(nextNumber)
+            };
         }
 
         await connection.commit();
@@ -143,6 +155,23 @@ router.post('/teams/management/cancel', async (req, res) => {
         res.status(400).json({ success: false, message: err.message || 'Abmeldung fehlgeschlagen' });
     } finally {
         connection.release();
+    }
+});
+
+router.put('/teams/:id/waitlist-status', async (req, res) => {
+    try {
+        await importTeams.ensureTeamColumns(db);
+        const { id } = req.params;
+        const { status } = req.body || {};
+        const allowed = new Set(['offen', 'angefragt', 'positive', 'abgemeldet']);
+        if (!allowed.has(status)) {
+            return res.status(400).json({ success: false, message: 'Ungueltiger Nachruecker-Status.' });
+        }
+        await db.query('UPDATE teams SET status=? WHERE id=? AND warteliste=1', [status, id]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('PUT /teams/:id/waitlist-status Fehler:', err);
+        res.status(500).json({ error: 'Datenbankfehler' });
     }
 });
 

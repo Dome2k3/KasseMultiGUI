@@ -97,12 +97,13 @@ function isTruthySheetValue(value) {
 
 function parsePaymentStatus(value) {
     const raw = text(value);
-    const normalized = normalizeText(raw);
-    const negative = /(nicht|unbezahlt|offen|nein|no|false|ausstehend)/.test(normalized);
-    const positive = /(bezahlt|ja|yes|true|x|ok)/.test(normalized);
+    const normalized = normalizeText(raw).replace(',', '.');
+    const amount = Number(normalized.replace(/[^0-9.]/g, ''));
+    const paidByAmount = Number.isFinite(amount) && amount >= 90;
+    const paidByText = /\b100\b/.test(normalized) || /(bezahlt|ja|yes|true|ok)/.test(normalized);
     return {
-        status: raw || 'unbekannt',
-        paid: positive && !negative
+        status: raw || 'offen',
+        paid: paidByAmount || paidByText
     };
 }
 
@@ -132,9 +133,16 @@ function isWaitlist(value) {
     return normalized.includes('nachrucker') || normalized.includes('nachruecker') || normalized.includes('warteliste');
 }
 
+function deriveStatus({ waitlist, paid, cancelled }) {
+    if (cancelled) return 'abgemeldet';
+    if (waitlist) return 'offen';
+    return paid ? 'angemeldet' : 'offen';
+}
+
 async function ensureTeamColumns(db) {
     const [columns] = await db.query('SHOW COLUMNS FROM teams');
     const existing = new Set(columns.map((column) => column.Field));
+    const statusColumn = columns.find((column) => column.Field === 'status');
     const additions = [
         ['sheet_row', 'INT NULL'],
         ['original_nummer', 'VARCHAR(80) NULL'],
@@ -142,13 +150,20 @@ async function ensureTeamColumns(db) {
         ['bezahlstatus', 'VARCHAR(120) NULL'],
         ['bezahlt', 'TINYINT(1) NOT NULL DEFAULT 0'],
         ['level', 'VARCHAR(180) NULL'],
-        ['warteliste', 'TINYINT(1) NOT NULL DEFAULT 0']
+        ['warteliste', 'TINYINT(1) NOT NULL DEFAULT 0'],
+        ['telefon', 'VARCHAR(80) NULL'],
+        ['abmeldung_info', 'VARCHAR(255) NULL'],
+        ['ersatz_team', 'VARCHAR(255) NULL']
     ];
 
     for (const [name, definition] of additions) {
         if (!existing.has(name)) {
             await db.query(`ALTER TABLE teams ADD COLUMN ${name} ${definition}`);
         }
+    }
+
+    if (statusColumn && !/^varchar\(/i.test(statusColumn.Type)) {
+        await db.query("ALTER TABLE teams MODIFY COLUMN status VARCHAR(40) NOT NULL DEFAULT 'offen'");
     }
 }
 
@@ -185,20 +200,23 @@ module.exports = async function importTeams(db, importConfig = {}) {
         const name = text(row[6]);          // G
         const anmelder = text(row[7]);      // H
         const email = text(row[9]);         // J
+        const telefon = text(row[10]);      // K
         const payment = parsePaymentStatus(row[22]); // W
         const waitlist = isWaitlist(row[0]);
+        const cancellation = text(row[4]);  // E
+        const replacement = text(row[5]);   // F
 
         if (!name) continue;
 
         await db.query(
             `INSERT INTO teams
-                (name, anmelder, email, status, teilnehmerzahl, sheet_row, original_nummer, melder_vorname, bezahlstatus, bezahlt, level, warteliste)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (name, anmelder, email, status, teilnehmerzahl, sheet_row, original_nummer, melder_vorname, bezahlstatus, bezahlt, level, warteliste, telefon, abmeldung_info, ersatz_team)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 name,
                 anmelder,
                 email,
-                waitlist ? 'nachruecker' : 'neutral',
+                deriveStatus({ waitlist, paid: payment.paid, cancelled: Boolean(cancellation) }),
                 0,
                 config.startRow + index,
                 parseOriginalNumber(row[0]),
@@ -206,7 +224,10 @@ module.exports = async function importTeams(db, importConfig = {}) {
                 payment.status,
                 payment.paid ? 1 : 0,
                 parseLevel(row),
-                waitlist ? 1 : 0
+                waitlist ? 1 : 0,
+                telefon,
+                cancellation,
+                replacement
             ]
         );
     }
