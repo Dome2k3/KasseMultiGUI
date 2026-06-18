@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BVT Helferessen Auswahl</title>
+  <link rel="stylesheet" href="helferessen.css" />
+</head>
+<body>
+<header class="topbar">
+  <details class="nav-menu">
+    <summary class="menu-button" aria-label="Navigation oeffnen">
+      <span class="burger-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span>Menue</span>
+    </summary>
+    <nav class="menu-panel" aria-label="Hauptnavigation">
+      <div class="menu-section">
+        <strong>Admin</strong>
+        <a href="../admin.html">Admin</a>
+      </div>
+      <div class="menu-section">
+        <strong>Organisation</strong>
+        <a href="../teams/teams.html">Teamuebersicht</a>
+        <a href="../Kommunikation/index.html">Kommunikation</a>
+        <a href="../helferplan/public/index.html">Helferplan</a>
+        <a href="index.html">Helferessen</a>
+      </div>
+    </nav>
+  </details>
+  <div>
+    <p class="eyebrow">Helferessen</p>
+    <h1 id="pageTitle">Auswahl laden</h1>
+  </div>
+</header>
+
+<main class="dashboard-shell">
+  <section class="hero-band">
+    <div class="hero-copy">
+      <p class="eyebrow">Eintragen</p>
+      <h2>Was sollen wir fuer dich mitbestellen?</h2>
+      <p>Trage deinen Namen ein und waehle dein Essen. Mehrere Personen koennen sich nacheinander am gleichen Handy eintragen.</p>
+    </div>
+  </section>
+
+  <section class="grid">
+    <article class="panel">
+      <form id="orderForm" class="entry-form">
+        <label>
+          Name
+          <input id="nameInput" type="text" autocomplete="name" placeholder="Dein Name" required />
+        </label>
+
+        <div id="mainChoiceWrap" class="field-label hidden">
+          Partypizza / Doener
+          <div class="choice-grid">
+            <label class="choice-card"><input type="radio" name="mainChoice" value="salami" /> Salami</label>
+            <label class="choice-card"><input type="radio" name="mainChoice" value="schinken" /> Schinken</label>
+            <label class="choice-card"><input type="radio" name="mainChoice" value="vegetarisch" /> Vegetarisch</label>
+            <label class="choice-card"><input type="radio" name="mainChoice" value="pizzadoener" /> Pizzadoener</label>
+            <label class="choice-card"><input type="radio" name="mainChoice" value="doener" /> Doener</label>
+          </div>
+        </div>
+
+        <div id="doenerOptions" class="doener-options">
+          <label class="toggle-option"><input id="withoutOnions" type="checkbox" /> Ohne Zwiebeln</label>
+          <label class="toggle-option"><input id="falafel" type="checkbox" /> Falafel</label>
+        </div>
+
+        <label id="iceWrap" class="toggle-option hidden">
+          <input id="wantsIce" type="checkbox" />
+          Eis
+        </label>
+
+        <button class="primary-button" type="submit">Eintragen</button>
+        <div id="formStatus" class="copy-status"></div>
+      </form>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Schon eingetragen</p>
+          <h2>Liste</h2>
+        </div>
+        <button type="button" id="reloadOrders" class="ghost-button">Neu laden</button>
+      </div>
+      <div id="orderList" class="order-list"></div>
+    </article>
+  </section>
+</main>
+
+<script src="../config.js"></script>
+<script src="bestellung.js"></script>
+</body>
+</html>

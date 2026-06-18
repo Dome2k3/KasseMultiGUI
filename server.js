@@ -1266,6 +1266,14 @@ if (typeof teamsRouter === 'function') {
     console.error('Teams-Router konnte nicht eingebunden werden: teams/teams.js exportiert keinen Express-Router.');
 }
 
+// Helferessen-API einbinden. Die API-Logik liegt im Unterordner HelferessenBestellung.
+const helferessenRouter = require('./HelferessenBestellung/helferessen');
+if (typeof helferessenRouter === 'function') {
+    app.use('/HelferessenBestellung/api', helferessenRouter);
+} else {
+    console.error('Helferessen-Router konnte nicht eingebunden werden.');
+}
+
 // Statische Oberflaechen (z.B. /teams/teams.html) aus diesem Projekt ausliefern.
 // Die API-Routen stehen davor, damit /teams/api/... JSON liefert.
 app.use(express.static(__dirname));

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BVT Helferessen</title>
+  <link rel="stylesheet" href="helferessen.css" />
+</head>
+<body>
+<header class="topbar">
+  <details class="nav-menu">
+    <summary class="menu-button" aria-label="Navigation oeffnen">
+      <span class="burger-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span>Menue</span>
+    </summary>
+    <nav class="menu-panel" aria-label="Hauptnavigation">
+      <div class="menu-section">
+        <strong>Admin</strong>
+        <a href="../admin.html">Admin</a>
+      </div>
+      <div class="menu-section">
+        <strong>Organisation</strong>
+        <a href="../teams/teams.html">Teamuebersicht</a>
+        <a href="../Kommunikation/index.html">Kommunikation</a>
+        <a href="../helferplan/public/index.html">Helferplan</a>
+        <a href="index.html">Helferessen</a>
+        <a class="muted-link" href="../turnier/public/index.html">Turnier-Verwaltung</a>
+      </div>
+      <div class="menu-section">
+        <strong>Kasse</strong>
+        <a href="../index.html">Kassen-Dashboard</a>
+        <a href="../staffelpreise.html">Staffelpreise Bierzelt</a>
+        <a href="../bons.html">Bons</a>
+        <a href="../lager.html">Lagerverwaltung</a>
+        <a href="../config_gebinde.html">Gebinde-Konfig</a>
+        <a href="../statistics_sql.html">Statistik-Uebersicht</a>
+      </div>
+    </nav>
+  </details>
+  <div>
+    <p class="eyebrow">Aufbau und Abbau</p>
+    <h1>Helferessen planen</h1>
+  </div>
+</header>
+
+<main class="dashboard-shell">
+  <section class="hero-band">
+    <div class="hero-copy">
+      <p class="eyebrow">Essen, QR und Bestellung</p>
+      <h2>Schnell wissen, was fuer die Helfer bestellt werden muss.</h2>
+      <p>Lege einen Tag an, verteile den QR-Code per WhatsApp und nutze danach die Zusammenfassung fuer Telefon oder Bestellung.</p>
+    </div>
+  </section>
+
+  <section class="grid two-col">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Planung</p>
+          <h2>Tag und Optionen</h2>
+        </div>
+      </div>
+      <form id="eventForm" class="entry-form">
+        <label>
+          Tag
+          <input id="tagLabel" type="text" placeholder="z.B. Aufbau Freitag" required />
+        </label>
+        <label>
+          Datum optional
+          <input id="eventDate" type="date" />
+        </label>
+        <div class="field-label">
+          Auswahl
+          <div class="toggle-row">
+            <label class="toggle-option">
+              <input id="mainEnabled" type="checkbox" checked />
+              Partypizza / Doener
+            </label>
+            <label class="toggle-option">
+              <input id="iceEnabled" type="checkbox" />
+              Eis
+            </label>
+          </div>
+        </div>
+        <button class="primary-button" type="submit">Planung erstellen</button>
+        <div id="createStatus" class="copy-status"></div>
+      </form>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">QR-Code</p>
+          <h2>WhatsApp-Link</h2>
+        </div>
+      </div>
+      <div id="qrBox" class="qr-box">
+        <div class="muted">Noch keine Planung erstellt.</div>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid two-col">
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Planungen</p>
+          <h2>Bestehende Tage</h2>
+        </div>
+        <button type="button" id="reloadEvents" class="ghost-button">Neu laden</button>
+      </div>
+      <div id="eventList" class="order-list"></div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Zusammenfassung</p>
+          <h2 id="summaryTitle">Keine Planung ausgewaehlt</h2>
+        </div>
+      </div>
+      <div id="summaryList" class="summary-list"></div>
+      <div class="form-actions">
+        <a id="whatsappSummary" class="primary-button hidden" href="#" target="_blank" rel="noopener">Zusammenfassung per WhatsApp</a>
+      </div>
+    </article>
+  </section>
+</main>
+
+<script src="../config.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>
