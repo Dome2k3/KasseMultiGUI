@@ -2,107 +2,322 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="config.js"></script>
-    <title>Bons Übersicht</title>
+    <title>Bons Uebersicht</title>
     <link rel="stylesheet" href="style_statistics.css">
     <style>
-        .pretty-btn {
-            padding: 6px 18px;
-            font-size: 15px;
-            border-radius: 8px;
-            border: none;
-            background: linear-gradient(90deg, #f5c542 0%, #facd60 100%);
-            color: #444;
-            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-            margin: 2px 4px;
-            cursor: pointer;
-        }
-        .pretty-btn:active {
-            background: linear-gradient(90deg, #facd60 0%, #f5c542 100%);
-        }
-        .sortable-header {
-            cursor: pointer;
-            text-decoration: underline;
-        }
-        #message {
-            color: green;
-            font-weight: bold;
-            margin-top: 8px;
-            margin-bottom: 8px;
-        }
-        #bons-container {
-            margin-top: 2rem;
-        }
-        .bon {
-            background: #fff;
-            border-radius: 6px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            margin-bottom: 1.5rem;
-            padding: 1rem 1.5rem;
-        }
-        .bon-header {
-            font-weight: bold;
-            margin-bottom: 0.6rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .bon-category {
-            font-size: 1rem;
-            color: #888;
-            margin-left: 1rem;
-        }
-        .bon-items table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .bon-items th, .bon-items td {
-            padding: 0.4rem 0.8rem;
-            border-bottom: 1px solid #eee;
-            text-align: left;
-        }
-        .bon-items th {
-            background: #f0f0f0;
-        }
-        .total {
-            margin-top: 1rem;
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-align: right;
-        }
-        @media (max-width:600px) {
-            .bon-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .bon-category {
-                margin-left: 0;
-                margin-top: 0.3rem;
-            }
+        :root {
+            --green: #2f6f5e;
+            --green-dark: #17483b;
+            --ink: #18201f;
+            --muted: #65716e;
+            --line: #dce5e1;
+            --paper: #ffffff;
+            --wash: #f5f8f6;
+            --blue: #0648b6;
+            --blue-soft: #dce8ff;
+            --shadow: 0 18px 42px rgba(24, 32, 31, 0.12);
         }
 
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(47, 111, 94, 0.16), transparent 28rem),
+                linear-gradient(135deg, #f8fbf9 0%, #edf4f1 100%);
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 14px;
+            align-items: center;
+            width: min(1120px, calc(100% - 24px));
+            margin: 0 auto;
+            padding: 16px 0 8px;
+        }
+
+        .menu-button,
+        .pretty-btn {
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            padding: 0 13px;
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: 0.9rem;
+        }
+
+        .nav-menu {
+            position: relative;
+            z-index: 20;
+        }
+
+        .menu-button {
+            gap: 8px;
+            list-style: none;
+            color: var(--green-dark);
+            background: #e5f4ee;
+        }
+
+        .menu-button::-webkit-details-marker {
+            display: none;
+        }
+
+        .burger-lines {
+            display: grid;
+            gap: 4px;
+        }
+
+        .burger-lines span {
+            display: block;
+            width: 18px;
+            height: 2px;
+            border-radius: 999px;
+            background: currentColor;
+        }
+
+        .menu-label {
+            font-size: 0.9rem;
+        }
+
+        .menu-panel {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            width: min(340px, 92vw);
+            display: none;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 18px 42px rgba(24, 32, 31, 0.16);
+        }
+
+        .nav-menu[open] .menu-panel {
+            display: grid;
+        }
+
+        .menu-section {
+            display: grid;
+            gap: 6px;
+        }
+
+        .menu-section strong {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .menu-panel a {
+            min-height: 34px;
+            display: flex;
+            align-items: center;
+            border-radius: 8px;
+            padding: 0 10px;
+            color: var(--ink);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .menu-panel a:hover {
+            background: #eef3f1;
+        }
+
+        .menu-panel a.muted-link {
+            color: rgba(24, 32, 31, 0.52);
+            background: #f7faf8;
+        }
+
+        .eyebrow {
+            margin: 0 0 4px;
+            color: var(--green-dark);
+            font-size: 0.74rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.6rem, 8vw, 3rem);
+            line-height: 1;
+            letter-spacing: 0;
+        }
+
+        .page-shell {
+            width: min(1120px, calc(100% - 24px));
+            margin: 0 auto;
+            padding: 12px 0 34px;
+        }
+
+        .controls,
+        .bon {
+            border: 1px solid rgba(220, 229, 225, 0.9);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(14px);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            padding: 14px;
+            margin: 0 0 14px;
+        }
+
+        .controls input {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0 12px;
+            font-size: 1rem;
+        }
+
+        .pretty-btn {
+            color: var(--blue);
+            background: var(--blue-soft);
+            transition: transform 0.16s ease, background 0.16s ease;
+        }
+
+        .pretty-btn:hover {
+            transform: translateY(-2px);
+            background: #c9dafc;
+        }
+
+        .pretty-btn.primary-action {
+            color: #fff;
+            background: var(--blue);
+        }
+
+        #bons-container {
+            display: grid;
+            gap: 14px;
+        }
+
+        .bon {
+            padding: 16px;
+        }
+
+        .bon-header {
+            font-weight: 800;
+            margin-bottom: 0.8rem;
+            display: grid;
+            gap: 4px;
+        }
+
+        .bon-category {
+            font-size: 0.95rem;
+            color: var(--muted);
+        }
+
+        .bon-items {
+            overflow-x: auto;
+        }
+
+        .bon-items table {
+            width: 100%;
+            min-width: 520px;
+            border-collapse: collapse;
+        }
+
+        .bon-items th,
+        .bon-items td {
+            padding: 0.48rem 0.65rem;
+            border-bottom: 1px solid #edf2f0;
+            text-align: left;
+        }
+
+        .bon-items th {
+            background: #f2f7f4;
+            color: var(--green-dark);
+        }
+
+        .total {
+            margin-top: 1rem;
+            font-size: 1.18rem;
+            font-weight: 900;
+            text-align: right;
+            color: var(--green-dark);
+        }
+
+        @media (min-width: 680px) {
+            .topbar {
+                grid-template-columns: auto 1fr auto;
+                padding-top: 22px;
+            }
+
+            .controls {
+                grid-template-columns: minmax(240px, 1fr) auto auto;
+                align-items: center;
+            }
+        }
     </style>
 </head>
 <body>
-<!-- Navigation oben -->
-<nav style="margin-bottom: 20px;">
-    <button onclick="window.location.href='admin.html'" class="pretty-btn">Zur Admin-Seite</button>
-    <button onclick="window.location.href='statistics_sql.html'" class="pretty-btn">Zur Statistik</button>
-    <button onclick="window.location.href='config_gebinde.html'" class="pretty-btn">Gebinde-Konfiguration</button>
-    <button onclick="window.location.href='index.html'" class="pretty-btn">Zurück zur Kassenübersicht</button>
-</nav>
+<header class="topbar">
+    <details class="nav-menu">
+        <summary class="menu-button" aria-label="Navigation oeffnen">
+            <span class="burger-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="menu-label">Menue</span>
+        </summary>
+        <nav class="menu-panel" aria-label="Hauptnavigation">
+            <div class="menu-section">
+                <strong>Admin</strong>
+                <a href="admin.html">Admin</a>
+            </div>
+            <div class="menu-section">
+                <strong>Organisation</strong>
+                <a href="teams/teams.html">Teamuebersicht</a>
+                <a href="Kommunikation/index.html">Kommunikation</a>
+                <a href="helferplan/public/index.html">Helferplan</a>
+                <a href="HelferessenBestellung/index.html">Helferessen</a>
+                <a class="muted-link" href="turnier/public/index.html">Turnier-Verwaltung</a>
+            </div>
+            <div class="menu-section">
+                <strong>Kasse</strong>
+                <a href="index.html">Kassen-Dashboard</a>
+                <a href="staffelpreise.html">Staffelpreise Bierzelt</a>
+                <a href="bons.html">Bons</a>
+                <a href="lager.html">Lagerverwaltung</a>
+                <a href="config_gebinde.html">Gebinde-Konfig</a>
+                <a href="statistics_sql.html">Statistik-Uebersicht</a>
+            </div>
+        </nav>
+    </details>
+    <div>
+        <p class="eyebrow">Kasse</p>
+        <h1>Bon-Uebersicht</h1>
+    </div>
+</header>
 
-<h1>Bon-Übersicht</h1>
+<main class="page-shell">
+    <div class="controls">
+        <input type="number" id="searchBon" placeholder="Bon-Nummer suchen">
+        <button onclick="searchBon()" class="pretty-btn primary-action">Suchen</button>
+        <button onclick="resetSearch()" class="pretty-btn">Alle anzeigen</button>
+    </div>
 
-<div class="controls">
-    <input type="number" id="searchBon" placeholder="Bon-Nummer suchen">
-    <button onclick="searchBon()" class="pretty-btn">Suchen</button>
-    <button onclick="resetSearch()" class="pretty-btn">Alle anzeigen</button>
-
-</div>
-<div id="bons-container">
-    <!-- Bons werden hier gerendert -->
-</div>
+    <div id="bons-container">
+        <!-- Bons werden hier gerendert -->
+    </div>
+</main>
 
 <script>
     let allBons = [];
@@ -117,7 +332,6 @@
         const container = document.getElementById("bons-container");
         container.innerHTML = "";
 
-        // Sicherstellen, dass neueste oben angezeigt werden
         const sorted = [...bons].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         if(sorted.length === 0) {
@@ -131,7 +345,7 @@
 
             div.innerHTML = `
                     <div class="bon-header">
-                        <span>Bon Nr. ${bon.id} – ${new Date(bon.created_at).toLocaleString()}</span>
+                        <span>Bon Nr. ${bon.id} - ${new Date(bon.created_at).toLocaleString()}</span>
                         <span class="bon-category">Kasse: ${bon.category || '-'}</span>
                     </div>
                     <div class="bon-items">
@@ -152,17 +366,17 @@
                                         <td>
                                             ${
                 item.quantity > 0
-                    ? `€${(parseFloat(item.total) / parseFloat(item.quantity)).toFixed(2)}`
+                    ? `EUR ${(parseFloat(item.total) / parseFloat(item.quantity)).toFixed(2)}`
                     : ""
             }
                                         </td>
-                                        <td>€${parseFloat(item.total).toFixed(2)}</td>
+                                        <td>EUR ${parseFloat(item.total).toFixed(2)}</td>
                                     </tr>
                                 `).join("")}
                             </tbody>
                         </table>
                     </div>
-                    <div class="total">Gesamt: €${parseFloat(bon.totalAmount).toFixed(2)}</div>
+                    <div class="total">Gesamt: EUR ${parseFloat(bon.totalAmount).toFixed(2)}</div>
                 `;
 
             container.appendChild(div);
@@ -172,11 +386,10 @@
     function searchBon() {
         const searchValue = document.getElementById("searchBon").value.trim().toLowerCase();
         if (!searchValue) {
-            renderBons(allBons); // keine Suche → alle anzeigen
+            renderBons(allBons);
             return;
         }
 
-        // Suche nach Bonnummer, Kategorie/Kasse oder Artikelnamen
         const filtered = allBons.filter(bon =>
             bon.id.toString() === searchValue ||
             (bon.category && bon.category.toLowerCase().includes(searchValue)) ||

@@ -3,224 +3,368 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kassen Dashboard</title>
+    <title>BVT Kassenanmeldung</title>
     <style>
-        /* Grundlayout */
+        :root {
+            --blue: #0648b6;
+            --blue-dark: #05388c;
+            --blue-soft: #dce8ff;
+            --ink: #152033;
+            --muted: #687488;
+            --line: #d9e1ef;
+            --paper: #ffffff;
+            --wash: #f5f8fc;
+            --green: #0f8a67;
+            --green-soft: #def5ed;
+            --amber: #a76300;
+            --amber-soft: #fff0d7;
+            --shadow: 0 22px 60px rgba(21, 32, 51, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            padding: 0;
-            font-family: 'Arial', sans-serif;
-            background-color: #f0f2f5;
+            min-height: 100vh;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(6, 72, 182, 0.12), transparent 34rem),
+                linear-gradient(135deg, #fbfdff 0%, #eef4fb 48%, #f8fafc 100%);
+        }
+
+        .page {
+            width: min(1180px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 34px 0 48px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+            gap: 28px;
+            align-items: stretch;
+            margin-bottom: 26px;
+        }
+
+        .hero-main,
+        .status-panel,
+        .section {
+            border: 1px solid rgba(217, 225, 239, 0.82);
+            background: rgba(255, 255, 255, 0.86);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .hero-main {
+            min-height: 280px;
+            border-radius: 28px;
+            padding: clamp(28px, 5vw, 56px);
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
-            color: #333;
+            justify-content: space-between;
+            overflow: hidden;
+            position: relative;
         }
+
+        .hero-main::after {
+            content: "";
+            position: absolute;
+            right: -80px;
+            bottom: -110px;
+            width: 320px;
+            height: 320px;
+            border-radius: 999px;
+            border: 54px solid rgba(6, 72, 182, 0.08);
+        }
+
+        .eyebrow {
+            margin: 0 0 14px;
+            color: var(--blue);
+            font-size: 0.78rem;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
         h1 {
-            margin-top: 30px;
-            font-size: 2.2rem;
-            color: #2c3e50;
+            position: relative;
+            z-index: 1;
+            max-width: 760px;
+            margin: 0;
+            font-size: clamp(2.35rem, 6vw, 5.25rem);
+            line-height: 0.94;
+            letter-spacing: 0;
         }
-        p {
-            margin: 10px 0 20px 0;
-            font-size: 1.1rem;
+
+        .hero-text {
+            position: relative;
+            z-index: 1;
+            max-width: 620px;
+            margin: 24px 0 0;
+            color: var(--muted);
+            font-size: clamp(1rem, 1.7vw, 1.18rem);
+            line-height: 1.65;
         }
-        /* Buttons Container */
-        .gui-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 15px;
-            width: 90%;
-            max-width: 900px;
-            margin-bottom: 40px;
-        }
-        /* Buttons Styling */
-        .gui-buttons button, .admin-btn {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 20px;
-            font-size: 1.1rem;
-            cursor: pointer;
-            transition: background-color 0.2s, transform 0.1s;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .gui-buttons button:hover, .admin-btn:hover {
-            background-color: #2980b9;
-            transform: translateY(-2px);
-        }
-        .gui-buttons button:active, .admin-btn:active {
-            transform: translateY(1px);
-        }
-        /* Admin Button extra Abstand */
-        .admin-btn-container {
-            width: 90%;
-            max-width: 900px;
-            margin-bottom: 40px;
+
+        .status-panel {
+            border-radius: 28px;
+            padding: 26px;
             display: flex;
-            justify-content: flex-end;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 24px;
         }
-        .admin-btn {
-            padding: 12px 32px;
-            font-size: 1.07rem;
-            border-radius: 10px;
-            background-color: #34495e;
-            margin-left: auto;
+
+        .status-block {
+            padding: 18px;
+            border-radius: 22px;
+            background: var(--wash);
+            border: 1px solid var(--line);
         }
-        .admin-btn:hover {
-            background-color: #2c3e50;
+
+        .status-block strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 1.15rem;
         }
-        /* Modal Styles */
-        .modal-bg {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0; top: 0;
-            width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.2);
+
+        .status-block span {
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .quick-row {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin: 0 0 26px;
+        }
+
+        .quick-pill {
+            display: flex;
             align-items: center;
             justify-content: center;
+            min-height: 68px;
+            padding: 16px 18px;
+            border: 0;
+            border-radius: 999px;
+            background: var(--blue);
+            color: #fff;
+            text-decoration: none;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            box-shadow: 0 14px 32px rgba(6, 72, 182, 0.22);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
         }
-        .modal {
-            background: #fff;
-            padding: 30px 26px 24px 26px;
-            border-radius: 13px;
-            box-shadow: 0 4px 30px #0003;
-            min-width: 260px;
+
+        .quick-pill.secondary {
+            background: var(--blue-soft);
+            color: var(--blue);
+            box-shadow: none;
+        }
+
+        .quick-pill:hover,
+        .action-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .quick-pill:hover {
+            background: var(--blue-dark);
+            box-shadow: 0 18px 36px rgba(6, 72, 182, 0.26);
+        }
+
+        .quick-pill.secondary:hover {
+            background: #c8d9fb;
+            box-shadow: none;
+        }
+
+        .section {
+            border-radius: 28px;
+            padding: clamp(22px, 3vw, 34px);
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            align-items: flex-start;
+            margin-bottom: 22px;
+        }
+
+        .section h2 {
+            margin: 0;
+            font-size: clamp(1.55rem, 3vw, 2.25rem);
+            letter-spacing: 0;
+        }
+
+        .section p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .section-tag {
+            flex: 0 0 auto;
+            padding: 9px 14px;
+            border-radius: 999px;
+            background: var(--green-soft);
+            color: var(--green);
+            font-size: 0.78rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .section.compact .section-tag {
+            background: var(--amber-soft);
+            color: var(--amber);
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .action-card {
+            min-height: 136px;
+            padding: 22px;
+            border-radius: 24px;
+            border: 1px solid var(--line);
+            background: linear-gradient(180deg, #fff 0%, #f7faff 100%);
+            color: inherit;
+            text-decoration: none;
             display: flex;
             flex-direction: column;
-            align-items: stretch;
+            justify-content: space-between;
+            transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
         }
-        .modal label {
-            font-weight: 500;
-            margin-bottom: 7px;
+
+        .action-card:hover {
+            border-color: rgba(6, 72, 182, 0.34);
+            box-shadow: 0 18px 38px rgba(21, 32, 51, 0.12);
         }
-        .modal input[type="password"] {
-            padding: 9px;
-            margin-bottom: 18px;
-            border-radius: 7px;
-            border: 1.2px solid #ccc;
-            font-size: 1.1rem;
+
+        .action-card strong {
+            font-size: 1.36rem;
+            letter-spacing: 0;
         }
-        .modal input[type="password"]:focus {
-            border-color: #3498db;
-            outline: none;
+
+        .action-card span {
+            color: var(--muted);
+            line-height: 1.5;
         }
-        .modal .modal-btn-row {
-            display: flex;
-            gap: 12px;
+
+        .action-card .cta {
+            margin-top: 18px;
+            color: var(--blue);
+            font-size: 0.82rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
         }
-        .modal button {
-            padding: 9px 22px;
-            border: none;
-            border-radius: 7px;
-            font-size: 1.01rem;
-            cursor: pointer;
-            background: #3498db;
-            color: #fff;
-            font-weight: 600;
-            transition: background 0.2s;
-        }
-        .modal button:hover {
-            background: #2980b9;
-        }
-        .modal .cancel-btn {
-            background: #bbb;
-            color: #222;
-        }
-        .modal .cancel-btn:hover {
-            background: #848484;
-        }
-        .modal .error {
-            color: #c0392b;
-            font-size: 1rem;
-            margin-bottom: 10px;
-            min-height: 1.2em;
-        }
-        @media (max-width: 768px) {
-            .gui-buttons, .admin-btn-container {
-                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+
+        @media (max-width: 860px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
-        @media (max-width: 480px) {
-            .gui-buttons {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-                gap: 10px;
+
+        @media (max-width: 560px) {
+            .page {
+                width: min(100% - 22px, 1180px);
+                padding-top: 18px;
             }
-            .gui-buttons button {
-                padding: 15px;
-                font-size: 1rem;
+
+            .hero-main,
+            .status-panel,
+            .section {
+                border-radius: 22px;
             }
-            .admin-btn-container {
-                margin-bottom: 20px;
+
+            .quick-row,
+            .action-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-pill {
+                justify-content: flex-start;
+                min-height: 62px;
+                padding-inline: 24px;
+            }
+
+            .section-head {
+                display: block;
+            }
+
+            .section-tag {
+                display: inline-flex;
+                margin-top: 14px;
             }
         }
     </style>
 </head>
 <body>
-<h1>Kassen Dashboard</h1>
-<p>Wähle die gewünschte Kasse:</p>
-<div class="gui-buttons">
-    <button onclick="openGUI('essen')">Essen</button>
-    <button onclick="openGUI('bierzelt')">Bierzelt</button>
-    <button onclick="openGUI('pfand')">Pfandrückgabe</button>
-    <button onclick="openGUI('fruehstueck')">Frühstück</button>
-    <button onclick="openGUI('bons')">Bons</button>
-    <button class="small-back-btn" onclick="window.location.href='staffelpreise.html'">Staffelpreise Bierzelt</button>
-    <button onclick="window.location.href='turnier/public/bracket.html'">🏐 Turnierbaum</button>
-</div>
-<div class="admin-btn-container">
-    <button class="admin-btn" onclick="showAdminModal()">Adminbereich</button>
-</div>
-
-<!-- Modal für Passwortabfrage -->
-<div class="modal-bg" id="adminModalBg">
-    <div class="modal">
-        <div class="error" id="adminModalError"></div>
-        <label for="adminPass">Admin-Passwort:</label>
-        <input type="password" id="adminPass" autocomplete="off">
-        <div class="modal-btn-row">
-            <button onclick="checkAdminPassword()">OK</button>
-            <button class="cancel-btn" onclick="closeAdminModal()">Abbrechen</button>
+<main class="page">
+    <section class="hero" aria-labelledby="pageTitle">
+        <div class="hero-main">
+            <div>
+                <p class="eyebrow">Bergstraesser Volleyballturnier</p>
+                <h1 id="pageTitle">Kassen Anmeldung</h1>
+                <p class="hero-text">Waehle den passenden Kassenbereich fuer Verkauf, Rueckgabe oder Preisverwaltung.</p>
+            </div>
         </div>
-    </div>
-</div>
-<script src="config.js"></script>
-<script>
-    function openGUI(gui) {
-        window.location.href = gui + '.html';
-    }
 
-    // Admin Modal Logik
-    function showAdminModal() {
-        document.getElementById('adminModalBg').style.display = 'flex';
-        document.getElementById('adminPass').value = '';
-        document.getElementById('adminModalError').textContent = '';
-        setTimeout(() => {
-            document.getElementById('adminPass').focus();
-        }, 50);
-    }
-    function closeAdminModal() {
-        document.getElementById('adminModalBg').style.display = 'none';
-    }
-    function checkAdminPassword() {
-        const pass = document.getElementById('adminPass').value;
-        if(pass === '1881') {
-            window.location.href = 'admin.html';
-        } else {
-            document.getElementById('adminModalError').textContent = 'Falsches Passwort!';
-        }
-    }
-    // Schließen via ESC oder Klick außerhalb
-    document.addEventListener('keydown', function(evt) {
-        if(evt.key === "Escape") closeAdminModal();
-    });
-    document.getElementById('adminModalBg').addEventListener('click', function(evt){
-        if(evt.target === this) closeAdminModal();
-    });
-</script>
+        <aside class="status-panel" aria-label="Hinweise">
+            <div class="status-block">
+                <strong>Schneller Zugriff</strong>
+                <span>Die wichtigsten Kassen liegen direkt oben als grosse Schaltflaechen.</span>
+            </div>
+            <div class="status-block">
+                <strong>Getrennte Bereiche</strong>
+                <span>Verkauf und Rueckgabe sind getrennt von Bons und Staffelpreisen.</span>
+            </div>
+        </aside>
+    </section>
+
+    <nav class="quick-row" aria-label="Direktzugriff Kasse">
+        <a class="quick-pill" href="essen.html">Essen</a>
+        <a class="quick-pill secondary" href="bierzelt.html">Bierzelt</a>
+        <a class="quick-pill secondary" href="pfand.html">Pfand</a>
+        <a class="quick-pill secondary" href="fruehstueck.html">Fruehstueck</a>
+    </nav>
+
+    <section class="section compact" aria-labelledby="toolsTitle">
+        <div class="section-head">
+            <div>
+                <p class="eyebrow">Verwaltung</p>
+                <h2 id="toolsTitle">Bons und Staffelpreise</h2>
+                <p>Hilfsseiten fuer Ausgabe, Preise und Bierzelt-Staffeln.</p>
+            </div>
+            <span class="section-tag">Setup</span>
+        </div>
+
+        <div class="action-grid">
+            <a class="action-card" href="bons.html">
+                <strong>Bons</strong>
+                <span>Bons anzeigen und vorbereiten.</span>
+                <span class="cta">Oeffnen</span>
+            </a>
+            <a class="action-card" href="staffelpreise.html">
+                <strong>Staffelpreise</strong>
+                <span>Staffelpreise fuer das Bierzelt verwalten.</span>
+                <span class="cta">Oeffnen</span>
+            </a>
+        </div>
+    </section>
+</main>
 </body>
 </html>
