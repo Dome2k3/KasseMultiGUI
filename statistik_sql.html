@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BVT Finanzdashboard</title>
+    <script src="config.js"></script>
+    <style>
+        :root {
+            --green: #2f6f5e;
+            --green-dark: #17483b;
+            --ink: #18201f;
+            --muted: #65716e;
+            --line: #dce5e1;
+            --paper: #ffffff;
+            --wash: #f5f8f6;
+            --blue: #0648b6;
+            --blue-soft: #dce8ff;
+            --gold: #a76300;
+            --gold-soft: #fff0d7;
+            --red: #b64a4a;
+            --shadow: 0 18px 42px rgba(24, 32, 31, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(47, 111, 94, 0.15), transparent 30rem),
+                radial-gradient(circle at 92% 10%, rgba(6, 72, 182, 0.11), transparent 24rem),
+                linear-gradient(135deg, #f8fbf9 0%, #edf4f1 100%);
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 14px;
+            align-items: center;
+            width: min(1320px, calc(100% - 24px));
+            margin: 0 auto;
+            padding: 16px 0 8px;
+        }
+
+        .menu-button,
+        .toolbar-button {
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            padding: 0 13px;
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: 0.9rem;
+        }
+
+        .nav-menu {
+            position: relative;
+            z-index: 20;
+        }
+
+        .menu-button {
+            gap: 8px;
+            list-style: none;
+            color: var(--green-dark);
+            background: #e5f4ee;
+        }
+
+        .menu-button::-webkit-details-marker {
+            display: none;
+        }
+
+        .burger-lines {
+            display: grid;
+            gap: 4px;
+        }
+
+        .burger-lines span {
+            display: block;
+            width: 18px;
+            height: 2px;
+            border-radius: 999px;
+            background: currentColor;
+        }
+
+        .menu-label {
+            font-size: 0.9rem;
+        }
+
+        .menu-panel {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            width: min(340px, 92vw);
+            display: none;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 18px 42px rgba(24, 32, 31, 0.16);
+        }
+
+        .nav-menu[open] .menu-panel {
+            display: grid;
+        }
+
+        .menu-section {
+            display: grid;
+            gap: 6px;
+        }
+
+        .menu-section strong {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .menu-panel a {
+            min-height: 34px;
+            display: flex;
+            align-items: center;
+            border-radius: 8px;
+            padding: 0 10px;
+            color: var(--ink);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .menu-panel a:hover {
+            background: #eef3f1;
+        }
+
+        .menu-panel a.muted-link {
+            color: rgba(24, 32, 31, 0.52);
+            background: #f7faf8;
+        }
+
+        .eyebrow {
+            margin: 0 0 4px;
+            color: var(--green-dark);
+            font-size: 0.74rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.8rem, 7vw, 4.2rem);
+            line-height: 0.96;
+            letter-spacing: 0;
+        }
+
+        .dashboard {
+            width: min(1320px, calc(100% - 24px));
+            margin: 0 auto;
+            padding: 12px 0 34px;
+        }
+
+        .hero {
+            display: grid;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .hero-card,
+        .panel,
+        .kpi-card,
+        .day-card,
+        .station-card {
+            border: 1px solid rgba(220, 229, 225, 0.9);
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(14px);
+        }
+
+        .hero-card {
+            border-radius: 24px;
+            padding: clamp(20px, 4vw, 34px);
+        }
+
+        .hero-card p {
+            max-width: 760px;
+            margin: 12px 0 0;
+            color: var(--muted);
+            line-height: 1.58;
+        }
+
+        .toolbar {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .field label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        input,
+        select {
+            min-height: 42px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--ink);
+            padding: 0 12px;
+            font: inherit;
+            font-weight: 700;
+        }
+
+        .toolbar-button {
+            min-height: 42px;
+            color: #fff;
+            background: var(--blue);
+        }
+
+        .toolbar-button.secondary {
+            color: var(--blue);
+            background: var(--blue-soft);
+        }
+
+        .kpi-grid,
+        .day-grid,
+        .station-grid,
+        .content-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .kpi-grid {
+            grid-template-columns: 1fr;
+            margin-bottom: 14px;
+        }
+
+        .kpi-card {
+            border-radius: 20px;
+            padding: 18px;
+        }
+
+        .kpi-card span {
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .kpi-card strong {
+            display: block;
+            margin-top: 8px;
+            font-size: clamp(1.7rem, 8vw, 3rem);
+            line-height: 1;
+        }
+
+        .kpi-card small {
+            display: block;
+            margin-top: 8px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        .day-grid {
+            grid-template-columns: 1fr;
+            margin-bottom: 14px;
+        }
+
+        .day-card {
+            border-radius: 20px;
+            padding: 16px;
+        }
+
+        .day-card .date {
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .day-card strong {
+            display: block;
+            margin-top: 8px;
+            font-size: 1.65rem;
+        }
+
+        .day-card .meta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .content-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .panel {
+            border-radius: 22px;
+            padding: 16px;
+            min-width: 0;
+        }
+
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            align-items: flex-start;
+            margin-bottom: 14px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: clamp(1.25rem, 4vw, 1.9rem);
+            letter-spacing: 0;
+        }
+
+        .panel-head p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .station-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .station-card {
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: none;
+        }
+
+        .station-title {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: baseline;
+            margin-bottom: 10px;
+        }
+
+        .station-title strong {
+            font-size: 1.15rem;
+        }
+
+        .station-title span {
+            color: var(--green-dark);
+            font-weight: 900;
+        }
+
+        .bar-track {
+            height: 10px;
+            border-radius: 999px;
+            background: #edf3f0;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--green), var(--blue));
+        }
+
+        .station-meta {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 0.86rem;
+        }
+
+        .station-meta strong {
+            display: block;
+            color: var(--ink);
+            font-size: 1rem;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            min-width: 620px;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px 9px;
+            border-bottom: 1px solid #edf2f0;
+            text-align: left;
+        }
+
+        th {
+            color: var(--green-dark);
+            background: #f2f7f4;
+            font-size: 0.78rem;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+
+        td.num,
+        th.num {
+            text-align: right;
+        }
+
+        .rank-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .rank-row {
+            display: grid;
+            gap: 8px;
+            padding: 10px;
+            border-radius: 14px;
+            background: #f7faf8;
+            border: 1px solid #e8efeb;
+        }
+
+        .rank-main {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-weight: 900;
+        }
+
+        .rank-main span {
+            color: var(--green-dark);
+            white-space: nowrap;
+        }
+
+        .rank-sub {
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .empty-state {
+            color: var(--muted);
+            padding: 18px;
+            border-radius: 14px;
+            background: #f7faf8;
+        }
+
+        .error-state {
+            color: var(--red);
+            padding: 18px;
+            border-radius: 14px;
+            background: #fff1f1;
+        }
+
+        @media (min-width: 680px) {
+            .topbar {
+                grid-template-columns: auto 1fr auto;
+                padding-top: 22px;
+            }
+
+            .toolbar {
+                grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto;
+                align-items: end;
+            }
+
+            .kpi-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            .day-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .station-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (min-width: 1040px) {
+            .content-grid {
+                grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+            }
+
+            .station-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <details class="nav-menu">
+        <summary class="menu-button" aria-label="Navigation oeffnen">
+            <span class="burger-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="menu-label">Menue</span>
+        </summary>
+        <nav class="menu-panel" aria-label="Hauptnavigation">
+            <div class="menu-section">
+                <strong>Admin</strong>
+                <a href="admin.html">Admin</a>
+            </div>
+            <div class="menu-section">
+                <strong>Organisation</strong>
+                <a href="teams/teams.html">Teamuebersicht</a>
+                <a href="Kommunikation/index.html">Kommunikation</a>
+                <a href="helferplan/public/index.html">Helferplan</a>
+                <a href="HelferessenBestellung/index.html">Helferessen</a>
+                <a class="muted-link" href="turnier/public/index.html">Turnier-Verwaltung</a>
+            </div>
+            <div class="menu-section">
+                <strong>Kasse</strong>
+                <a href="index.html">Kassen-Dashboard</a>
+                <a href="staffelpreise.html">Staffelpreise Bierzelt</a>
+                <a href="bons.html">Bons</a>
+                <a href="lager.html">Lagerverwaltung</a>
+                <a href="config_gebinde.html">Gebinde-Konfig</a>
+                <a href="statistik_sql.html">Finanzdashboard</a>
+            </div>
+        </nav>
+    </details>
+    <div>
+        <p class="eyebrow">Finanzen und Stationen</p>
+        <h1>BVT Finanzdashboard</h1>
+    </div>
+</header>
+
+<main class="dashboard">
+    <section class="hero">
+        <div class="hero-card">
+            <p class="eyebrow">Drei Turniertage</p>
+            <p>Read-only Auswertung der Kassenbons mit Fokus auf Tagesumsatz, Stationen und meistverkaufte Gerichte. Keine Wochenvergleiche, keine Langzeitstatistik.</p>
+
+            <div class="toolbar">
+                <div class="field">
+                    <label for="startDate">Starttag</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="field">
+                    <label for="stationFilter">Station</label>
+                    <select id="stationFilter">
+                        <option value="">Alle Stationen</option>
+                        <option value="essen">Essen</option>
+                        <option value="bierzelt">Bierzelt</option>
+                        <option value="pfand">Pfand</option>
+                        <option value="fruehstueck">Fruehstueck</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="articleSearch">Gericht / Artikel</label>
+                    <input type="search" id="articleSearch" placeholder="z.B. Pommes">
+                </div>
+                <button type="button" id="refreshBtn" class="toolbar-button">Aktualisieren</button>
+                <button type="button" id="todayBtn" class="toolbar-button secondary">Heute</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="kpi-grid" aria-label="Kennzahlen">
+        <article class="kpi-card">
+            <span>Umsatz 3 Tage</span>
+            <strong id="totalRevenue">EUR 0,00</strong>
+            <small id="totalRevenueHint">Keine Bons geladen.</small>
+        </article>
+        <article class="kpi-card">
+            <span>Bons</span>
+            <strong id="totalBons">0</strong>
+            <small id="totalBonsHint">Im gewaehlten Zeitraum.</small>
+        </article>
+        <article class="kpi-card">
+            <span>Durchschnitt</span>
+            <strong id="avgBon">EUR 0,00</strong>
+            <small>Durchschnittlicher Bonwert.</small>
+        </article>
+        <article class="kpi-card">
+            <span>Top Station</span>
+            <strong id="topStation">-</strong>
+            <small id="topStationHint">Nach Umsatz.</small>
+        </article>
+    </section>
+
+    <section id="dayGrid" class="day-grid" aria-label="Turniertage"></section>
+
+    <section class="panel" style="margin-bottom:14px;">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">Stationen</p>
+                <h2>Umsatz nach Kasse</h2>
+                <p>Essen, Bierzelt, Pfand und Fruehstueck im direkten Vergleich.</p>
+            </div>
+        </div>
+        <div id="stationGrid" class="station-grid"></div>
+    </section>
+
+    <section class="content-grid">
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Gerichte und Artikel</p>
+                    <h2>Top-Verkaeufe</h2>
+                    <p>Sortiert nach Umsatz, mit Menge und Station.</p>
+                </div>
+            </div>
+            <div id="topArticles" class="rank-list"></div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="eyebrow">Tagesmatrix</p>
+                    <h2>Stationen pro Tag</h2>
+                    <p>Welche Kasse hat an welchem Turniertag getragen?</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Tag</th>
+                        <th>Station</th>
+                        <th class="num">Bons</th>
+                        <th class="num">Menge</th>
+                        <th class="num">Umsatz</th>
+                    </tr>
+                    </thead>
+                    <tbody id="dayStationTable"></tbody>
+                </table>
+            </div>
+        </article>
+    </section>
+</main>
+
+<script>
+    const stationLabels = {
+        essen: 'Essen',
+        bierzelt: 'Bierzelt',
+        pfand: 'Pfand',
+        fruehstueck: 'Fruehstueck'
+    };
+
+    const state = {
+        bons: [],
+        loading: false
+    };
+
+    const els = {
+        startDate: document.getElementById('startDate'),
+        stationFilter: document.getElementById('stationFilter'),
+        articleSearch: document.getElementById('articleSearch'),
+        refreshBtn: document.getElementById('refreshBtn'),
+        todayBtn: document.getElementById('todayBtn'),
+        totalRevenue: document.getElementById('totalRevenue'),
+        totalRevenueHint: document.getElementById('totalRevenueHint'),
+        totalBons: document.getElementById('totalBons'),
+        totalBonsHint: document.getElementById('totalBonsHint'),
+        avgBon: document.getElementById('avgBon'),
+        topStation: document.getElementById('topStation'),
+        topStationHint: document.getElementById('topStationHint'),
+        dayGrid: document.getElementById('dayGrid'),
+        stationGrid: document.getElementById('stationGrid'),
+        topArticles: document.getElementById('topArticles'),
+        dayStationTable: document.getElementById('dayStationTable')
+    };
+
+    function money(value) {
+        return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(Number(value) || 0);
+    }
+
+    function number(value) {
+        return new Intl.NumberFormat('de-DE').format(Number(value) || 0);
+    }
+
+    function dateKey(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function addDays(key, amount) {
+        const date = new Date(`${key}T12:00:00`);
+        date.setDate(date.getDate() + amount);
+        return dateKey(date);
+    }
+
+    function formatDay(key) {
+        return new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(`${key}T12:00:00`));
+    }
+
+    function normalizeStation(value) {
+        return String(value || 'unbekannt').trim().toLowerCase();
+    }
+
+    function bonTotal(bon) {
+        return Number(bon.totalAmount || bon.total || 0);
+    }
+
+    function selectedDays() {
+        const start = els.startDate.value || dateKey(new Date());
+        return [start, addDays(start, 1), addDays(start, 2)];
+    }
+
+    function bonMatches(bon) {
+        const days = new Set(selectedDays());
+        if (!days.has(dateKey(bon.created_at))) return false;
+        const station = normalizeStation(bon.category);
+        if (els.stationFilter.value && station !== els.stationFilter.value) return false;
+        const search = els.articleSearch.value.trim().toLowerCase();
+        if (!search) return true;
+        return (bon.items || []).some((item) => String(item.name || '').toLowerCase().includes(search));
+    }
+
+    function filteredBons() {
+        return state.bons.filter(bonMatches);
+    }
+
+    function sumItems(bons) {
+        return bons.reduce((sum, bon) => sum + (bon.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
+    }
+
+    function groupStations(bons) {
+        const map = new Map();
+        bons.forEach((bon) => {
+            const station = normalizeStation(bon.category);
+            if (!map.has(station)) map.set(station, { station, revenue: 0, bons: 0, quantity: 0 });
+            const entry = map.get(station);
+            entry.revenue += bonTotal(bon);
+            entry.bons += 1;
+            entry.quantity += sumItems([bon]);
+        });
+        return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+    }
+
+    function groupArticles(bons) {
+        const map = new Map();
+        bons.forEach((bon) => {
+            const station = normalizeStation(bon.category);
+            (bon.items || []).forEach((item) => {
+                const name = String(item.name || 'Unbekannter Artikel').trim();
+                const key = `${station}::${name}`;
+                if (!map.has(key)) map.set(key, { station, name, quantity: 0, revenue: 0 });
+                const entry = map.get(key);
+                entry.quantity += Number(item.quantity || 0);
+                entry.revenue += Number(item.total || 0);
+            });
+        });
+        return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+    }
+
+    function renderKpis(bons) {
+        const revenue = bons.reduce((sum, bon) => sum + bonTotal(bon), 0);
+        const stations = groupStations(bons);
+        const top = stations[0];
+
+        els.totalRevenue.textContent = money(revenue);
+        els.totalRevenueHint.textContent = `${selectedDays().map(formatDay).join(' bis ')}.`;
+        els.totalBons.textContent = number(bons.length);
+        els.totalBonsHint.textContent = `${number(sumItems(bons))} Artikelpositionen/Mengen.`;
+        els.avgBon.textContent = money(bons.length ? revenue / bons.length : 0);
+        els.topStation.textContent = top ? (stationLabels[top.station] || top.station) : '-';
+        els.topStationHint.textContent = top ? `${money(top.revenue)} Umsatz` : 'Noch keine Daten.';
+    }
+
+    function renderDays(bons) {
+        els.dayGrid.innerHTML = selectedDays().map((day, index) => {
+            const dayBons = bons.filter((bon) => dateKey(bon.created_at) === day);
+            const revenue = dayBons.reduce((sum, bon) => sum + bonTotal(bon), 0);
+            return `
+                <article class="day-card">
+                    <div class="date">Tag ${index + 1} - ${formatDay(day)}</div>
+                    <strong>${money(revenue)}</strong>
+                    <div class="meta">
+                        <span>${number(dayBons.length)} Bons</span>
+                        <span>${number(sumItems(dayBons))} Menge</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    function renderStations(bons) {
+        const stations = groupStations(bons);
+        const max = Math.max(...stations.map((station) => station.revenue), 1);
+        const knownStations = ['essen', 'bierzelt', 'pfand', 'fruehstueck'];
+        const merged = knownStations.map((station) => stations.find((item) => item.station === station) || { station, revenue: 0, bons: 0, quantity: 0 });
+
+        els.stationGrid.innerHTML = merged.map((station) => {
+            const pct = Math.max(0, Math.min(100, (station.revenue / max) * 100));
+            return `
+                <article class="station-card">
+                    <div class="station-title">
+                        <strong>${stationLabels[station.station] || station.station}</strong>
+                        <span>${money(station.revenue)}</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+                    <div class="station-meta">
+                        <span><strong>${number(station.bons)}</strong>Bons</span>
+                        <span><strong>${number(station.quantity)}</strong>Menge</span>
+                        <span><strong>${money(station.bons ? station.revenue / station.bons : 0)}</strong>Schnitt</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    function renderArticles(bons) {
+        const articles = groupArticles(bons).slice(0, 12);
+        const max = Math.max(...articles.map((item) => item.revenue), 1);
+
+        if (!articles.length) {
+            els.topArticles.innerHTML = '<div class="empty-state">Keine Artikel im gewaehlten Zeitraum gefunden.</div>';
+            return;
+        }
+
+        els.topArticles.innerHTML = articles.map((item, index) => {
+            const pct = Math.max(4, Math.min(100, (item.revenue / max) * 100));
+            return `
+                <div class="rank-row">
+                    <div class="rank-main">
+                        <strong>${index + 1}. ${item.name}</strong>
+                        <span>${money(item.revenue)}</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+                    <div class="rank-sub">${stationLabels[item.station] || item.station} - ${number(item.quantity)} verkauft</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderDayStationTable(bons) {
+        const rows = [];
+        selectedDays().forEach((day) => {
+            const dayBons = bons.filter((bon) => dateKey(bon.created_at) === day);
+            groupStations(dayBons).forEach((station) => rows.push({ day, ...station }));
+        });
+
+        if (!rows.length) {
+            els.dayStationTable.innerHTML = '<tr><td colspan="5">Keine Daten im gewaehlten Zeitraum.</td></tr>';
+            return;
+        }
+
+        els.dayStationTable.innerHTML = rows.map((row) => `
+            <tr>
+                <td>${formatDay(row.day)}</td>
+                <td>${stationLabels[row.station] || row.station}</td>
+                <td class="num">${number(row.bons)}</td>
+                <td class="num">${number(row.quantity)}</td>
+                <td class="num">${money(row.revenue)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function render() {
+        const bons = filteredBons();
+        renderKpis(bons);
+        renderDays(bons);
+        renderStations(bons);
+        renderArticles(bons);
+        renderDayStationTable(bons);
+    }
+
+    async function loadBons() {
+        try {
+            state.loading = true;
+            els.refreshBtn.textContent = 'Laedt...';
+            const response = await fetch(`${window.API_URL}/bons`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            state.bons = await response.json();
+            render();
+        } catch (err) {
+            els.topArticles.innerHTML = `<div class="error-state">Bons konnten nicht geladen werden: ${err.message}</div>`;
+        } finally {
+            state.loading = false;
+            els.refreshBtn.textContent = 'Aktualisieren';
+        }
+    }
+
+    function setToday() {
+        els.startDate.value = dateKey(new Date());
+        render();
+    }
+
+    els.refreshBtn.addEventListener('click', loadBons);
+    els.todayBtn.addEventListener('click', setToday);
+    els.startDate.addEventListener('change', render);
+    els.stationFilter.addEventListener('change', render);
+    els.articleSearch.addEventListener('input', render);
+
+    els.startDate.value = dateKey(new Date());
+    loadBons();
+</script>
+</body>
+</html>

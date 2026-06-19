@@ -47,7 +47,7 @@
 <!-- Navigation oben -->
 <nav style="margin-bottom: 20px;">
     <button onclick="window.location.href='admin.html'" class="pretty-btn">Zur Admin-Seite</button>
-    <button onclick="window.location.href='statistics_sql.html'" class="pretty-btn">Zur Statistik</button>
+    <button onclick="window.location.href='statistik_sql.html'" class="pretty-btn">Zum Finanzdashboard</button>
     <button onclick="window.location.href='config_gebinde.html'" class="pretty-btn">Gebinde-Konfiguration</button>
 </nav>
 
@@ -69,15 +69,15 @@
     <p id="message"></p>
 </div>
 
-<!-- Filter für Verkaufsstatistik -->
+<!-- Filter fÃ¼r Verkaufsstatistik -->
 <div class="filter-row">
-    <label for="salesDate">Verkäufe für Datum:</label>
+    <label for="salesDate">VerkÃ¤ufe fÃ¼r Datum:</label>
     <input type="date" id="salesDate">
     <button type="button" id="filterSalesBtn" class="pretty-btn">Aktualisieren</button>
     <span id="salesDateInfo" style="color:#444; font-size:0.95em;"></span>
 </div>
 
-<h3>Bestände</h3>
+<h3>BestÃ¤nde</h3>
 <table border="1" id="lagerTable">
     <thead>
     <tr>
@@ -88,7 +88,7 @@
         <th class="sortable-header" data-sort="verkauft">Verkauft</th>
         <th class="sortable-header" data-sort="differenz">Differenz</th>
         <th>Bearbeiten</th>
-        <th>Löschen</th>
+        <th>LÃ¶schen</th>
     </tr>
     </thead>
     <tbody></tbody>

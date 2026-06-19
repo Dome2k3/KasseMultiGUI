@@ -37,7 +37,7 @@
 <!-- Navigation oben -->
 <nav style="margin-bottom: 20px;">
   <button onclick="window.location.href='admin.html'" class="pretty-btn">Zur Admin-Seite</button>
-  <button onclick="window.location.href='statistics_sql.html'" class="pretty-btn">Zur Statistik</button>
+  <button onclick="window.location.href='statistik_sql.html'" class="pretty-btn">Zum Finanzdashboard</button>
   <button onclick="window.location.href='lager.html'" class="pretty-btn">Zum Lager</button>
 </nav>
 
@@ -48,7 +48,7 @@
   <form id="editForm">
     <label for="produkt_name">Produkt:</label>
     <input type="text" id="produkt_name" name="produkt_name" required>
-    <label for="gebinde_groesse">Gebindegröße:</label>
+    <label for="gebinde_groesse">GebindegrÃ¶ÃŸe:</label>
     <input type="number" id="gebinde_groesse" name="gebinde_groesse" required>
     <input type="hidden" id="gebinde_id" name="gebinde_id">
     <button type="submit" class="pretty-btn">Speichern</button>
@@ -62,11 +62,11 @@
   <thead>
   <tr>
     <th class="sortable-header" data-sort="produkt_name">Produkt</th>
-    <th class="sortable-header" data-sort="gebinde_groesse">Gebindegröße</th>
+    <th class="sortable-header" data-sort="gebinde_groesse">GebindegrÃ¶ÃŸe</th>
     <th class="sortable-header" data-sort="created_at">Erstellt</th>
-    <th class="sortable-header" data-sort="updated_at">Letzte Änderung</th>
+    <th class="sortable-header" data-sort="updated_at">Letzte Ã„nderung</th>
     <th>Bearbeiten</th>
-    <th>Löschen</th>
+    <th>LÃ¶schen</th>
   </tr>
   </thead>
   <tbody></tbody>
