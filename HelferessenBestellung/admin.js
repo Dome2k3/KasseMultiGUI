@@ -50,7 +50,8 @@ function labelMain(choice) {
     schinken: 'Schinken',
     vegetarisch: 'Vegetarisch',
     pizzadoener: 'Pizzadoener',
-    doener: 'Doener'
+    doener: 'Doener',
+    pommes: 'Pommes'
   };
   return labels[choice] || 'Kein Hauptessen';
 }
