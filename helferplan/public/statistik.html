@@ -282,6 +282,12 @@
             text-align: right;
             font-family: 'Courier New', monospace;
         }
+
+        .distribution-table tr.absent-summary-row {
+            background: #fff5f5;
+            color: #9f1d1d;
+            font-weight: 600;
+        }
         
         @media (max-width: 768px) {
             .chart-container {
@@ -444,6 +450,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     let sortDirection = 'asc'; // 'asc' or 'desc'
     let collapsedTeams = new Set(); // track collapsed team IDs
     let allTeamsCollapsed = true; // start collapsed
+    let distributionBarChart = null;
+    let distributionPieChart = null;
+
+    function isHelperAbsent(helper) {
+        return helper.abwesend === 1 || helper.abwesend === true || helper.abwesend === '1';
+    }
+
+    function getFilteredStats() {
+        const filterTeamId = teamFilter.value;
+        if (!filterTeamId) {
+            return statsData.helper_stats;
+        }
+        return statsData.helper_stats.filter(h => String(h.team_id) === String(filterTeamId));
+    }
+
+    function buildShiftDistribution(helpers) {
+        const distribution = {};
+        helpers.forEach(helper => {
+            const count = helper.total_shifts || 0;
+            distribution[count] = (distribution[count] || 0) + 1;
+        });
+
+        return Object.entries(distribution)
+            .map(([shifts, count]) => ({
+                shift_count: parseInt(shifts),
+                helper_count: count,
+                percentage: helpers.length > 0 ? ((count / helpers.length) * 100).toFixed(1) : '0.0'
+            }))
+            .sort((a, b) => a.shift_count - b.shift_count);
+    }
     
     // Load data
     async function loadData() {
@@ -483,12 +519,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function renderKPIs() {
-        const filterTeamId = teamFilter.value;
-        let filteredStats = statsData.helper_stats;
-        
-        if (filterTeamId) {
-            filteredStats = filteredStats.filter(h => String(h.team_id) === String(filterTeamId));
-        }
+        const filteredStats = getFilteredStats();
         
         const totalHelpers = filteredStats.length;
         const totalPlanShifts = filteredStats.reduce((sum, h) => sum + h.plan_shifts, 0);
@@ -718,9 +749,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function renderDistributionCharts() {
-        const distribution = clusterDistribution(statsData.shift_distribution);
+        const filteredStats = getFilteredStats();
+        const distribution = clusterDistribution(buildShiftDistribution(filteredStats));
         
         if (distribution.length === 0) {
+            if (distributionBarChart) distributionBarChart.destroy();
+            if (distributionPieChart) distributionPieChart.destroy();
+            distributionBarChart = null;
+            distributionPieChart = null;
             return;
         }
         
@@ -732,7 +768,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Bar chart
         const barCtx = document.getElementById('distribution-bar-chart').getContext('2d');
-        new Chart(barCtx, {
+        if (distributionBarChart) distributionBarChart.destroy();
+        distributionBarChart = new Chart(barCtx, {
             type: 'bar',
             data: {
                 labels: labels,
@@ -765,7 +802,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Pie chart
         const pieCtx = document.getElementById('distribution-pie-chart').getContext('2d');
-        new Chart(pieCtx, {
+        if (distributionPieChart) distributionPieChart.destroy();
+        distributionPieChart = new Chart(pieCtx, {
             type: 'doughnut',
             data: {
                 labels: labels,
@@ -805,9 +843,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function renderDistributionTable() {
-        const distribution = clusterDistribution(statsData.shift_distribution);
+        const filteredStats = getFilteredStats();
+        const distribution = clusterDistribution(buildShiftDistribution(filteredStats));
+        const absentHelpers = filteredStats.filter(isHelperAbsent).length;
+        const absentPercentage = filteredStats.length > 0 ? ((absentHelpers / filteredStats.length) * 100).toFixed(1) : '0.0';
         
-        if (distribution.length === 0) {
+        if (distribution.length === 0 && absentHelpers === 0) {
             distributionTable.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px;">Keine Daten verfügbar</td></tr>';
             return;
         }
@@ -823,6 +864,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </tr>
             `;
         });
+
+        html += `
+            <tr class="absent-summary-row">
+                <td>davon abwesend</td>
+                <td class="number">${absentHelpers}</td>
+                <td class="number">${absentPercentage}%</td>
+            </tr>
+        `;
         
         distributionTable.innerHTML = html;
     }
@@ -841,6 +890,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     teamFilter.addEventListener('change', () => {
         renderKPIs();
         renderTable();
+        renderDistributionCharts();
+        renderDistributionTable();
     });
     
     // Column sorting
