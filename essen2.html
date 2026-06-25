@@ -386,7 +386,7 @@
 
         .button-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
             gap: 9px;
         }
 
@@ -398,9 +398,11 @@
             color: #ffffff;
             border-radius: var(--radius);
             box-shadow: 0 9px 18px rgba(20, 35, 60, 0.16);
+            font-size: 0.9rem;
             line-height: 1.12;
             white-space: normal;
-            overflow-wrap: anywhere;
+            overflow-wrap: normal;
+            word-break: normal;
         }
 
         .button-grid button:hover {
