@@ -17,7 +17,7 @@ const https = require("https");
 const { execFile } = require('child_process');
 const os = require('os');
 
-const PRINTER_NAME = process.env.PRINTER_NAME || 'TM-T20III';
+const PRINTER_NAME = process.env.PRINTER_NAME || 'TM-T20IV';
 
 // Bon-Rufname-Liste (zyklisch durchlaufend)
 const BON_KEYWORDS = [
