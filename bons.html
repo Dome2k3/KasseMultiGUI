@@ -227,6 +227,33 @@
             color: var(--muted);
         }
 
+        .payment-badge {
+            width: fit-content;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 0.82rem;
+            font-weight: 900;
+        }
+
+        .payment-badge.card {
+            color: #073b8f;
+            background: var(--blue-soft);
+        }
+
+        .payment-badge.cash {
+            color: var(--green-dark);
+            background: #e5f4ee;
+        }
+
+        .payment-badge small {
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
         .bon-items {
             overflow-x: auto;
         }
@@ -342,11 +369,13 @@
         sorted.forEach(bon => {
             const div = document.createElement("div");
             div.className = "bon";
+            const paymentBadge = paymentBadgeHtml(bon.paymentMethod, bon.paymentTransactionId);
 
             div.innerHTML = `
                     <div class="bon-header">
                         <span>Bon Nr. ${bon.id} - ${new Date(bon.created_at).toLocaleString()}</span>
                         <span class="bon-category">Kasse: ${bon.category || '-'}</span>
+                        ${paymentBadge}
                     </div>
                     <div class="bon-items">
                         <table>
@@ -381,6 +410,16 @@
 
             container.appendChild(div);
         });
+    }
+
+    function paymentBadgeHtml(method, transactionId) {
+        const normalized = (method || 'bar').toLowerCase();
+        if (normalized === 'karte') {
+            const tx = transactionId ? ` <small>${transactionId}</small>` : "";
+            return `<span class="payment-badge card" title="Kartenzahlung">&#128179; Karte${tx}</span>`;
+        }
+
+        return '<span class="payment-badge cash" title="Barzahlung">Bar</span>';
     }
 
     function searchBon() {

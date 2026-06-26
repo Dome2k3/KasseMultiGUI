@@ -89,6 +89,9 @@ h1 {
     background-color: #ffc107;
     color: #000;
 }
+.action-buttons button.card-payment {
+    background-color: #172033;
+}
 .action-buttons button:hover {
     background-color: var(--accent-hover);
     opacity: 0.94;
@@ -171,6 +174,27 @@ h1 {
     padding: 7px 10px;
     margin-bottom: 5px;
     font-size: 0.94rem;
+}
+.payment-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+.payment-badge.card {
+    color: #063d8f;
+    background: #dce8ff;
+}
+.payment-badge.cash {
+    color: #17483b;
+    background: #e5f4ee;
+}
+.payment-badge small {
+    color: #607080;
+    font-size: 0.72rem;
 }
 
 /* Button Panel (Bestellbuttons) -- jetzt wirklich rechts! */

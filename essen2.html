@@ -206,9 +206,35 @@
             box-shadow: 0 9px 18px rgba(245, 179, 1, 0.24);
         }
 
+        .action-buttons .card-payment {
+            grid-column: 1 / -1;
+            background: #172033;
+            box-shadow: 0 9px 18px rgba(23, 32, 51, 0.2);
+        }
+
         .action-buttons .reset {
             background: var(--red);
             box-shadow: 0 9px 18px rgba(227, 50, 71, 0.23);
+        }
+
+        .payment-status {
+            min-height: 20px;
+            color: var(--muted);
+            font-size: 0.86rem;
+        }
+
+        .payment-status.pending {
+            color: var(--blue);
+        }
+
+        .payment-status.success {
+            color: #198754;
+            font-weight: 700;
+        }
+
+        .payment-status.error {
+            color: var(--red);
+            font-weight: 700;
         }
 
         .card h3 {
@@ -324,6 +350,33 @@
 
         .bon-entry strong {
             color: #0d5ed7;
+        }
+
+        .payment-badge {
+            width: fit-content;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+
+        .payment-badge.card {
+            color: #073b8f;
+            background: #dce8ff;
+        }
+
+        .payment-badge.cash {
+            color: #17483b;
+            background: #e5f4ee;
+        }
+
+        .payment-badge small {
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 700;
         }
 
         .bon-entry ul,
@@ -514,9 +567,11 @@
             <section class="card" id="receipt-section" aria-label="Aktueller Bon">
                 <div class="action-buttons">
                     <button onclick="finalizeBon()">Bon abschlie&szlig;en</button>
+                    <button id="card-payment-btn" onclick="startCardPayment()" class="card-payment">Kartenzahlung</button>
                     <button onclick="removePfandItems()" class="remove-pfand">Pfand entfernen</button>
                     <button onclick="resetReceipt()" class="reset">Bon zur&uuml;cksetzen</button>
                 </div>
+                <div id="payment-status" class="payment-status"></div>
                 <h3>Aktueller Bon</h3>
                 <ul id="receipt-list"></ul>
                 <div id="total">Summe: 0.00 &euro;</div>

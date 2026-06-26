@@ -4,6 +4,7 @@ let receiptCount = 1; // Eindeutige Bon-Nummer
 let history = []; // Speichert alle Bons
 let receipts = {}; // Startet leer, wird mit jedem Artikel befüllt
 let bonDetails = { items: [] }; // Standardwert als leeres Array
+let currentCardPayment = null;
 
 // Bon-Rufname-Liste (zyklisch durchlaufend)
 const BON_KEYWORDS = [
@@ -31,6 +32,15 @@ fetch(`${window.API_URL}/items`)
 function addMultipleItems(itemName, itemPrice, qty) {
     for (let i = 0; i < qty; i++) {
         addItem(itemName, itemPrice);
+    }
+}
+
+function clearCardPaymentState(message) {
+    currentCardPayment = null;
+    if (message) {
+        setPaymentStatus(message, 'pending');
+    } else {
+        setPaymentStatus('', '');
     }
 }
 
@@ -167,6 +177,7 @@ function displayItems() {
 
 // Funktion für das Hinzufügen eines Artikels
 function addItem(itemName, itemPrice) {
+    clearCardPaymentState();
     const receiptId = Date.now(); // Verwende die aktuelle Zeit als eindeutige ID
     const receipt = receipts[receiptId] || { items: [], total: 0 };  // Hole den aktuellen Bon oder erstelle einen neuen
 
@@ -211,12 +222,14 @@ function addItem(itemName, itemPrice) {
 
 // Funktion zum Entfernen eines einzelnen Artikels vom Bon
 function removeReceiptItem(listItem, itemPrice) {
+    clearCardPaymentState();
     listItem.remove();
     total -= itemPrice;
     document.getElementById('total').textContent = `Summe: ${total.toFixed(2)} €`;
 }
 
 function removePfandItems() {
+    clearCardPaymentState();
     const receiptList = document.getElementById('receipt-list');
     const totalElement = document.getElementById('total');
 
@@ -252,6 +265,7 @@ function removePfandItems() {
 }
 
 function resetReceipt() {
+    clearCardPaymentState();
     const receiptList = document.getElementById('receipt-list');
     const totalElement = document.getElementById('total'); // Überprüfen, ob das Element existiert
 
@@ -266,6 +280,102 @@ function resetReceipt() {
 
     // Artikelnummer zurücksetzen
     itemCount = 1; // Stellt sicher, dass der Zähler korrekt zurückgesetzt wird
+}
+
+function getCurrentReceiptPayload() {
+    const receiptList = document.querySelector('#receipt-list');
+    const receiptItems = Array.from(receiptList.children).map(item => item.textContent);
+
+    if (receiptItems.length === 0) {
+        return { error: 'Es sind keine Artikel auf dem Bon.' };
+    }
+
+    const formattedItems = formatItems(receiptItems);
+    let totalAmount = formattedItems.reduce((sum, item) => sum + item.total, 0);
+    totalAmount = parseFloat(totalAmount).toFixed(2);
+
+    if (isNaN(totalAmount) || totalAmount === 'NaN') {
+        return { error: 'Der aktuelle Bonbetrag ist ungueltig.' };
+    }
+
+    if (parseFloat(totalAmount) <= 0) {
+        return { error: 'Kartenzahlung ist nur fuer Betraege groesser als 0 moeglich.' };
+    }
+
+    return {
+        receiptItems,
+        formattedItems,
+        totalAmount,
+        timestamp: new Date().toLocaleString()
+    };
+}
+
+function setPaymentStatus(message, type) {
+    const status = document.getElementById('payment-status');
+    if (!status) return;
+
+    status.textContent = message || '';
+    status.className = type ? `payment-status ${type}` : 'payment-status';
+}
+
+function paymentBadgeHtml(method, transactionId) {
+    const normalized = (method || 'bar').toLowerCase();
+    if (normalized === 'karte') {
+        const tx = transactionId ? ` <small>${transactionId}</small>` : '';
+        return `<span class="payment-badge card" title="Kartenzahlung">&#128179; Karte${tx}</span>`;
+    }
+
+    return '<span class="payment-badge cash" title="Barzahlung">Bar</span>';
+}
+
+async function startCardPayment() {
+    const paymentButton = document.getElementById('card-payment-btn');
+    const payload = getCurrentReceiptPayload();
+
+    if (payload.error) {
+        setPaymentStatus(payload.error, 'error');
+        alert(payload.error);
+        return;
+    }
+
+    const confirmed = confirm(`Kartenzahlung über ${payload.totalAmount} € an SumUp senden?`);
+    if (!confirmed) return;
+
+    try {
+        if (paymentButton) paymentButton.disabled = true;
+        setPaymentStatus('Kartenzahlung wird an SumUp gesendet ...', 'pending');
+
+        const response = await fetch(`${window.API_URL}/sumup/reader-checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                totalAmount: payload.totalAmount,
+                items: payload.formattedItems,
+                gui: window.currentGUI || 'essen'
+            })
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Kartenzahlung konnte nicht an SumUp gesendet werden.');
+        }
+
+        const transactionText = data.clientTransactionId ? ` Transaktion: ${data.clientTransactionId}` : '';
+        currentCardPayment = {
+            method: 'karte',
+            transactionId: data.clientTransactionId || null,
+            amount: payload.totalAmount
+        };
+        setPaymentStatus(`An SumUp gesendet: ${payload.totalAmount} €.${transactionText}`, 'success');
+        alert(`Kartenzahlung über ${payload.totalAmount} € wurde an das SumUp Solo gesendet. Nach erfolgreicher Zahlung bitte Bon abschließen.`);
+    } catch (error) {
+        console.error('Fehler bei Kartenzahlung:', error);
+        setPaymentStatus(error.message, 'error');
+        alert(error.message);
+    } finally {
+        if (paymentButton) paymentButton.disabled = false;
+    }
 }
 
 function finalizeBon() {
@@ -295,8 +405,18 @@ function finalizeBon() {
             return;
         }
 
+        const paymentMethod = currentCardPayment && currentCardPayment.amount === totalAmount ? 'karte' : 'bar';
+        const paymentTransactionId = paymentMethod === 'karte' ? currentCardPayment.transactionId : null;
+        bonDetails.paymentMethod = paymentMethod;
+        bonDetails.paymentTransactionId = paymentTransactionId;
+
         // Erst in DB speichern, dann mit DB-ID drucken
-        sendReceiptsToServer({ totalAmount: totalAmount, items: formattedItems }, function(dbId, keyword) {
+        sendReceiptsToServer({
+            totalAmount: totalAmount,
+            items: formattedItems,
+            paymentMethod,
+            paymentTransactionId
+        }, function(dbId, keyword) {
             // Bon-ID aus der Datenbank verwenden
             if (dbId) {
                 bonDetails.id = dbId;
@@ -342,6 +462,7 @@ function updateHistory() {
 
     latestOrderDiv.innerHTML = `
         <h3>Letzte Bestellung (Bon Nr. ${latestReceipt.id})</h3>
+        <div>${paymentBadgeHtml(latestReceipt.paymentMethod, latestReceipt.paymentTransactionId)}</div>
         <table>
             <thead>
                 <tr>
@@ -385,7 +506,7 @@ function updateHistory() {
 
             historyItem.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h4>Bon Nr. ${receipt.id}</h4>
+                    <h4>Bon Nr. ${receipt.id} ${paymentBadgeHtml(receipt.paymentMethod, receipt.paymentTransactionId)}</h4>
                     <button class="toggle-details">Details anzeigen</button>
                 </div>
             `;
@@ -727,6 +848,7 @@ function renderBon(bon, prepend = false) {
 
     bonDiv.innerHTML = `
         <strong>Bon #${bon.id}</strong> (${dateStr})<br>
+        ${paymentBadgeHtml(bon.paymentMethod, bon.paymentTransactionId)}<br>
         Summe: ${parseFloat(bon.totalAmount).toFixed(2)} €<br>
         <ul>
             ${bon.items.map(i => `<li>${i.quantity} × ${i.name} (${parseFloat(i.total).toFixed(2)} €)</li>`).join("")}

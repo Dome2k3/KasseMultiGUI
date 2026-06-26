@@ -11,6 +11,7 @@ const express = require("express");
 const mysql = require("mysql2");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const https = require("https");
 
 // Drucker (CUPS via lp)
 const { execFile } = require('child_process');
@@ -64,6 +65,119 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
+function sumupConfig() {
+    const required = ['SUMUP_API_KEY', 'SUMUP_MERCHANT_CODE', 'SUMUP_READER_ID'];
+    const missing = required.filter((key) => !process.env[key]);
+
+    if (missing.length > 0) {
+        return { missing };
+    }
+
+    return {
+        apiKey: process.env.SUMUP_API_KEY,
+        merchantCode: process.env.SUMUP_MERCHANT_CODE,
+        readerId: process.env.SUMUP_READER_ID,
+        currency: process.env.SUMUP_CURRENCY || 'EUR',
+        apiBaseUrl: process.env.SUMUP_API_BASE_URL || 'https://api.sumup.com'
+    };
+}
+
+function postJson(url, headers, payload) {
+    return new Promise((resolve, reject) => {
+        const body = JSON.stringify(payload);
+        const target = new URL(url);
+
+        const req = https.request({
+            method: 'POST',
+            hostname: target.hostname,
+            port: target.port || 443,
+            path: `${target.pathname}${target.search}`,
+            headers: {
+                ...headers,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body)
+            }
+        }, (response) => {
+            let data = '';
+
+            response.setEncoding('utf8');
+            response.on('data', (chunk) => { data += chunk; });
+            response.on('end', () => {
+                let parsed = {};
+                if (data) {
+                    try {
+                        parsed = JSON.parse(data);
+                    } catch (err) {
+                        parsed = { raw: data };
+                    }
+                }
+
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                    resolve(parsed);
+                    return;
+                }
+
+                const error = new Error(parsed.detail || parsed.title || 'SumUp-Anfrage fehlgeschlagen');
+                error.statusCode = response.statusCode;
+                error.response = parsed;
+                reject(error);
+            });
+        });
+
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
+app.post('/sumup/reader-checkout', async (req, res) => {
+    const config = sumupConfig();
+    if (config.missing) {
+        return res.status(500).json({
+            success: false,
+            message: `SumUp ist nicht konfiguriert: ${config.missing.join(', ')} fehlt.`
+        });
+    }
+
+    const totalAmount = Number(req.body && req.body.totalAmount);
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'Der Kartenzahlungsbetrag muss groesser als 0 sein.'
+        });
+    }
+
+    const value = Math.round(totalAmount * 100);
+    const url = `${config.apiBaseUrl}/v0.1/merchants/${encodeURIComponent(config.merchantCode)}/readers/${encodeURIComponent(config.readerId)}/checkout`;
+
+    try {
+        const result = await postJson(url, {
+            Authorization: `Bearer ${config.apiKey}`,
+            Accept: 'application/problem+json, application/json'
+        }, {
+            total_amount: {
+                currency: config.currency,
+                minor_unit: 2,
+                value
+            }
+        });
+
+        return res.json({
+            success: true,
+            message: 'Kartenzahlung wurde an SumUp gesendet.',
+            clientTransactionId: result && result.data ? result.data.client_transaction_id : null,
+            sumup: result
+        });
+    } catch (err) {
+        console.error('SumUp Reader Checkout fehlgeschlagen:', err.message);
+        return res.status(err.statusCode || 502).json({
+            success: false,
+            message: err.message || 'SumUp Reader Checkout fehlgeschlagen.',
+            details: err.response || null
+        });
+    }
+});
+
 
 // // 🔹 Route zum Speichern der Daten
 // app.post('/saveReceipts', (req, res) => {
@@ -105,9 +219,14 @@ app.post('/finalize-bon', (req, res) => {
 
     const category = bonDetails.gui || bonDetails.category || 'essen';
     const totalAmount = parseFloat(bonDetails.totalAmount) || 0.0;
+    const paymentMethod = bonDetails.paymentMethod === 'karte' ? 'karte' : 'bar';
+    const paymentTransactionId = paymentMethod === 'karte' ? (bonDetails.paymentTransactionId || null) : null;
     const items = bonDetails.items; // [{name,quantity,total}, ...]
 
-    db.query('INSERT INTO kasse_bon (total, category) VALUES (?, ?)', [totalAmount, category], (err, result) => {
+    db.query(
+        'INSERT INTO kasse_bon (total, category, payment_method, payment_transaction_id) VALUES (?, ?, ?, ?)',
+        [totalAmount, category, paymentMethod, paymentTransactionId],
+        (err, result) => {
         if (err) {
             console.error('Fehler beim Speichern des Bons:', err);
             return res.status(500).json({ success: false, message: 'Fehler beim Speichern' });
@@ -130,6 +249,8 @@ app.post('/finalize-bon', (req, res) => {
                 id: bonId,
                 timestamp: new Date().toLocaleString('de-DE'),
                 totalAmount,
+                paymentMethod,
+                paymentTransactionId,
                 keyword: bonKeyword
             };
             try {
@@ -428,6 +549,8 @@ app.get("/statistics", (req, res) => {
 app.get("/bons", (req, res) => {
     const query = `
         SELECT b.id, b.total AS totalAmount, b.created_at, b.category,
+               b.payment_method AS paymentMethod,
+               b.payment_transaction_id AS paymentTransactionId,
                bi.name, bi.quantity, bi.total
         FROM kasse_bon b
                  JOIN kasse_bon_items bi ON b.id = bi.bon_id
@@ -449,6 +572,8 @@ app.get("/bons", (req, res) => {
                     created_at: row.created_at,
                     totalAmount: row.totalAmount,
                     category: row.category, // Neu!
+                    paymentMethod: row.paymentMethod || 'bar',
+                    paymentTransactionId: row.paymentTransactionId || null,
                     items: []
                 };
             }
@@ -478,6 +603,8 @@ app.get('/recent-bons', (req, res) => {
 
     const sql = `
         SELECT b.id, b.total AS totalAmount, b.category, b.created_at,
+               b.payment_method AS paymentMethod,
+               b.payment_transaction_id AS paymentTransactionId,
                bi.name, bi.quantity, bi.total AS item_total
         FROM (
                  SELECT id FROM kasse_bon
@@ -503,6 +630,8 @@ app.get('/recent-bons', (req, res) => {
                 totalAmount: row.totalAmount,
                 category: row.category,
                 created_at: row.created_at,
+                paymentMethod: row.paymentMethod || 'bar',
+                paymentTransactionId: row.paymentTransactionId || null,
                 items: []
             };
             if (row.name) bons[row.id].items.push({
