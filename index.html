@@ -136,6 +136,46 @@
             line-height: 1.5;
         }
 
+        .reader-options {
+            display: grid;
+            gap: 10px;
+        }
+
+        .reader-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 46px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 0 12px;
+            background: #fff;
+            cursor: pointer;
+            font-weight: 800;
+        }
+
+        .reader-option input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--blue);
+        }
+
+        .reader-selection-state {
+            min-height: 22px;
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .reader-selection-state.ready {
+            color: var(--green);
+        }
+
+        .reader-selection-state.error {
+            color: #b42318;
+        }
+
         .quick-row {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -164,6 +204,12 @@
         .quick-pill.secondary {
             background: var(--blue-soft);
             color: var(--blue);
+            box-shadow: none;
+        }
+
+        .quick-pill.disabled {
+            background: #d9e1ef;
+            color: #7b8798;
             box-shadow: none;
         }
 
@@ -325,21 +371,35 @@
 
         <aside class="status-panel" aria-label="Hinweise">
             <div class="status-block">
-                <strong>Schneller Zugriff</strong>
-                <span>Die wichtigsten Kassen liegen direkt oben als grosse Schaltflaechen.</span>
+                <strong>Zahlungsart waehlen</strong>
+                <span>Vor dem Oeffnen einer Kasse muss festgelegt werden, ob diese Kasse ein SumUp-Geraet oder Bar/andere Zahlmethoden nutzt.</span>
             </div>
             <div class="status-block">
-                <strong>Getrennte Bereiche</strong>
-                <span>Verkauf und Rueckgabe sind getrennt von Bons und Staffelpreisen.</span>
+                <strong>Reader</strong>
+                <div class="reader-options" role="radiogroup" aria-label="Zahlungsart">
+                    <label class="reader-option">
+                        <input type="radio" name="payment-reader" value="bvt-solo-1">
+                        BVT Solo #1
+                    </label>
+                    <label class="reader-option">
+                        <input type="radio" name="payment-reader" value="solo-lite-manual">
+                        Solo Lite / Handy
+                    </label>
+                    <label class="reader-option">
+                        <input type="radio" name="payment-reader" value="cash">
+                        Andere Zahlmethode/Bar
+                    </label>
+                </div>
+                <div id="reader-selection-state" class="reader-selection-state">Keine Zahlungsart ausgewaehlt.</div>
             </div>
         </aside>
     </section>
 
     <nav class="quick-row" aria-label="Direktzugriff Kasse">
-        <a class="quick-pill" href="essen2.html">Essen</a>
-        <a class="quick-pill secondary" href="bierzelt.html">Bierzelt</a>
-        <a class="quick-pill secondary" href="pfand.html">Pfand</a>
-        <a class="quick-pill secondary" href="fruehstueck.html">Fruehstueck</a>
+        <a class="quick-pill kasse-link" href="essen2.html">Essen</a>
+        <a class="quick-pill secondary kasse-link" href="bierzelt.html">Bierzelt</a>
+        <a class="quick-pill secondary kasse-link" href="pfand.html">Pfand</a>
+        <a class="quick-pill secondary kasse-link" href="fruehstueck.html">Fruehstueck</a>
     </nav>
 
     <section class="section compact" aria-labelledby="toolsTitle">
@@ -366,5 +426,58 @@
         </div>
     </section>
 </main>
+<script>
+    const PAYMENT_READER_STORAGE_KEY = 'bvtPaymentReader';
+    const PAYMENT_READERS = {
+        'bvt-solo-1': 'BVT Solo #1',
+        'solo-lite-manual': 'Solo Lite / Handy',
+        cash: 'Andere Zahlmethode/Bar'
+    };
+
+    function selectedPaymentReader() {
+        return localStorage.getItem(PAYMENT_READER_STORAGE_KEY) || '';
+    }
+
+    function updateKasseLinks() {
+        const selected = selectedPaymentReader();
+        const state = document.getElementById('reader-selection-state');
+        const links = document.querySelectorAll('.kasse-link');
+
+        if (state) {
+            if (selected && PAYMENT_READERS[selected]) {
+                state.textContent = `Aktiv: ${PAYMENT_READERS[selected]}`;
+                state.className = 'reader-selection-state ready';
+            } else {
+                state.textContent = 'Keine Zahlungsart ausgewaehlt.';
+                state.className = 'reader-selection-state error';
+            }
+        }
+
+        links.forEach((link) => {
+            link.classList.toggle('disabled', !selected);
+            link.setAttribute('aria-disabled', selected ? 'false' : 'true');
+        });
+    }
+
+    document.querySelectorAll('input[name="payment-reader"]').forEach((input) => {
+        input.checked = input.value === selectedPaymentReader();
+        input.addEventListener('change', () => {
+            localStorage.setItem(PAYMENT_READER_STORAGE_KEY, input.value);
+            updateKasseLinks();
+        });
+    });
+
+    document.querySelectorAll('.kasse-link').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            if (!selectedPaymentReader()) {
+                event.preventDefault();
+                updateKasseLinks();
+                alert('Bitte zuerst eine Zahlungsart bzw. einen Reader auswaehlen.');
+            }
+        });
+    });
+
+    updateKasseLinks();
+</script>
 </body>
 </html>

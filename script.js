@@ -5,6 +5,12 @@ let history = []; // Speichert alle Bons
 let receipts = {}; // Startet leer, wird mit jedem Artikel befüllt
 let bonDetails = { items: [] }; // Standardwert als leeres Array
 let currentCardPayment = null;
+const PAYMENT_READER_STORAGE_KEY = 'bvtPaymentReader';
+const PAYMENT_READERS = {
+    'bvt-solo-1': { label: 'BVT Solo #1', type: 'sumup' },
+    'solo-lite-manual': { label: 'Solo Lite / Handy', type: 'manual-card' },
+    cash: { label: 'Andere Zahlmethode/Bar', type: 'cash' }
+};
 
 // Bon-Rufname-Liste (zyklisch durchlaufend)
 const BON_KEYWORDS = [
@@ -42,6 +48,45 @@ function clearCardPaymentState(message) {
     } else {
         setPaymentStatus('', '');
     }
+}
+
+function getSelectedPaymentReader() {
+    const id = localStorage.getItem(PAYMENT_READER_STORAGE_KEY) || '';
+    const config = PAYMENT_READERS[id] || null;
+    return { id, config };
+}
+
+function updateCardPaymentControls() {
+    const paymentButton = document.getElementById('card-payment-btn');
+    if (!paymentButton) return;
+
+    const { id, config } = getSelectedPaymentReader();
+    const canUseCard = !!config && (config.type === 'sumup' || config.type === 'manual-card');
+
+    paymentButton.disabled = !canUseCard;
+    paymentButton.title = canUseCard ? `Kartenzahlung ueber ${config.label}` : 'Auf dem Dashboard wurde Bar/andere Zahlmethode oder kein Reader ausgewaehlt.';
+
+    if (!id || !config) {
+        setPaymentStatus('Bitte auf dem Dashboard eine Zahlungsart auswaehlen.', 'pending');
+        return;
+    }
+
+    if (config.type === 'manual-card') {
+        setPaymentStatus(`${config.label} ausgewaehlt. Kartenzahlung bitte manuell am Handy/Solo Lite durchfuehren.`, 'pending');
+    } else if (!canUseCard) {
+        setPaymentStatus(`${config.label} ausgewaehlt. Kartenzahlung ist deaktiviert.`, 'pending');
+    }
+}
+
+function enforcePaymentReaderSelection() {
+    const isCashRegisterPage = !!document.getElementById('receipt-list');
+    if (!isCashRegisterPage) return;
+
+    const { id, config } = getSelectedPaymentReader();
+    if (id && config) return;
+
+    alert('Bitte zuerst auf dem Dashboard eine Zahlungsart bzw. einen Reader auswaehlen.');
+    window.location.href = 'index.html';
 }
 
 // Kategorie-Farben und Icons Mapping
@@ -331,10 +376,37 @@ function paymentBadgeHtml(method, transactionId) {
 async function startCardPayment() {
     const paymentButton = document.getElementById('card-payment-btn');
     const payload = getCurrentReceiptPayload();
+    const { id: readerId, config: readerConfig } = getSelectedPaymentReader();
+
+    if (!readerConfig || (readerConfig.type !== 'sumup' && readerConfig.type !== 'manual-card')) {
+        const message = readerConfig
+            ? `${readerConfig.label} ist ausgewaehlt. Bitte Bon normal abschliessen.`
+            : 'Bitte zuerst auf dem Dashboard eine Kartenzahlungsart auswaehlen.';
+        setPaymentStatus(message, 'error');
+        alert(message);
+        return;
+    }
 
     if (payload.error) {
         setPaymentStatus(payload.error, 'error');
         alert(payload.error);
+        return;
+    }
+
+    if (readerConfig.type === 'manual-card') {
+        const confirmed = confirm(`Kartenzahlung über ${payload.totalAmount} € am ${readerConfig.label} manuell vormerken?`);
+        if (!confirmed) return;
+
+        currentCardPayment = {
+            method: 'karte',
+            transactionId: null,
+            amount: payload.totalAmount,
+            readerId,
+            readerLabel: readerConfig.label,
+            manual: true
+        };
+        setPaymentStatus(`${readerConfig.label}: ${payload.totalAmount} € manuell kassieren und danach Bon abschließen.`, 'success');
+        alert(`Bitte ${payload.totalAmount} € über Handy/Bluetooth am Solo Lite kassieren. Wenn die Zahlung sichtbar durch ist, Bon abschließen.`);
         return;
     }
 
@@ -351,7 +423,8 @@ async function startCardPayment() {
             body: JSON.stringify({
                 totalAmount: payload.totalAmount,
                 items: payload.formattedItems,
-                gui: window.currentGUI || 'essen'
+                gui: window.currentGUI || 'essen',
+                readerId
             })
         });
 
@@ -365,7 +438,9 @@ async function startCardPayment() {
         currentCardPayment = {
             method: 'karte',
             transactionId: data.clientTransactionId || null,
-            amount: payload.totalAmount
+            amount: payload.totalAmount,
+            readerId,
+            readerLabel: readerConfig.label
         };
         setPaymentStatus(`An SumUp gesendet: ${payload.totalAmount} €.${transactionText}`, 'success');
         alert(`Kartenzahlung über ${payload.totalAmount} € wurde an das SumUp Solo gesendet. Nach erfolgreicher Zahlung bitte Bon abschließen.`);
@@ -891,4 +966,6 @@ async function loadRecentBons() {
 
 
 // --- Direkt beim Laden der Seite Historie aus DB holen ---
+window.addEventListener("DOMContentLoaded", enforcePaymentReaderSelection);
 window.addEventListener("DOMContentLoaded", loadRecentBons);
+window.addEventListener("DOMContentLoaded", updateCardPaymentControls);

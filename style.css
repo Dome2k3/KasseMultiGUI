@@ -96,6 +96,11 @@ h1 {
     background-color: var(--accent-hover);
     opacity: 0.94;
 }
+.action-buttons button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+    transform: none;
+}
 
 /* Aktuelle Bestellung */
 #receipt-section h3 {

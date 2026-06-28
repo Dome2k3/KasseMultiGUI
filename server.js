@@ -65,7 +65,23 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-function sumupConfig() {
+const PAYMENT_READERS = [
+    { id: 'bvt-solo-1', label: 'BVT Solo #1', type: 'sumup' },
+    { id: 'solo-lite-manual', label: 'Solo Lite / Handy', type: 'manual-card' },
+    { id: 'cash', label: 'Andere Zahlmethode/Bar', type: 'cash' }
+];
+
+function sumupConfig(readerSelection) {
+    const readerId = readerSelection || 'bvt-solo-1';
+    const reader = PAYMENT_READERS.find((entry) => entry.id === readerId);
+    if (!reader) {
+        return { missing: [`Unbekannter Reader: ${readerId}`] };
+    }
+
+    if (reader.type !== 'sumup') {
+        return { missing: ['Es wurde kein SumUp Reader ausgewaehlt.'] };
+    }
+
     const required = ['SUMUP_API_KEY', 'SUMUP_MERCHANT_CODE', 'SUMUP_READER_ID'];
     const missing = required.filter((key) => !process.env[key]);
 
@@ -74,6 +90,8 @@ function sumupConfig() {
     }
 
     return {
+        readerSelection: reader.id,
+        label: reader.label,
         apiKey: process.env.SUMUP_API_KEY,
         merchantCode: process.env.SUMUP_MERCHANT_CODE,
         readerId: process.env.SUMUP_READER_ID,
@@ -81,6 +99,10 @@ function sumupConfig() {
         apiBaseUrl: process.env.SUMUP_API_BASE_URL || 'https://api.sumup.com'
     };
 }
+
+app.get('/payment/readers', (req, res) => {
+    res.json(PAYMENT_READERS);
+});
 
 function postJson(url, headers, payload) {
     return new Promise((resolve, reject) => {
@@ -131,7 +153,7 @@ function postJson(url, headers, payload) {
 }
 
 app.post('/sumup/reader-checkout', async (req, res) => {
-    const config = sumupConfig();
+    const config = sumupConfig(req.body && req.body.readerId);
     if (config.missing) {
         return res.status(500).json({
             success: false,
