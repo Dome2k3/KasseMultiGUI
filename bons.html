@@ -181,7 +181,8 @@
             margin: 0 0 14px;
         }
 
-        .controls input {
+        .controls input,
+        .controls select {
             width: 100%;
             min-height: 42px;
             border: 1px solid var(--line);
@@ -291,7 +292,7 @@
             }
 
             .controls {
-                grid-template-columns: minmax(240px, 1fr) auto auto;
+                grid-template-columns: minmax(220px, 1fr) minmax(190px, auto) auto auto;
                 align-items: center;
             }
         }
@@ -337,6 +338,12 @@
 <main class="page-shell">
     <div class="controls">
         <input type="number" id="searchBon" placeholder="Bon-Nummer suchen">
+        <select id="paymentFilter" aria-label="Zahlart filtern">
+            <option value="">Alle Zahlarten</option>
+            <option value="card-manual">Karte Solo Lite</option>
+            <option value="card-id">Karte mit ID / Solo</option>
+            <option value="cash">Bar</option>
+        </select>
         <button onclick="searchBon()" class="pretty-btn primary-action">Suchen</button>
         <button onclick="resetSearch()" class="pretty-btn">Alle anzeigen</button>
     </div>
@@ -422,24 +429,37 @@
         return '<span class="payment-badge cash" title="Barzahlung">Bar</span>';
     }
 
+    function paymentKind(bon) {
+        const method = String(bon.paymentMethod || 'bar').toLowerCase();
+        if (method === 'karte' && bon.paymentTransactionId) return 'card-id';
+        if (method === 'karte') return 'card-manual';
+        return 'cash';
+    }
+
     function searchBon() {
         const searchValue = document.getElementById("searchBon").value.trim().toLowerCase();
-        if (!searchValue) {
+        const paymentValue = document.getElementById("paymentFilter").value;
+        if (!searchValue && !paymentValue) {
             renderBons(allBons);
             return;
         }
 
-        const filtered = allBons.filter(bon =>
-            bon.id.toString() === searchValue ||
-            (bon.category && bon.category.toLowerCase().includes(searchValue)) ||
-            bon.items.some(item => item.name && item.name.toLowerCase().includes(searchValue))
-        );
+        const filtered = allBons.filter((bon) => {
+            const matchesPayment = !paymentValue || paymentKind(bon) === paymentValue;
+            const matchesSearch = !searchValue ||
+                bon.id.toString() === searchValue ||
+                (bon.category && bon.category.toLowerCase().includes(searchValue)) ||
+                bon.items.some(item => item.name && item.name.toLowerCase().includes(searchValue));
+
+            return matchesPayment && matchesSearch;
+        });
 
         renderBons(filtered);
     }
 
     function resetSearch() {
         document.getElementById("searchBon").value = "";
+        document.getElementById("paymentFilter").value = "";
         renderBons(allBons);
     }
 

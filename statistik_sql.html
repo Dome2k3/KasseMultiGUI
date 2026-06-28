@@ -346,6 +346,43 @@
             grid-template-columns: 1fr;
         }
 
+        .payment-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .payment-card {
+            border-radius: 18px;
+            border: 1px solid #e8efeb;
+            background: #f7faf8;
+            padding: 16px;
+        }
+
+        .payment-card .label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .payment-card strong {
+            display: block;
+            margin-top: 8px;
+            font-size: 1.55rem;
+        }
+
+        .payment-card .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
         .station-card {
             border-radius: 18px;
             padding: 16px;
@@ -495,6 +532,10 @@
             .station-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+
+            .payment-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
         }
 
         @media (min-width: 1040px) {
@@ -612,6 +653,17 @@
         <div id="stationGrid" class="station-grid"></div>
     </section>
 
+    <section class="panel" style="margin-bottom:14px;">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">Zahlungsarten</p>
+                <h2>Umsatz nach Zahlungsart</h2>
+                <p>Bar, manuelle Solo-Lite-Kartenzahlung und SumUp Solo mit Transaktions-ID.</p>
+            </div>
+        </div>
+        <div id="paymentGrid" class="payment-grid"></div>
+    </section>
+
     <section class="content-grid">
         <article class="panel">
             <div class="panel-head">
@@ -678,6 +730,7 @@
         topStationHint: document.getElementById('topStationHint'),
         dayGrid: document.getElementById('dayGrid'),
         stationGrid: document.getElementById('stationGrid'),
+        paymentGrid: document.getElementById('paymentGrid'),
         topArticles: document.getElementById('topArticles'),
         dayStationTable: document.getElementById('dayStationTable')
     };
@@ -715,6 +768,13 @@
 
     function bonTotal(bon) {
         return Number(bon.totalAmount || bon.total || 0);
+    }
+
+    function paymentKind(bon) {
+        const method = String(bon.paymentMethod || 'bar').toLowerCase();
+        if (method === 'karte' && bon.paymentTransactionId) return 'card-id';
+        if (method === 'karte') return 'card-manual';
+        return 'cash';
     }
 
     function selectedDays() {
@@ -767,6 +827,22 @@
             });
         });
         return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+    }
+
+    function groupPayments(bons) {
+        const groups = {
+            'card-manual': { key: 'card-manual', label: 'Karte Solo Lite', revenue: 0, bons: 0 },
+            'card-id': { key: 'card-id', label: 'Karte mit ID / Solo', revenue: 0, bons: 0 },
+            cash: { key: 'cash', label: 'Bar', revenue: 0, bons: 0 }
+        };
+
+        bons.forEach((bon) => {
+            const key = paymentKind(bon);
+            groups[key].revenue += bonTotal(bon);
+            groups[key].bons += 1;
+        });
+
+        return [groups['card-manual'], groups['card-id'], groups.cash];
     }
 
     function renderKpis(bons) {
@@ -825,6 +901,24 @@
         }).join('');
     }
 
+    function renderPayments(bons) {
+        const payments = groupPayments(bons);
+
+        els.paymentGrid.innerHTML = payments.map((payment) => {
+            const avg = payment.bons ? payment.revenue / payment.bons : 0;
+            return `
+                <article class="payment-card">
+                    <div class="label">${payment.label}</div>
+                    <strong>${money(payment.revenue)}</strong>
+                    <div class="meta">
+                        <span>${number(payment.bons)} Bons</span>
+                        <span>Schnitt ${money(avg)}</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
     function renderArticles(bons) {
         const articles = groupArticles(bons).slice(0, 12);
         const max = Math.max(...articles.map((item) => item.revenue), 1);
@@ -877,6 +971,7 @@
         renderKpis(bons);
         renderDays(bons);
         renderStations(bons);
+        renderPayments(bons);
         renderArticles(bons);
         renderDayStationTable(bons);
     }
